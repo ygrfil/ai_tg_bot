@@ -1,0 +1,15 @@
+services:
+  bot:
+    build: .
+    volumes:
+      - .:/app
+      - ./user_preferences.db:/app/user_preferences.db
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - ALLOWED_USER_IDS=${ALLOWED_USER_IDS}
+      - ADMIN_USER_IDS=${ADMIN_USER_IDS}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - PPLX_API_KEY=${PPLX_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+    restart: always
