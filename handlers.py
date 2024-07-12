@@ -1,5 +1,5 @@
 from telebot.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_anthropic import ChatAnthropic
@@ -11,6 +11,8 @@ from database import (get_user_preferences, save_user_preferences, ensure_user_p
 from models import get_llm, get_conversation_messages
 from utils import (is_authorized, reset_conversation_if_needed, limit_conversation_history,
                    create_keyboard, get_system_prompts, get_username, StreamHandler)
+
+user_conversation_history = {}
 
 def handle_commands(bot, message: Message) -> None:
     if not is_authorized(message):
@@ -153,7 +155,7 @@ def process_prompt_content(bot, message: Message, prompt_name: str) -> None:
         file.write(prompt_content)
     bot.reply_to(message, f"System prompt '{prompt_name}' has been created and saved successfully!")
 
-def handle_message(bot, message: Message, user_conversation_history) -> None:
+def handle_message(bot, message: Message) -> None:
     if not is_authorized(message):
         bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
         return
@@ -165,7 +167,7 @@ def handle_message(bot, message: Message, user_conversation_history) -> None:
 
     reset_conversation_if_needed(user_id)
 
-    user_message = process_message_content(message)
+    user_message = process_message_content(message, bot)
     user_conversation_history.setdefault(user_id, []).append(user_message)
     limit_conversation_history(user_id)
 
@@ -186,7 +188,7 @@ def handle_message(bot, message: Message, user_conversation_history) -> None:
     except Exception as e:
         bot.edit_message_text(f"An error occurred: {str(e)}", chat_id=message.chat.id, message_id=placeholder_message.message_id)
 
-def process_message_content(message: Message) -> HumanMessage:
+def process_message_content(message: Message, bot) -> HumanMessage:
     if message.content_type == 'photo':
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded_file = bot.download_file(file_info.file_path)
