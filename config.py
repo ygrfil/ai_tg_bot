@@ -1,4 +1,8 @@
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 ENV = {
     "TELEGRAM_BOT_TOKEN": os.getenv("TELEGRAM_BOT_TOKEN"),
@@ -9,6 +13,6 @@ ENV = {
 }
 
 if not ENV["TELEGRAM_BOT_TOKEN"]:
-    raise ValueError("TELEGRAM_BOT_TOKEN is not set in the environment variables. Please set it and try again.")
+    raise ValueError("TELEGRAM_BOT_TOKEN is not set in the .env file. Please set it and try again.")
 
 # Add any other configuration variables or functions here
