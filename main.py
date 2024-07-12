@@ -72,12 +72,15 @@ def log_usage(user_id, model, messages_count, tokens_count):
         VALUES (?, ?, ?, ?, ?)
     ''', (today, user_id, model, messages_count, tokens_count)))
 
-def get_daily_usage():
+def get_monthly_usage():
     return db_operation(lambda c: c.execute('''
-        SELECT date, SUM(messages_count) as total_messages, SUM(tokens_count) as total_tokens
+        SELECT user_id, 
+               SUM(messages_count) as total_messages, 
+               SUM(tokens_count) as total_tokens
         FROM usage_stats
-        GROUP BY date
-        ORDER BY date DESC
+        WHERE date >= date('now', 'start of month')
+        GROUP BY user_id
+        ORDER BY total_messages DESC
     ''').fetchall())
 
 def is_authorized(message: Message) -> bool:
@@ -137,12 +140,12 @@ def handle_commands(message: Message) -> None:
         if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
             bot.reply_to(message, "Sorry, you are not authorized to use this command.")
             return
-        usage_stats = get_daily_usage()
-        usage_report = "Daily Usage Report:\n\n"
-        for date, messages, tokens in usage_stats:
-            usage_report += f"Date: {date}\n"
+        usage_stats = get_monthly_usage()
+        usage_report = "Monthly Usage Report (from the start of the current month):\n\n"
+        for user_id, messages, tokens in usage_stats:
+            usage_report += f"User ID: {user_id}\n"
             usage_report += f"Total Messages: {messages}\n"
-            usage_report += f"Total Tokens: {tokens}\n\n"
+            usage_report += f"Estimated Tokens: {tokens}\n\n"
         bot.reply_to(message, usage_report)
 
 def send_broadcast(user_id: int, message: str) -> bool:
