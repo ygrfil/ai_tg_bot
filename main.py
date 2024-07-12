@@ -44,6 +44,16 @@ def init_db():
             selected_model TEXT DEFAULT 'anthropic'
         )
     '''))
+    db_operation(lambda c: c.execute('''
+        CREATE TABLE IF NOT EXISTS usage_stats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT,
+            user_id INTEGER,
+            model TEXT,
+            messages_count INTEGER,
+            tokens_count INTEGER
+        )
+    '''))
 
 def get_user_preferences(user_id):
     result = db_operation(lambda c: c.execute('SELECT selected_model FROM user_preferences WHERE user_id = ?', (user_id,)).fetchone())
@@ -54,6 +64,21 @@ def save_user_preferences(user_id, selected_model):
 
 def ensure_user_preferences(user_id):
     db_operation(lambda c: c.execute('INSERT OR IGNORE INTO user_preferences (user_id) VALUES (?)', (user_id,)))
+
+def log_usage(user_id, model, messages_count, tokens_count):
+    today = datetime.now().strftime('%Y-%m-%d')
+    db_operation(lambda c: c.execute('''
+        INSERT INTO usage_stats (date, user_id, model, messages_count, tokens_count)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (today, user_id, model, messages_count, tokens_count)))
+
+def get_daily_usage():
+    return db_operation(lambda c: c.execute('''
+        SELECT date, SUM(messages_count) as total_messages, SUM(tokens_count) as total_tokens
+        FROM usage_stats
+        GROUP BY date
+        ORDER BY date DESC
+    ''').fetchall())
 
 def is_authorized(message: Message) -> bool:
     return str(message.from_user.id) in ENV["ALLOWED_USER_IDS"] or str(message.from_user.id) in ENV["ADMIN_USER_IDS"]
@@ -80,7 +105,7 @@ def get_system_prompts():
     return {filename[:-4]: open(os.path.join('system_prompts', filename), 'r').read().strip()
             for filename in os.listdir('system_prompts') if filename.endswith('.txt')}
 
-@bot.message_handler(commands=['model', 'sm', 'broadcast'])
+@bot.message_handler(commands=['model', 'sm', 'broadcast', 'usage'])
 def handle_commands(message: Message) -> None:
     if not is_authorized(message):
         bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
@@ -108,6 +133,17 @@ def handle_commands(message: Message) -> None:
         broadcast_message = message.text.split(maxsplit=1)[1]
         success_count = sum(1 for user_id in ENV["ALLOWED_USER_IDS"] if send_broadcast(int(user_id), broadcast_message))
         bot.reply_to(message, f"Broadcast sent successfully to {success_count} out of {len(ENV['ALLOWED_USER_IDS'])} allowed users.")
+    elif command == 'usage':
+        if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
+            bot.reply_to(message, "Sorry, you are not authorized to use this command.")
+            return
+        usage_stats = get_daily_usage()
+        usage_report = "Daily Usage Report:\n\n"
+        for date, messages, tokens in usage_stats:
+            usage_report += f"Date: {date}\n"
+            usage_report += f"Total Messages: {messages}\n"
+            usage_report += f"Total Tokens: {tokens}\n\n"
+        bot.reply_to(message, usage_report)
 
 def send_broadcast(user_id: int, message: str) -> bool:
     try:
@@ -260,6 +296,11 @@ def handle_message(message: Message) -> None:
         response = llm.invoke(messages)
         # Always add the AI response to the conversation history, regardless of the model
         user_conversation_history[user_id].append(AIMessage(content=stream_handler.response))
+        
+        # Log usage
+        messages_count = 1  # We count this as one interaction
+        tokens_count = len(stream_handler.response.split())  # Rough estimate of tokens
+        log_usage(user_id, selected_model, messages_count, tokens_count)
     except ApiTelegramException as e:
         handle_api_error(e, message)
 
