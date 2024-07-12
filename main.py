@@ -1,10 +1,11 @@
-import os, time, sqlite3, base64, json
+import os, time, sqlite3, base64, json, tempfile
 from contextlib import closing
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from telebot import TeleBot
 from telebot.apihelper import ApiTelegramException
-from telebot.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from telebot.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, Voice
+import speech_recognition as sr
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langchain_community.chat_models import ChatPerplexity
@@ -383,7 +384,7 @@ class StreamHandler(BaseCallbackHandler):
     def on_llm_end(self, response: str, **kwargs) -> None:
         self.update_message()
 
-@bot.message_handler(content_types=['text', 'photo'])
+@bot.message_handler(content_types=['text', 'photo', 'voice'])
 def handle_message(message: Message) -> None:
     if not is_authorized(message):
         bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
@@ -426,6 +427,8 @@ def process_message_content(message: Message) -> HumanMessage:
             {"type": "text", "text": message.caption or "Analyze this image."},
             {"type": "image_url", "image_url": {"url": image_url}}
         ])
+    elif message.content_type == 'voice':
+        return process_voice_message(message)
     return HumanMessage(content=message.text)
 
 def get_llm(selected_model: str, stream_handler: StreamHandler):
@@ -460,6 +463,29 @@ def get_conversation_messages(user_id: int, selected_model: str):
             messages[first_non_system] = HumanMessage(content=messages[first_non_system].content)
     
     return messages
+
+def process_voice_message(message: Message) -> HumanMessage:
+    file_info = bot.get_file(message.voice.file_id)
+    downloaded_file = bot.download_file(file_info.file_path)
+    
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".ogg") as temp_audio:
+        temp_audio.write(downloaded_file)
+        temp_audio_path = temp_audio.name
+
+    recognizer = sr.Recognizer()
+    with sr.AudioFile(temp_audio_path) as source:
+        audio = recognizer.record(source)
+    
+    try:
+        text = recognizer.recognize_google(audio)
+    except sr.UnknownValueError:
+        text = "Sorry, I couldn't understand the audio."
+    except sr.RequestError:
+        text = "Sorry, there was an error processing the audio."
+    
+    os.unlink(temp_audio_path)
+    
+    return HumanMessage(content=text)
 
 def main() -> None:
     init_db()
