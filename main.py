@@ -83,6 +83,13 @@ def get_monthly_usage():
         ORDER BY total_messages DESC
     ''').fetchall())
 
+def get_username(user_id):
+    try:
+        user = bot.get_chat_member(user_id, user_id).user
+        return user.username or f"{user.first_name} {user.last_name}".strip()
+    except ApiTelegramException:
+        return f"Unknown User ({user_id})"
+
 def is_authorized(message: Message) -> bool:
     return str(message.from_user.id) in ENV["ALLOWED_USER_IDS"] or str(message.from_user.id) in ENV["ADMIN_USER_IDS"]
 
@@ -143,7 +150,8 @@ def handle_commands(message: Message) -> None:
         usage_stats = get_monthly_usage()
         usage_report = "Monthly Usage Report (from the start of the current month):\n\n"
         for user_id, messages, tokens in usage_stats:
-            usage_report += f"User ID: {user_id}\n"
+            username = get_username(user_id)
+            usage_report += f"User: {username}\n"
             usage_report += f"Total Messages: {messages}\n"
             usage_report += f"Estimated Tokens: {tokens}\n\n"
         bot.reply_to(message, usage_report)
