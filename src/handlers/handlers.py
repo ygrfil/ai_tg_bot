@@ -128,7 +128,7 @@ def summarize_conversation(conversation_history):
     ])
     llm = ChatAnthropic(api_key=ENV["ANTHROPIC_API_KEY"], model="claude-3-5-sonnet-20240620")
     chain = summary_prompt | llm | StrOutputParser()
-    conversation_text = "\n".join(f"{type(msg).__name__}: {msg.content}" for msg in conversation_history)
+    conversation_text = "\n".join(f"{type(msg).__name__}: {msg['content'] if isinstance(msg, dict) else msg.content}" for msg in conversation_history)
     return chain.invoke({"conversation": conversation_text})
 
 def create_prompt_command(bot, message: Message) -> None:
