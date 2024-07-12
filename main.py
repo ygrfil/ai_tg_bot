@@ -277,7 +277,7 @@ def get_llm(selected_model: str, stream_handler: StreamHandler):
     llm_config = {
         "openai": (ChatOpenAI, {"api_key": ENV["OPENAI_API_KEY"], "model": "gpt-4o"}),
         "anthropic": (ChatAnthropic, {"api_key": ENV["ANTHROPIC_API_KEY"], "model": "claude-3-5-sonnet-20240620"}),
-        "perplexity": (ChatPerplexity, {"model": "lama-3-sonar-large-32k-online"}),
+        "perplexity": (ChatPerplexity, {"model": "llama-3-sonar-large-32k-online"}),
         "groq": (ChatGroq, {"model_name": "llama3-70b-8192"}),
     }
     
