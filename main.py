@@ -446,6 +446,11 @@ def get_conversation_messages(user_id: int, selected_model: str):
     
     return messages
 
+import os
+import tempfile
+from pydub import AudioSegment
+import speech_recognition as sr
+
 def process_voice_message(message: Message) -> HumanMessage:
     file_info = bot.get_file(message.voice.file_id)
     downloaded_file = bot.download_file(file_info.file_path)
@@ -454,8 +459,13 @@ def process_voice_message(message: Message) -> HumanMessage:
         temp_audio.write(downloaded_file)
         temp_audio_path = temp_audio.name
 
+    # Convert OGG to WAV
+    audio = AudioSegment.from_ogg(temp_audio_path)
+    wav_path = temp_audio_path.replace(".ogg", ".wav")
+    audio.export(wav_path, format="wav")
+
     recognizer = sr.Recognizer()
-    with sr.AudioFile(temp_audio_path) as source:
+    with sr.AudioFile(wav_path) as source:
         audio = recognizer.record(source)
     
     try:
@@ -466,6 +476,7 @@ def process_voice_message(message: Message) -> HumanMessage:
         text = "Sorry, there was an error processing the audio."
     
     os.unlink(temp_audio_path)
+    os.unlink(wav_path)
     
     return HumanMessage(content=text)
 
