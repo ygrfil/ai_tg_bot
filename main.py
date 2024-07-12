@@ -366,7 +366,7 @@ class StreamHandler(BaseCallbackHandler):
     def on_llm_end(self, response: str, **kwargs) -> None:
         self.update_message()
 
-@bot.message_handler(content_types=['text', 'photo', 'voice'])
+@bot.message_handler(content_types=['text', 'photo'])
 def handle_message(message: Message) -> None:
     if not is_authorized(message):
         bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
@@ -411,8 +411,6 @@ def process_message_content(message: Message) -> HumanMessage:
             {"type": "text", "text": message.caption or "Analyze this image."},
             {"type": "image_url", "image_url": {"url": image_url}}
         ])
-    elif message.content_type == 'voice':
-        return process_voice_message(message)
     return HumanMessage(content=message.text)
 
 def get_llm(selected_model: str, stream_handler: StreamHandler):
@@ -450,14 +448,6 @@ def get_conversation_messages(user_id: int, selected_model: str):
 
 import base64
 
-def process_voice_message(message: Message) -> HumanMessage:
-    file_info = bot.get_file(message.voice.file_id)
-    downloaded_file = bot.download_file(file_info.file_path)
-    
-    # Encode the audio file to base64
-    audio_base64 = base64.b64encode(downloaded_file).decode('utf-8')
-    
-    return HumanMessage(content=f"[This is a voice message. Base64 encoded audio data: {audio_base64[:100]}... (truncated)]")
 
 def main() -> None:
     init_db()
