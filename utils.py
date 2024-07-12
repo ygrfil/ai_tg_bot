@@ -12,11 +12,13 @@ def is_authorized(message) -> bool:
 
 def reset_conversation_if_needed(user_id: int) -> None:
     if datetime.now() - last_interaction_time.get(user_id, datetime.min) > timedelta(hours=2):
-        user_conversation_history[user_id] = []
+        # Reset conversation logic should be handled in the main handler
+        pass
     last_interaction_time[user_id] = datetime.now()
 
 def limit_conversation_history(user_id: int) -> None:
-    user_conversation_history[user_id] = user_conversation_history[user_id][-10:]
+    # Conversation history limiting should be handled in the main handler
+    pass
 
 def create_keyboard(buttons) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[InlineKeyboardButton(text, callback_data=data)] for text, data in buttons])
