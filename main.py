@@ -1,11 +1,14 @@
-import os, time, sqlite3, base64, json, tempfile
+import os
+import time
+import sqlite3
+import base64
+import json
 from contextlib import closing
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from telebot import TeleBot
 from telebot.apihelper import ApiTelegramException
-from telebot.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, Voice
-import speech_recognition as sr
+from telebot.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langchain_community.chat_models import ChatPerplexity
@@ -35,9 +38,10 @@ user_conversation_history = {}
 last_interaction_time = {}
 
 def db_operation(operation, *args):
-    with closing(sqlite3.connect('user_preferences.db')) as conn, closing(conn.cursor()) as cursor:
-        result = operation(cursor, *args)
-        conn.commit()
+    with closing(sqlite3.connect('user_preferences.db')) as conn:
+        with closing(conn.cursor()) as cursor:
+            result = operation(cursor, *args)
+            conn.commit()
     return result
 
 def init_db():
@@ -124,7 +128,7 @@ def load_conversation_context(user_id, context_name):
 def get_username(user_id):
     try:
         user = bot.get_chat_member(user_id, user_id).user
-        return user.username or f"{user.first_name} {user.last_name}".strip()
+        return user.username or f"{user.first_name} {user.last_name}".strip() or f"User {user_id}"
     except ApiTelegramException:
         return f"Unknown User ({user_id})"
 
@@ -141,17 +145,22 @@ def limit_conversation_history(user_id: int) -> None:
 
 def handle_api_error(e: ApiTelegramException, message: Message) -> None:
     if e.error_code == 429:
-        time.sleep(int(e.result_json['parameters']['retry_after']))
+        retry_after = int(e.result_json['parameters']['retry_after'])
+        time.sleep(retry_after)
         handle_message(message)
     else:
-        print(f"Error: {e}")
+        print(f"Telegram API Error: {e}")
 
 def create_keyboard(buttons) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[InlineKeyboardButton(text, callback_data=data)] for text, data in buttons])
 
 def get_system_prompts():
-    return {filename[:-4]: open(os.path.join('system_prompts', filename), 'r').read().strip()
-            for filename in os.listdir('system_prompts') if filename.endswith('.txt')}
+    prompts = {}
+    for filename in os.listdir('system_prompts'):
+        if filename.endswith('.txt'):
+            with open(os.path.join('system_prompts', filename), 'r') as file:
+                prompts[filename[:-4]] = file.read().strip()
+    return prompts
 
 @bot.message_handler(commands=['model', 'sm', 'broadcast', 'usage', 'my_usage', 'save_context', 'load_context', 'list_prompts'])
 def handle_commands(message: Message) -> None:
@@ -188,11 +197,14 @@ def handle_broadcast(message: Message) -> None:
     if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
         bot.reply_to(message, "Sorry, you are not authorized to use this command.")
         return
-    if len(message.text.split(maxsplit=1)) < 2:
+
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
         bot.reply_to(message, "Please provide a message to broadcast after the /broadcast command.")
         return
-    broadcast_message = message.text.split(maxsplit=1)[1]
-    success_count = sum(1 for user_id in ENV["ALLOWED_USER_IDS"] if send_broadcast(int(user_id), broadcast_message))
+
+    broadcast_message = parts[1]
+    success_count = sum(send_broadcast(int(user_id), broadcast_message) for user_id in ENV["ALLOWED_USER_IDS"])
     bot.reply_to(message, f"Broadcast sent successfully to {success_count} out of {len(ENV['ALLOWED_USER_IDS'])} allowed users.")
 
 def handle_usage(message: Message) -> None:
@@ -310,7 +322,7 @@ def summarize_conversation(conversation_history):
     ])
     llm = ChatAnthropic(api_key=ENV["ANTHROPIC_API_KEY"], model="claude-3-5-sonnet-20240620")
     chain = summary_prompt | llm | StrOutputParser()
-    conversation_text = "\n".join([f"{type(msg).__name__}: {msg.content}" for msg in conversation_history])
+    conversation_text = "\n".join(f"{type(msg).__name__}: {msg.content}" for msg in conversation_history)
     return chain.invoke({"conversation": conversation_text})
 
 @bot.message_handler(commands=['create_prompt'])
