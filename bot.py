@@ -33,7 +33,7 @@ def create_prompt(message):
 
 @bot.message_handler(content_types=['text', 'photo'])
 def message_handler(message):
-    handle_message(bot, message, user_conversation_history)
+    handle_message(bot, message)
 
 def main():
     init_db()
