@@ -296,7 +296,16 @@ def get_conversation_messages(user_id: int, selected_model: str):
         if human_messages:
             messages.append(human_messages[-1])
         return messages
-    return [msg if isinstance(msg, (SystemMessage, HumanMessage, AIMessage)) else SystemMessage(content=msg['content']) for msg in user_conversation_history[user_id]]
+    
+    messages = [msg if isinstance(msg, (SystemMessage, HumanMessage, AIMessage)) else SystemMessage(content=msg['content']) for msg in user_conversation_history[user_id]]
+    
+    # Ensure the first non-system message is a HumanMessage for Anthropic
+    if selected_model == "anthropic":
+        first_non_system = next((i for i, msg in enumerate(messages) if not isinstance(msg, SystemMessage)), None)
+        if first_non_system is not None and not isinstance(messages[first_non_system], HumanMessage):
+            messages[first_non_system] = HumanMessage(content=messages[first_non_system].content)
+    
+    return messages
 
 def main() -> None:
     init_db()
