@@ -4,7 +4,11 @@ from src.database.database import init_db
 from src.handlers.handlers import (handle_commands, callback_query_handler, start_command,
                       reset_command, summarize_command, create_prompt_command, handle_message)
 
-bot = TeleBot(ENV["TELEGRAM_BOT_TOKEN"])
+try:
+    bot = TeleBot(ENV["TELEGRAM_BOT_TOKEN"])
+except Exception as e:
+    print(f"Error initializing bot: {e}")
+    raise
 
 @bot.message_handler(commands=['model', 'sm', 'broadcast', 'usage'])
 def command_handler(message):
@@ -35,8 +39,12 @@ def message_handler(message):
     handle_message(bot, message)
 
 def main():
-    init_db()
-    bot.polling()
+    try:
+        init_db()
+        bot.polling()
+    except Exception as e:
+        print(f"Error in main function: {e}")
+        raise
 
 if __name__ == "__main__":
     main()

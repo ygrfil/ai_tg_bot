@@ -8,4 +8,7 @@ ENV = {
     "ADMIN_USER_IDS": os.getenv("ADMIN_USER_IDS", "").split(","),
 }
 
+if not ENV["TELEGRAM_BOT_TOKEN"]:
+    raise ValueError("TELEGRAM_BOT_TOKEN is not set in the environment variables. Please set it and try again.")
+
 # Add any other configuration variables or functions here
