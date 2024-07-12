@@ -390,11 +390,7 @@ def handle_message(message: Message) -> None:
         llm = get_llm(selected_model, stream_handler)
         messages = get_conversation_messages(user_id, selected_model)
         
-        # Handle voice messages differently
-        if message.content_type == 'voice':
-            response = llm.invoke(messages)
-        else:
-            response = llm.invoke(messages)
+        response = llm.invoke(messages)
         
         # Always add the AI response to the conversation history, regardless of the model
         user_conversation_history[user_id].append(AIMessage(content=stream_handler.response))
@@ -403,8 +399,8 @@ def handle_message(message: Message) -> None:
         messages_count = 1  # We count this as one interaction
         tokens_count = len(stream_handler.response.split())  # Rough estimate of tokens
         log_usage(user_id, selected_model, messages_count, tokens_count)
-    except ApiTelegramException as e:
-        handle_api_error(e, message)
+    except Exception as e:
+        bot.edit_message_text(f"An error occurred: {str(e)}", chat_id=message.chat.id, message_id=placeholder_message.message_id)
 
 def process_message_content(message: Message) -> HumanMessage:
     if message.content_type == 'photo':
@@ -461,10 +457,7 @@ def process_voice_message(message: Message) -> HumanMessage:
     # Encode the audio file to base64
     audio_base64 = base64.b64encode(downloaded_file).decode('utf-8')
     
-    return HumanMessage(content=[
-        {"type": "text", "text": "Please transcribe and respond to this voice message:"},
-        {"type": "audio", "audio": f"data:audio/ogg;base64,{audio_base64}"}
-    ])
+    return HumanMessage(content=f"[This is a voice message. Base64 encoded audio data: {audio_base64[:100]}... (truncated)]")
 
 def main() -> None:
     init_db()
