@@ -5,5 +5,3 @@ langchain-openai==0.1.15
 langchain-anthropic==0.1.19
 langchain-community==0.2.7
 langchain-groq==0.1.6
-SpeechRecognition==3.10.4
-pydub==0.25.1

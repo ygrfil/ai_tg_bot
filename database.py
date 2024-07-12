@@ -27,15 +27,6 @@ def init_db():
             tokens_count INTEGER
         )
     '''))
-    db_operation(lambda c: c.execute('''
-        CREATE TABLE IF NOT EXISTS conversation_contexts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            context_name TEXT,
-            context_data TEXT,
-            UNIQUE(user_id, context_name)
-        )
-    '''))
 
 def get_user_preferences(user_id):
     result = db_operation(lambda c: c.execute('SELECT selected_model FROM user_preferences WHERE user_id = ?', (user_id,)).fetchone())
@@ -74,18 +65,3 @@ def get_user_monthly_usage(user_id):
         AND user_id = ?
     ''', (user_id,)).fetchone())
 
-def save_conversation_context(user_id, context_name, context):
-    context_data = json.dumps(context)
-    db_operation(lambda c: c.execute('''
-        INSERT OR REPLACE INTO conversation_contexts (user_id, context_name, context_data)
-        VALUES (?, ?, ?)
-    ''', (user_id, context_name, context_data)))
-
-def load_conversation_context(user_id, context_name):
-    result = db_operation(lambda c: c.execute('''
-        SELECT context_data FROM conversation_contexts
-        WHERE user_id = ? AND context_name = ?
-    ''', (user_id, context_name)).fetchone())
-    if result:
-        return json.loads(result[0])
-    return None
