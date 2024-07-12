@@ -7,7 +7,7 @@ import base64
 import time
 from config import ENV
 from database import (get_user_preferences, save_user_preferences, ensure_user_preferences,
-                      log_usage, get_monthly_usage, save_conversation_context, load_conversation_context)
+                      log_usage, get_monthly_usage)
 from models import get_llm, get_conversation_messages
 from utils import (is_authorized, reset_conversation_if_needed, limit_conversation_history,
                    create_keyboard, get_system_prompts, get_username, StreamHandler)
