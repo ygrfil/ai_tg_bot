@@ -60,8 +60,7 @@ def init_db():
     '''))
     db_operation(lambda c: c.execute('''
         CREATE TABLE IF NOT EXISTS conversation_contexts (
-            id INTEGER PRIMARY KEY AUTOINC
-REMENT,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
             context_name TEXT,
             context_data TEXT,
