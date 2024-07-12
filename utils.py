@@ -5,7 +5,6 @@ from config import ENV
 from langchain.callbacks.base import BaseCallbackHandler
 import time
 
-user_conversation_history = {}
 last_interaction_time = {}
 
 def is_authorized(message) -> bool:
