@@ -258,6 +258,7 @@ def handle_message(message: Message) -> None:
         llm = get_llm(selected_model, stream_handler)
         messages = get_conversation_messages(user_id, selected_model)
         response = llm.invoke(messages)
+        # Always add the AI response to the conversation history, regardless of the model
         user_conversation_history[user_id].append(AIMessage(content=stream_handler.response))
     except ApiTelegramException as e:
         handle_api_error(e, message)
@@ -289,7 +290,12 @@ def get_llm(selected_model: str, stream_handler: StreamHandler):
 
 def get_conversation_messages(user_id: int, selected_model: str):
     if selected_model == "perplexity":
-        return [msg for msg in user_conversation_history[user_id] if isinstance(msg, (HumanMessage, AIMessage))]
+        # For Perplexity model, return only the system message and the last human message
+        messages = [msg for msg in user_conversation_history[user_id] if isinstance(msg, SystemMessage)]
+        human_messages = [msg for msg in user_conversation_history[user_id] if isinstance(msg, HumanMessage)]
+        if human_messages:
+            messages.append(human_messages[-1])
+        return messages
     return [msg if isinstance(msg, (SystemMessage, HumanMessage, AIMessage)) else SystemMessage(content=msg['content']) for msg in user_conversation_history[user_id]]
 
 def main() -> None:
