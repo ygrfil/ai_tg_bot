@@ -155,17 +155,17 @@ def create_prompt_command(bot, message: Message) -> None:
         bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
         return
     bot.reply_to(message, "Please send the name for your new system prompt.")
-    bot.register_next_step_handler(message, process_prompt_name)
+    bot.register_next_step_handler(message, lambda m: process_prompt_name(bot, m))
 
-def process_prompt_name(message: Message) -> None:
+def process_prompt_name(bot, message: Message) -> None:
     prompt_name = message.text.strip()
     if not prompt_name or '/' in prompt_name:
         bot.reply_to(message, "Invalid prompt name. Please try again with a valid name without '/'.")
         return
     bot.reply_to(message, f"Great! Now send the content for the '{prompt_name}' system prompt.")
-    bot.register_next_step_handler(message, lambda m: process_prompt_content(m, prompt_name))
+    bot.register_next_step_handler(message, lambda m: process_prompt_content(bot, m, prompt_name))
 
-def process_prompt_content(message: Message, prompt_name: str) -> None:
+def process_prompt_content(bot, message: Message, prompt_name: str) -> None:
     prompt_content = message.text.strip()
     if not prompt_content:
         bot.reply_to(message, "Invalid prompt content. Please try again with valid content.")
