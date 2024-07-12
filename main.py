@@ -389,7 +389,13 @@ def handle_message(message: Message) -> None:
         stream_handler = StreamHandler(bot, message.chat.id, placeholder_message.message_id)
         llm = get_llm(selected_model, stream_handler)
         messages = get_conversation_messages(user_id, selected_model)
-        response = llm.invoke(messages)
+        
+        # Handle voice messages differently
+        if message.content_type == 'voice':
+            response = llm.invoke(messages)
+        else:
+            response = llm.invoke(messages)
+        
         # Always add the AI response to the conversation history, regardless of the model
         user_conversation_history[user_id].append(AIMessage(content=stream_handler.response))
         
@@ -446,39 +452,19 @@ def get_conversation_messages(user_id: int, selected_model: str):
     
     return messages
 
-import os
-import tempfile
-from pydub import AudioSegment
-import speech_recognition as sr
+import base64
 
 def process_voice_message(message: Message) -> HumanMessage:
     file_info = bot.get_file(message.voice.file_id)
     downloaded_file = bot.download_file(file_info.file_path)
     
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".ogg") as temp_audio:
-        temp_audio.write(downloaded_file)
-        temp_audio_path = temp_audio.name
-
-    # Convert OGG to WAV
-    audio = AudioSegment.from_ogg(temp_audio_path)
-    wav_path = temp_audio_path.replace(".ogg", ".wav")
-    audio.export(wav_path, format="wav")
-
-    recognizer = sr.Recognizer()
-    with sr.AudioFile(wav_path) as source:
-        audio = recognizer.record(source)
+    # Encode the audio file to base64
+    audio_base64 = base64.b64encode(downloaded_file).decode('utf-8')
     
-    try:
-        text = recognizer.recognize_google(audio)
-    except sr.UnknownValueError:
-        text = "Sorry, I couldn't understand the audio."
-    except sr.RequestError:
-        text = "Sorry, there was an error processing the audio."
-    
-    os.unlink(temp_audio_path)
-    os.unlink(wav_path)
-    
-    return HumanMessage(content=text)
+    return HumanMessage(content=[
+        {"type": "text", "text": "Please transcribe and respond to this voice message:"},
+        {"type": "audio", "audio": f"data:audio/ogg;base64,{audio_base64}"}
+    ])
 
 def main() -> None:
     init_db()
