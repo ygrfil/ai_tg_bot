@@ -1,7 +1,7 @@
 from telebot import TeleBot
 from config import ENV
-from src.database.database import init_db
-from src.handlers.handlers import (handle_commands, callback_query_handler, start_command,
+from database import init_db
+from handlers import (handle_commands, callback_query_handler, start_command,
                       reset_command, summarize_command, create_prompt_command, handle_message)
 
 bot = TeleBot(ENV["TELEGRAM_BOT_TOKEN"])
