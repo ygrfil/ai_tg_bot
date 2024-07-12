@@ -1,5 +1,5 @@
 services:
-  Telegramm-AI:
+  telegramm-ai:
     container_name: Telegramm-AI-Bot
     build: .
     volumes:
