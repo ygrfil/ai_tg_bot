@@ -44,8 +44,7 @@ def init_db():
     db_operation(lambda c: c.execute('''
         CREATE TABLE IF NOT EXISTS user_preferences (
             user_id INTEGER PRIMARY KEY,
-            selected_model TEXT DEFAULT 'anthropic',
-            default_model TEXT DEFAULT 'anthropic'
+            selected_model TEXT DEFAULT 'anthropic'
         )
     '''))
     db_operation(lambda c: c.execute('''
@@ -69,17 +68,14 @@ def init_db():
     '''))
 
 def get_user_preferences(user_id):
-    result = db_operation(lambda c: c.execute('SELECT selected_model, default_model FROM user_preferences WHERE user_id = ?', (user_id,)).fetchone())
-    return {'selected_model': result[0], 'default_model': result[1]} if result else {'selected_model': 'anthropic', 'default_model': 'anthropic'}
+    result = db_operation(lambda c: c.execute('SELECT selected_model FROM user_preferences WHERE user_id = ?', (user_id,)).fetchone())
+    return {'selected_model': result[0] if result else 'anthropic'}
 
-def save_user_preferences(user_id, selected_model, default_model=None):
-    if default_model is None:
-        db_operation(lambda c: c.execute('UPDATE user_preferences SET selected_model = ? WHERE user_id = ?', (selected_model, user_id)))
-    else:
-        db_operation(lambda c: c.execute('INSERT OR REPLACE INTO user_preferences (user_id, selected_model, default_model) VALUES (?, ?, ?)', (user_id, selected_model, default_model)))
+def save_user_preferences(user_id, selected_model):
+    db_operation(lambda c: c.execute('INSERT OR REPLACE INTO user_preferences (user_id, selected_model) VALUES (?, ?)', (user_id, selected_model)))
 
 def ensure_user_preferences(user_id):
-    db_operation(lambda c: c.execute('INSERT OR IGNORE INTO user_preferences (user_id, selected_model, default_model) VALUES (?, ?, ?)', (user_id, 'anthropic', 'anthropic')))
+    db_operation(lambda c: c.execute('INSERT OR IGNORE INTO user_preferences (user_id, selected_model) VALUES (?, ?)', (user_id, 'anthropic')))
 
 def log_usage(user_id, model, messages_count, tokens_count):
     today = datetime.now().strftime('%Y-%m-%d')
@@ -157,7 +153,7 @@ def get_system_prompts():
     return {filename[:-4]: open(os.path.join('system_prompts', filename), 'r').read().strip()
             for filename in os.listdir('system_prompts') if filename.endswith('.txt')}
 
-@bot.message_handler(commands=['model', 'sm', 'broadcast', 'usage', 'my_usage', 'save_context', 'load_context', 'list_prompts', 'set_default'])
+@bot.message_handler(commands=['model', 'sm', 'broadcast', 'usage', 'my_usage', 'save_context', 'load_context', 'list_prompts'])
 def handle_commands(message: Message) -> None:
     if not is_authorized(message):
         bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
@@ -187,8 +183,6 @@ def handle_commands(message: Message) -> None:
         handle_load_context(message)
     elif command == 'list_prompts':
         handle_list_prompts(message)
-    elif command == 'set_default':
-        handle_set_default(message)
 
 def handle_broadcast(message: Message) -> None:
     if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
@@ -245,18 +239,7 @@ def handle_list_prompts(message: Message) -> None:
     prompt_list = "Available system prompts:\n\n" + "\n".join(prompts.keys())
     bot.reply_to(message, prompt_list)
 
-def handle_set_default(message: Message) -> None:
-    user_id = message.from_user.id
-    args = message.text.split()[1:]
-    if not args:
-        bot.reply_to(message, "Please specify a model to set as default. Available models: " + ", ".join(AVAILABLE_MODELS))
-        return
-    model = args[0].lower()
-    if model not in AVAILABLE_MODELS:
-        bot.reply_to(message, f"Invalid model. Available models: {', '.join(AVAILABLE_MODELS)}")
-        return
-    save_user_preferences(user_id, model, model)
-    bot.reply_to(message, f"Default model set to {model}.")
+# Remove the handle_set_default function entirely
 
 def send_broadcast(user_id: int, message: str) -> bool:
     try:
