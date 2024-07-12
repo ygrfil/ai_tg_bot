@@ -27,6 +27,8 @@ ENV = {
     "GROQ_API_KEY": os.getenv("GROQ_API_KEY"),
 }
 
+AVAILABLE_MODELS = ["openai", "anthropic", "perplexity", "groq"]
+
 bot = TeleBot(ENV["TELEGRAM_BOT_TOKEN"])
 user_conversation_history = {}
 last_interaction_time = {}
@@ -41,7 +43,8 @@ def init_db():
     db_operation(lambda c: c.execute('''
         CREATE TABLE IF NOT EXISTS user_preferences (
             user_id INTEGER PRIMARY KEY,
-            selected_model TEXT DEFAULT 'anthropic'
+            selected_model TEXT DEFAULT 'anthropic',
+            default_model TEXT DEFAULT 'anthropic'
         )
     '''))
     db_operation(lambda c: c.execute('''
@@ -54,16 +57,29 @@ def init_db():
             tokens_count INTEGER
         )
     '''))
+    db_operation(lambda c: c.execute('''
+        CREATE TABLE IF NOT EXISTS conversation_contexts (
+            id INTEGER PRIMARY KEY AUTOINC
+REMENT,
+            user_id INTEGER,
+            context_name TEXT,
+            context_data TEXT,
+            UNIQUE(user_id, context_name)
+        )
+    '''))
 
 def get_user_preferences(user_id):
-    result = db_operation(lambda c: c.execute('SELECT selected_model FROM user_preferences WHERE user_id = ?', (user_id,)).fetchone())
-    return {'selected_model': result[0] if result else 'anthropic'}
+    result = db_operation(lambda c: c.execute('SELECT selected_model, default_model FROM user_preferences WHERE user_id = ?', (user_id,)).fetchone())
+    return {'selected_model': result[0], 'default_model': result[1]} if result else {'selected_model': 'anthropic', 'default_model': 'anthropic'}
 
-def save_user_preferences(user_id, selected_model):
-    db_operation(lambda c: c.execute('INSERT OR REPLACE INTO user_preferences (user_id, selected_model) VALUES (?, ?)', (user_id, selected_model)))
+def save_user_preferences(user_id, selected_model, default_model=None):
+    if default_model is None:
+        db_operation(lambda c: c.execute('UPDATE user_preferences SET selected_model = ? WHERE user_id = ?', (selected_model, user_id)))
+    else:
+        db_operation(lambda c: c.execute('INSERT OR REPLACE INTO user_preferences (user_id, selected_model, default_model) VALUES (?, ?, ?)', (user_id, selected_model, default_model)))
 
 def ensure_user_preferences(user_id):
-    db_operation(lambda c: c.execute('INSERT OR IGNORE INTO user_preferences (user_id) VALUES (?)', (user_id,)))
+    db_operation(lambda c: c.execute('INSERT OR IGNORE INTO user_preferences (user_id, selected_model, default_model) VALUES (?, ?, ?)', (user_id, 'anthropic', 'anthropic')))
 
 def log_usage(user_id, model, messages_count, tokens_count):
     today = datetime.now().strftime('%Y-%m-%d')
@@ -82,6 +98,32 @@ def get_monthly_usage():
         GROUP BY user_id
         ORDER BY total_messages DESC
     ''').fetchall())
+
+def get_user_monthly_usage(user_id):
+    return db_operation(lambda c: c.execute('''
+        SELECT SUM(messages_count) as total_messages, 
+               SUM(tokens_count) as total_tokens
+        FROM usage_stats
+        WHERE date >= date('now', 'start of month')
+        AND user_id = ?
+    ''', (user_id,)).fetchone())
+
+def save_conversation_context(user_id, context_name):
+    context = json.dumps(user_conversation_history.get(user_id, []))
+    db_operation(lambda c: c.execute('''
+        INSERT OR REPLACE INTO conversation_contexts (user_id, context_name, context_data)
+        VALUES (?, ?, ?)
+    ''', (user_id, context_name, context)))
+
+def load_conversation_context(user_id, context_name):
+    result = db_operation(lambda c: c.execute('''
+        SELECT context_data FROM conversation_contexts
+        WHERE user_id = ? AND context_name = ?
+    ''', (user_id, context_name)).fetchone())
+    if result:
+        user_conversation_history[user_id] = json.loads(result[0])
+        return True
+    return False
 
 def get_username(user_id):
     try:
@@ -115,7 +157,7 @@ def get_system_prompts():
     return {filename[:-4]: open(os.path.join('system_prompts', filename), 'r').read().strip()
             for filename in os.listdir('system_prompts') if filename.endswith('.txt')}
 
-@bot.message_handler(commands=['model', 'sm', 'broadcast', 'usage'])
+@bot.message_handler(commands=['model', 'sm', 'broadcast', 'usage', 'my_usage', 'save_context', 'load_context', 'list_prompts', 'set_default'])
 def handle_commands(message: Message) -> None:
     if not is_authorized(message):
         bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
@@ -134,27 +176,87 @@ def handle_commands(message: Message) -> None:
         ensure_user_preferences(message.from_user.id)
         bot.send_message(message.chat.id, "Select a system message:", reply_markup=create_keyboard([(name, f"sm_{name}") for name in get_system_prompts()]))
     elif command == 'broadcast':
-        if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
-            bot.reply_to(message, "Sorry, you are not authorized to use this command.")
-            return
-        if len(message.text.split(maxsplit=1)) < 2:
-            bot.reply_to(message, "Please provide a message to broadcast after the /broadcast command.")
-            return
-        broadcast_message = message.text.split(maxsplit=1)[1]
-        success_count = sum(1 for user_id in ENV["ALLOWED_USER_IDS"] if send_broadcast(int(user_id), broadcast_message))
-        bot.reply_to(message, f"Broadcast sent successfully to {success_count} out of {len(ENV['ALLOWED_USER_IDS'])} allowed users.")
+        handle_broadcast(message)
     elif command == 'usage':
-        if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
-            bot.reply_to(message, "Sorry, you are not authorized to use this command.")
-            return
-        usage_stats = get_monthly_usage()
-        usage_report = "Monthly Usage Report (from the start of the current month):\n\n"
-        for user_id, messages, tokens in usage_stats:
-            username = get_username(user_id)
-            usage_report += f"User: {username}\n"
-            usage_report += f"Total Messages: {messages}\n"
-            usage_report += f"Estimated Tokens: {tokens}\n\n"
-        bot.reply_to(message, usage_report)
+        handle_usage(message)
+    elif command == 'my_usage':
+        handle_my_usage(message)
+    elif command == 'save_context':
+        handle_save_context(message)
+    elif command == 'load_context':
+        handle_load_context(message)
+    elif command == 'list_prompts':
+        handle_list_prompts(message)
+    elif command == 'set_default':
+        handle_set_default(message)
+
+def handle_broadcast(message: Message) -> None:
+    if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
+        bot.reply_to(message, "Sorry, you are not authorized to use this command.")
+        return
+    if len(message.text.split(maxsplit=1)) < 2:
+        bot.reply_to(message, "Please provide a message to broadcast after the /broadcast command.")
+        return
+    broadcast_message = message.text.split(maxsplit=1)[1]
+    success_count = sum(1 for user_id in ENV["ALLOWED_USER_IDS"] if send_broadcast(int(user_id), broadcast_message))
+    bot.reply_to(message, f"Broadcast sent successfully to {success_count} out of {len(ENV['ALLOWED_USER_IDS'])} allowed users.")
+
+def handle_usage(message: Message) -> None:
+    if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
+        bot.reply_to(message, "Sorry, you are not authorized to use this command.")
+        return
+    usage_stats = get_monthly_usage()
+    usage_report = "Monthly Usage Report (from the start of the current month):\n\n"
+    for user_id, messages, tokens in usage_stats:
+        username = get_username(user_id)
+        usage_report += f"User: {username}\n"
+        usage_report += f"Total Messages: {messages}\n"
+        usage_report += f"Estimated Tokens: {tokens}\n\n"
+    bot.reply_to(message, usage_report)
+
+def handle_my_usage(message: Message) -> None:
+    user_id = message.from_user.id
+    usage_stats = get_user_monthly_usage(user_id)
+    if usage_stats:
+        messages, tokens = usage_stats
+        usage_report = f"Your Monthly Usage (from the start of the current month):\n\n"
+        usage_report += f"Total Messages: {messages}\n"
+        usage_report += f"Estimated Tokens: {tokens}\n"
+    else:
+        usage_report = "You haven't used the bot this month."
+    bot.reply_to(message, usage_report)
+
+def handle_save_context(message: Message) -> None:
+    user_id = message.from_user.id
+    context_name = message.text.split(maxsplit=1)[1] if len(message.text.split(maxsplit=1)) > 1 else "default"
+    save_conversation_context(user_id, context_name)
+    bot.reply_to(message, f"Conversation context saved as '{context_name}'.")
+
+def handle_load_context(message: Message) -> None:
+    user_id = message.from_user.id
+    context_name = message.text.split(maxsplit=1)[1] if len(message.text.split(maxsplit=1)) > 1 else "default"
+    if load_conversation_context(user_id, context_name):
+        bot.reply_to(message, f"Conversation context '{context_name}' loaded successfully.")
+    else:
+        bot.reply_to(message, f"No saved context found with name '{context_name}'.")
+
+def handle_list_prompts(message: Message) -> None:
+    prompts = get_system_prompts()
+    prompt_list = "Available system prompts:\n\n" + "\n".join(prompts.keys())
+    bot.reply_to(message, prompt_list)
+
+def handle_set_default(message: Message) -> None:
+    user_id = message.from_user.id
+    args = message.text.split()[1:]
+    if not args:
+        bot.reply_to(message, "Please specify a model to set as default. Available models: " + ", ".join(AVAILABLE_MODELS))
+        return
+    model = args[0].lower()
+    if model not in AVAILABLE_MODELS:
+        bot.reply_to(message, f"Invalid model. Available models: {', '.join(AVAILABLE_MODELS)}")
+        return
+    save_user_preferences(user_id, model, model)
+    bot.reply_to(message, f"Default model set to {model}.")
 
 def send_broadcast(user_id: int, message: str) -> bool:
     try:
