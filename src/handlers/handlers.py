@@ -5,6 +5,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_anthropic import ChatAnthropic
 import base64
 import time
+import os
 from config import ENV
 from src.database.database import (get_user_preferences, save_user_preferences, ensure_user_preferences,
                       log_usage, get_monthly_usage)
@@ -35,6 +36,8 @@ def handle_commands(bot, message: Message) -> None:
         handle_broadcast(bot, message)
     elif command == 'usage':
         handle_usage(bot, message)
+    elif command == 'create_prompt':
+        create_prompt_command(bot, message)
 
 def handle_broadcast(bot, message: Message) -> None:
     if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
@@ -96,6 +99,7 @@ def start_command(bot, message: Message) -> None:
                           "/sm: Select a system message to set the AI behavior and context.\n"
                           "/reset: Reset the conversation history.\n"
                           "/summarize: Summarize the current conversation.\n"
+                          "/create_prompt: Create a new system prompt.\n"
                           "/broadcast: (Admin only) Send a message to all users.\n"
                           "/usage: (Admin only) View usage statistics.\n"
                           "Created by Yegor")
@@ -146,12 +150,31 @@ def process_prompt_name(bot, message: Message) -> None:
     bot.reply_to(message, f"Great! Now send the content for the '{prompt_name}' system prompt.")
     bot.register_next_step_handler(message, lambda m: process_prompt_content(bot, m, prompt_name))
 
-def process_prompt_content(bot, message: Message, prompt_name: str) -> None:
+def create_prompt_command(bot, message: Message) -> None:
+    if not is_authorized(message):
+        bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
+        return
+    bot.reply_to(message, "Please send the name for your new system prompt.")
+    bot.register_next_step_handler(message, process_prompt_name)
+
+def process_prompt_name(message: Message) -> None:
+    prompt_name = message.text.strip()
+    if not prompt_name or '/' in prompt_name:
+        bot.reply_to(message, "Invalid prompt name. Please try again with a valid name without '/'.")
+        return
+    bot.reply_to(message, f"Great! Now send the content for the '{prompt_name}' system prompt.")
+    bot.register_next_step_handler(message, lambda m: process_prompt_content(m, prompt_name))
+
+def process_prompt_content(message: Message, prompt_name: str) -> None:
     prompt_content = message.text.strip()
     if not prompt_content:
         bot.reply_to(message, "Invalid prompt content. Please try again with valid content.")
         return
-    with open(f"system_prompts/{prompt_name}.txt", 'w') as file:
+    
+    prompt_dir = "system_prompts"
+    os.makedirs(prompt_dir, exist_ok=True)
+    
+    with open(os.path.join(prompt_dir, f"{prompt_name}.txt"), 'w') as file:
         file.write(prompt_content)
     bot.reply_to(message, f"System prompt '{prompt_name}' has been created and saved successfully!")
 
