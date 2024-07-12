@@ -162,7 +162,7 @@ def get_system_prompts():
                 prompts[filename[:-4]] = file.read().strip()
     return prompts
 
-@bot.message_handler(commands=['model', 'sm', 'broadcast', 'usage', 'my_usage', 'save_context', 'load_context', 'list_prompts'])
+@bot.message_handler(commands=['model', 'sm', 'broadcast', 'usage'])
 def handle_commands(message: Message) -> None:
     if not is_authorized(message):
         bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
@@ -184,14 +184,6 @@ def handle_commands(message: Message) -> None:
         handle_broadcast(message)
     elif command == 'usage':
         handle_usage(message)
-    elif command == 'my_usage':
-        handle_my_usage(message)
-    elif command == 'save_context':
-        handle_save_context(message)
-    elif command == 'load_context':
-        handle_load_context(message)
-    elif command == 'list_prompts':
-        handle_list_prompts(message)
 
 def handle_broadcast(message: Message) -> None:
     if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
@@ -219,39 +211,6 @@ def handle_usage(message: Message) -> None:
         usage_report += f"Total Messages: {messages}\n"
         usage_report += f"Estimated Tokens: {tokens}\n\n"
     bot.reply_to(message, usage_report)
-
-def handle_my_usage(message: Message) -> None:
-    user_id = message.from_user.id
-    usage_stats = get_user_monthly_usage(user_id)
-    if usage_stats:
-        messages, tokens = usage_stats
-        usage_report = f"Your Monthly Usage (from the start of the current month):\n\n"
-        usage_report += f"Total Messages: {messages}\n"
-        usage_report += f"Estimated Tokens: {tokens}\n"
-    else:
-        usage_report = "You haven't used the bot this month."
-    bot.reply_to(message, usage_report)
-
-def handle_save_context(message: Message) -> None:
-    user_id = message.from_user.id
-    context_name = message.text.split(maxsplit=1)[1] if len(message.text.split(maxsplit=1)) > 1 else "default"
-    save_conversation_context(user_id, context_name)
-    bot.reply_to(message, f"Conversation context saved as '{context_name}'.")
-
-def handle_load_context(message: Message) -> None:
-    user_id = message.from_user.id
-    context_name = message.text.split(maxsplit=1)[1] if len(message.text.split(maxsplit=1)) > 1 else "default"
-    if load_conversation_context(user_id, context_name):
-        bot.reply_to(message, f"Conversation context '{context_name}' loaded successfully.")
-    else:
-        bot.reply_to(message, f"No saved context found with name '{context_name}'.")
-
-def handle_list_prompts(message: Message) -> None:
-    prompts = get_system_prompts()
-    prompt_list = "Available system prompts:\n\n" + "\n".join(prompts.keys())
-    bot.reply_to(message, prompt_list)
-
-# Remove the handle_set_default function entirely
 
 def send_broadcast(user_id: int, message: str) -> bool:
     try:
@@ -284,12 +243,12 @@ def start_command(message: Message) -> None:
     ensure_user_preferences(message.from_user.id)
     bot.reply_to(message, "Welcome! Here are the available commands:\n"
                           "/start: Introduces the bot and explains the available AI models.\n"
-                          "/model: Select the AI model (OpenAI, Anthropic, or Groq).\n"
+                          "/model: Select the AI model (OpenAI, Anthropic, Perplexity, or Groq).\n"
                           "/sm: Select a system message to set the AI behavior and context.\n"
                           "/reset: Reset the conversation history.\n"
                           "/summarize: Summarize the current conversation.\n"
                           "/broadcast: (Admin only) Send a message to all users.\n"
-                          "/create_prompt: Create a new system prompt.\n"
+                          "/usage: (Admin only) View usage statistics.\n"
                           "Created by Yegor")
 
 @bot.message_handler(commands=['reset'])
