@@ -3,7 +3,6 @@ from config import ENV
 from database import init_db
 from handlers import (handle_commands, callback_query_handler, start_command,
                       reset_command, summarize_command, create_prompt_command, handle_message)
-from utils import user_conversation_history
 
 bot = TeleBot(ENV["TELEGRAM_BOT_TOKEN"])
 

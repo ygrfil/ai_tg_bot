@@ -14,6 +14,8 @@ from utils import (is_authorized, reset_conversation_if_needed, limit_conversati
 
 user_conversation_history = {}
 
+user_conversation_history = {}
+
 def handle_commands(bot, message: Message) -> None:
     if not is_authorized(message):
         bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
