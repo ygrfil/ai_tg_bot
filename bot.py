@@ -1,6 +1,6 @@
 from telebot import TeleBot
 from config import ENV
-from src.database.database import init_db
+from src.database.database import init_db, add_allowed_user
 from src.handlers.handlers import (handle_commands, callback_query_handler, start_command,
                       startadmin_command, reset_command, summarize_command, create_prompt_command, handle_message)
 
@@ -42,9 +42,16 @@ def create_prompt(message):
 def message_handler(message):
     handle_message(bot, message)
 
+def import_allowed_users():
+    allowed_users = ENV.get("ALLOWED_USER_IDS", "").split(",")
+    for user_id in allowed_users:
+        if user_id.strip():
+            add_allowed_user(int(user_id.strip()))
+
 def main():
     try:
         init_db()
+        import_allowed_users()
         bot.polling()
     except Exception as e:
         print(f"Error in main function: {e}")

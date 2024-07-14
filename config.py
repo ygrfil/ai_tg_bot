@@ -9,6 +9,7 @@ ENV = {
     "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),
     "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY"),
     "ADMIN_USER_IDS": os.getenv("ADMIN_USER_IDS", "").split(","),
+    "ALLOWED_USER_IDS": os.getenv("ALLOWED_USER_IDS", "").split(","),
 }
 
 if not ENV["TELEGRAM_BOT_TOKEN"]:

@@ -70,7 +70,7 @@ def get_allowed_users():
     return db_operation(lambda c: c.execute('SELECT user_id, username FROM allowed_users').fetchall())
 
 def add_allowed_user(user_id):
-    db_operation(lambda c: c.execute('INSERT OR REPLACE INTO allowed_users (user_id) VALUES (?)', (user_id,)))
+    db_operation(lambda c: c.execute('INSERT OR IGNORE INTO allowed_users (user_id) VALUES (?)', (user_id,)))
     return True
 
 def is_user_allowed(user_id):
