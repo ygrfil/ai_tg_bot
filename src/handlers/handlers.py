@@ -150,9 +150,19 @@ def start_command(bot, message: Message) -> None:
                           "/reset: Reset the conversation history.\n"
                           "/summarize: Summarize the current conversation.\n"
                           "/create_prompt: Create a new system prompt.\n"
-                          "/broadcast: (Admin only) Send a message to all users.\n"
-                          "/usage: (Admin only) View usage statistics.\n"
                           "Created by Yegor")
+
+def startadmin_command(bot, message: Message) -> None:
+    if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
+        bot.reply_to(message, "Sorry, you are not authorized to use this command.")
+        return
+    bot.reply_to(message, "Welcome, Admin! Here are the available admin commands:\n"
+                          "/startadmin: Shows all admin commands.\n"
+                          "/broadcast: Send a message to all users.\n"
+                          "/usage: View usage statistics.\n"
+                          "/list_users: List all allowed users.\n"
+                          "/add_user: Add a new allowed user.\n"
+                          "/remove_user: Remove an allowed user.")
 
 def reset_command(bot, message: Message) -> None:
     if not is_authorized(message):
