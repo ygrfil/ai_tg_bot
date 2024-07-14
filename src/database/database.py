@@ -72,6 +72,14 @@ def add_allowed_user(user_id, username):
     db_operation(lambda c: c.execute('INSERT OR REPLACE INTO allowed_users (user_id, username) VALUES (?, ?)', (user_id, username)))
     return True
 
+def is_user_allowed(user_id):
+    result = db_operation(lambda c: c.execute('SELECT 1 FROM allowed_users WHERE user_id = ? OR username = ?', (user_id, get_username_by_id(user_id))).fetchone())
+    return bool(result)
+
+def get_username_by_id(user_id):
+    result = db_operation(lambda c: c.execute('SELECT username FROM allowed_users WHERE user_id = ?', (user_id,)).fetchone())
+    return result[0] if result else None
+
 def remove_allowed_user(username):
     result = db_operation(lambda c: c.execute('DELETE FROM allowed_users WHERE username = ?', (username,)))
     return result.rowcount > 0

@@ -62,36 +62,18 @@ def handle_add_user(bot, message: Message) -> None:
     
     parts = message.text.split()
     if len(parts) != 2:
-        bot.reply_to(message, "Usage: /add_user <username or user_id>")
+        bot.reply_to(message, "Usage: /add_user <username>")
         return
     
-    user_identifier = parts[1]
-    if user_identifier.startswith('@'):
-        user_identifier = user_identifier[1:]
+    username = parts[1]
+    if username.startswith('@'):
+        username = username[1:]
     
-    try:
-        # First, try to get the user by username
-        user = bot.get_chat("@" + user_identifier)
-        user_id = user.id
-        username = user.username or user_identifier
-    except Exception as e:
-        # If that fails, check if the input is a valid user ID
-        try:
-            user_id = int(user_identifier)
-            user = bot.get_chat(user_id)
-            username = user.username or user_identifier
-        except ValueError:
-            bot.reply_to(message, f"Failed to find user with username {user_identifier}. Make sure the user has interacted with the bot at least once.")
-            return
-        except Exception as e:
-            bot.reply_to(message, f"Failed to find user with identifier {user_identifier}. Error: {str(e)}")
-            return
-    
-    result = add_allowed_user(user_id, username)
+    result = add_allowed_user(None, username)
     if result:
-        bot.reply_to(message, f"User {username} (ID: {user_id}) has been added to the allowed users list.")
+        bot.reply_to(message, f"User {username} has been added to the allowed users list.")
     else:
-        bot.reply_to(message, f"Failed to add user {username} (ID: {user_id}). The user might already be in the allowed list.")
+        bot.reply_to(message, f"Failed to add user {username}. The user might already be in the allowed list.")
 
 def handle_remove_user(bot, message: Message) -> None:
     if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
