@@ -52,7 +52,7 @@ def handle_list_users(bot, message: Message) -> None:
         return
     
     users = get_allowed_users()
-    user_list = "\n".join([f"User ID: {user[0]}, Username: {user[1]}" for user in users])
+    user_list = "\n".join([f"Username: {user[0]}" for user in users])
     bot.reply_to(message, f"List of allowed users:\n{user_list}")
 
 def handle_add_user(bot, message: Message) -> None:
