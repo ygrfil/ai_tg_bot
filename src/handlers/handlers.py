@@ -61,14 +61,13 @@ def handle_add_user(bot, message: Message) -> None:
         return
     
     parts = message.text.split()
-    if len(parts) != 3:
-        bot.reply_to(message, "Usage: /add_user <user_id> <username>")
+    if len(parts) != 2:
+        bot.reply_to(message, "Usage: /add_user <username>")
         return
     
-    user_id = int(parts[1])
-    username = parts[2]
-    add_allowed_user(user_id, username)
-    bot.reply_to(message, f"User {username} (ID: {user_id}) has been added to the allowed users list.")
+    username = parts[1]
+    add_allowed_user(username)
+    bot.reply_to(message, f"User {username} has been added to the allowed users list.")
 
 def handle_remove_user(bot, message: Message) -> None:
     if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
