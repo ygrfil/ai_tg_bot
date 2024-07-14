@@ -69,6 +69,7 @@ def handle_add_user(bot, message: Message) -> None:
     if username.startswith('@'):
         username = username[1:]
     
+    # We don't have the user_id when adding by username, so we'll use None for now
     result = add_allowed_user(None, username)
     if result:
         bot.reply_to(message, f"User {username} has been added to the allowed users list.")
