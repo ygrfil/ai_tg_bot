@@ -10,13 +10,14 @@ from config import ENV
 from src.database.database import (get_user_preferences, save_user_preferences, ensure_user_preferences,
                       log_usage, get_monthly_usage)
 from src.models.models import get_llm, get_conversation_messages
-from src.utils.utils import (is_authorized, reset_conversation_if_needed, limit_conversation_history,
+from src.utils.utils import (reset_conversation_if_needed, limit_conversation_history,
                    create_keyboard, get_system_prompts, get_username, StreamHandler)
+from src.database.database import is_user_allowed, get_allowed_users, add_allowed_user, remove_allowed_user
 
 user_conversation_history = {}
 
 def handle_commands(bot, message: Message) -> None:
-    if not is_authorized(message):
+    if not is_user_allowed(message.from_user.id) and str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
         bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
         return
 
@@ -38,6 +39,50 @@ def handle_commands(bot, message: Message) -> None:
         handle_usage(bot, message)
     elif command == 'create_prompt':
         create_prompt_command(bot, message)
+    elif command == 'list_users':
+        handle_list_users(bot, message)
+    elif command == 'add_user':
+        handle_add_user(bot, message)
+    elif command == 'remove_user':
+        handle_remove_user(bot, message)
+
+def handle_list_users(bot, message: Message) -> None:
+    if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
+        bot.reply_to(message, "Sorry, you are not authorized to use this command.")
+        return
+    
+    users = get_allowed_users()
+    user_list = "\n".join([f"User ID: {user[0]}, Username: {user[1]}" for user in users])
+    bot.reply_to(message, f"List of allowed users:\n{user_list}")
+
+def handle_add_user(bot, message: Message) -> None:
+    if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
+        bot.reply_to(message, "Sorry, you are not authorized to use this command.")
+        return
+    
+    parts = message.text.split()
+    if len(parts) != 3:
+        bot.reply_to(message, "Usage: /add_user <user_id> <username>")
+        return
+    
+    user_id = int(parts[1])
+    username = parts[2]
+    add_allowed_user(user_id, username)
+    bot.reply_to(message, f"User {username} (ID: {user_id}) has been added to the allowed users list.")
+
+def handle_remove_user(bot, message: Message) -> None:
+    if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
+        bot.reply_to(message, "Sorry, you are not authorized to use this command.")
+        return
+    
+    parts = message.text.split()
+    if len(parts) != 2:
+        bot.reply_to(message, "Usage: /remove_user <user_id>")
+        return
+    
+    user_id = int(parts[1])
+    remove_allowed_user(user_id)
+    bot.reply_to(message, f"User with ID {user_id} has been removed from the allowed users list.")
 
 def handle_broadcast(bot, message: Message) -> None:
     if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
