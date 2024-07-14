@@ -81,7 +81,7 @@ def handle_add_user(bot, message: Message) -> None:
             user = bot.get_chat(user_id)
             username = user.username or user_identifier
         except ValueError:
-            bot.reply_to(message, f"Invalid input. Please provide a valid username or user ID.")
+            bot.reply_to(message, f"Invalid input. Please provide a valid username (without @) or user ID.")
             return
         except Exception as e:
             bot.reply_to(message, f"Failed to find user with identifier {user_identifier}. Error: {str(e)}")
