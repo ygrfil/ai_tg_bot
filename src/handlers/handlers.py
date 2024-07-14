@@ -71,7 +71,7 @@ def handle_add_user(bot, message: Message) -> None:
     
     try:
         # First, try to get the user by username
-        user = bot.get_chat(user_identifier)
+        user = bot.get_chat("@" + user_identifier)
         user_id = user.id
         username = user.username or user_identifier
     except Exception as e:
@@ -81,7 +81,7 @@ def handle_add_user(bot, message: Message) -> None:
             user = bot.get_chat(user_id)
             username = user.username or user_identifier
         except ValueError:
-            bot.reply_to(message, f"Invalid input. Please provide a valid username (without @) or user ID.")
+            bot.reply_to(message, f"Failed to find user with username {user_identifier}. Make sure the user has interacted with the bot at least once.")
             return
         except Exception as e:
             bot.reply_to(message, f"Failed to find user with identifier {user_identifier}. Error: {str(e)}")
