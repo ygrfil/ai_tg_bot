@@ -40,6 +40,18 @@ def get_username(bot, user_id):
     except Exception:
         return f"Unknown User ({user_id})"
 
+def get_user_id(bot, user_input):
+    if user_input.isdigit():
+        return int(user_input)
+    elif user_input.startswith('@'):
+        try:
+            chat = bot.get_chat(user_input)
+            return chat.id
+        except Exception:
+            return None
+    else:
+        return None
+
 class StreamHandler(BaseCallbackHandler):
     def __init__(self, bot, chat_id, message_id):
         self.bot = bot

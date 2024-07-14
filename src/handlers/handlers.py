@@ -11,7 +11,7 @@ from src.database.database import (get_user_preferences, save_user_preferences, 
                       log_usage, get_monthly_usage)
 from src.models.models import get_llm, get_conversation_messages
 from src.utils.utils import (reset_conversation_if_needed, limit_conversation_history,
-                   create_keyboard, get_system_prompts, get_username, StreamHandler, is_authorized)
+                   create_keyboard, get_system_prompts, get_username, get_user_id, StreamHandler, is_authorized)
 from src.database.database import is_user_allowed, get_allowed_users, add_allowed_user, remove_allowed_user
 
 user_conversation_history = {}
@@ -67,19 +67,22 @@ def handle_add_user(bot, message: Message) -> None:
     
     parts = message.text.split()
     if len(parts) != 2:
-        bot.reply_to(message, "Usage: /add_user <user_id>")
+        bot.reply_to(message, "Usage: /add_user <user_id or @username>")
         return
     
-    user_id = parts[1]
-    if not user_id.isdigit():
-        bot.reply_to(message, "Invalid user ID. Please provide a numeric ID.")
+    user_input = parts[1]
+    user_id = get_user_id(bot, user_input)
+    
+    if user_id is None:
+        bot.reply_to(message, "Invalid user ID or username. Please provide a valid numeric ID or @username.")
         return
     
-    result = add_allowed_user(int(user_id))
+    result = add_allowed_user(user_id)
     if result:
-        bot.reply_to(message, f"User with ID {user_id} has been added to the allowed users list.")
+        username = get_username(bot, user_id)
+        bot.reply_to(message, f"User {username} (ID: {user_id}) has been added to the allowed users list.")
     else:
-        bot.reply_to(message, f"Failed to add user with ID {user_id}. The user might already be in the allowed list.")
+        bot.reply_to(message, f"Failed to add user. The user might already be in the allowed list.")
 
 def handle_remove_user(bot, message: Message) -> None:
     if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
