@@ -68,17 +68,19 @@ def get_user_monthly_usage(user_id):
 def get_allowed_users():
     return db_operation(lambda c: c.execute('SELECT username FROM allowed_users').fetchall())
 
-def add_allowed_user(user_id, username):
-    db_operation(lambda c: c.execute('INSERT OR REPLACE INTO allowed_users (user_id, username) VALUES (?, ?)', (user_id, username)))
+def add_allowed_user(username):
+    db_operation(lambda c: c.execute('INSERT OR REPLACE INTO allowed_users (username) VALUES (?)', (username,)))
     return True
 
 def is_user_allowed(user_id):
-    result = db_operation(lambda c: c.execute('SELECT 1 FROM allowed_users WHERE user_id = ? OR username = ?', (user_id, get_username_by_id(user_id))).fetchone())
+    username = get_username_by_id(user_id)
+    result = db_operation(lambda c: c.execute('SELECT 1 FROM allowed_users WHERE username = ?', (username,)).fetchone())
     return bool(result)
 
 def get_username_by_id(user_id):
-    result = db_operation(lambda c: c.execute('SELECT username FROM allowed_users WHERE user_id = ?', (user_id,)).fetchone())
-    return result[0] if result else None
+    # This function should be implemented to get the username from the Telegram API
+    # For now, we'll return None as a placeholder
+    return None
 
 def remove_allowed_user(username):
     result = db_operation(lambda c: c.execute('DELETE FROM allowed_users WHERE username = ?', (username,)))
@@ -111,7 +113,6 @@ def init_db():
     '''))
     db_operation(lambda c: c.execute('''
         CREATE TABLE IF NOT EXISTS allowed_users (
-            user_id INTEGER PRIMARY KEY,
-            username TEXT
+            username TEXT PRIMARY KEY
         )
     '''))
