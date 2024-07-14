@@ -74,7 +74,7 @@ def add_allowed_user(user_id):
 
 def is_user_allowed(user_id):
     result = db_operation(lambda c: c.execute('SELECT 1 FROM allowed_users WHERE user_id = ?', (user_id,)).fetchone())
-    return bool(result)
+    return bool(result) or str(user_id) in ENV["ADMIN_USER_IDS"]
 
 def remove_allowed_user(user_id):
     result = db_operation(lambda c: c.execute('DELETE FROM allowed_users WHERE user_id = ?', (user_id,)))
