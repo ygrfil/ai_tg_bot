@@ -68,11 +68,16 @@ def get_user_monthly_usage(user_id):
 def get_allowed_users():
     return db_operation(lambda c: c.execute('SELECT username FROM allowed_users').fetchall())
 
-def add_allowed_user(user_id, username):
-    db_operation(lambda c: c.execute('INSERT OR REPLACE INTO allowed_users (user_id, username) VALUES (?, ?)', (user_id, username)))
+def add_allowed_user(username):
+    user_id = db_operation(lambda c: c.execute('SELECT user_id FROM user_preferences WHERE username = ?', (username,)).fetchone())
+    if user_id:
+        db_operation(lambda c: c.execute('INSERT OR REPLACE INTO allowed_users (user_id, username) VALUES (?, ?)', (user_id[0], username)))
+        return True
+    return False
 
-def remove_allowed_user(user_id):
-    db_operation(lambda c: c.execute('DELETE FROM allowed_users WHERE user_id = ?', (user_id,)))
+def remove_allowed_user(username):
+    result = db_operation(lambda c: c.execute('DELETE FROM allowed_users WHERE username = ?', (username,)))
+    return result.rowcount > 0
 
 def is_user_allowed(user_id):
     result = db_operation(lambda c: c.execute('SELECT 1 FROM allowed_users WHERE user_id = ?', (user_id,)).fetchone())

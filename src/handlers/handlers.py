@@ -61,14 +61,16 @@ def handle_add_user(bot, message: Message) -> None:
         return
     
     parts = message.text.split()
-    if len(parts) != 3:
-        bot.reply_to(message, "Usage: /add_user <user_id> <username>")
+    if len(parts) != 2:
+        bot.reply_to(message, "Usage: /add_user <username>")
         return
     
-    user_id = int(parts[1])
-    username = parts[2]
-    add_allowed_user(user_id, username)
-    bot.reply_to(message, f"User {username} (ID: {user_id}) has been added to the allowed users list.")
+    username = parts[1]
+    result = add_allowed_user(username)
+    if result:
+        bot.reply_to(message, f"User {username} has been added to the allowed users list.")
+    else:
+        bot.reply_to(message, f"Failed to add user {username}. Make sure the username is correct and the user has interacted with the bot.")
 
 def handle_remove_user(bot, message: Message) -> None:
     if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
@@ -77,12 +79,15 @@ def handle_remove_user(bot, message: Message) -> None:
     
     parts = message.text.split()
     if len(parts) != 2:
-        bot.reply_to(message, "Usage: /remove_user <user_id>")
+        bot.reply_to(message, "Usage: /remove_user <username>")
         return
     
-    user_id = int(parts[1])
-    remove_allowed_user(user_id)
-    bot.reply_to(message, f"User with ID {user_id} has been removed from the allowed users list.")
+    username = parts[1]
+    result = remove_allowed_user(username)
+    if result:
+        bot.reply_to(message, f"User {username} has been removed from the allowed users list.")
+    else:
+        bot.reply_to(message, f"Failed to remove user {username}. Make sure the username is correct.")
 
 def handle_broadcast(bot, message: Message) -> None:
     if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
