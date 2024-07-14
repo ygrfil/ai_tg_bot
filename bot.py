@@ -22,6 +22,10 @@ def callback_query(call):
 def start(message):
     start_command(bot, message)
 
+@bot.message_handler(commands=['startadmin'])
+def startadmin(message):
+    startadmin_command(bot, message)
+
 @bot.message_handler(commands=['reset'])
 def reset(message):
     reset_command(bot, message)
