@@ -4,11 +4,12 @@ import os
 from config import ENV
 from langchain.callbacks.base import BaseCallbackHandler
 import time
+from src.database.database import is_user_allowed
 
 last_interaction_time = {}
 
 def is_authorized(message) -> bool:
-    return str(message.from_user.id) in ENV["ALLOWED_USER_IDS"] or str(message.from_user.id) in ENV["ADMIN_USER_IDS"]
+    return is_user_allowed(message.from_user.id) or str(message.from_user.id) in ENV["ADMIN_USER_IDS"]
 
 def reset_conversation_if_needed(user_id: int) -> None:
     if datetime.now() - last_interaction_time.get(user_id, datetime.min) > timedelta(hours=2):
