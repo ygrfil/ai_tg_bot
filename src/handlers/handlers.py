@@ -52,7 +52,7 @@ def handle_list_users(bot, message: Message) -> None:
         return
     
     users = get_allowed_users()
-    user_list = "\n".join([f"Username: {user[0]}" for user in users])
+    user_list = "\n".join([f"ID: {user[0]}, Username: {user[1]}" for user in users])
     bot.reply_to(message, f"List of allowed users:\n{user_list}")
 
 def handle_add_user(bot, message: Message) -> None:
@@ -62,18 +62,19 @@ def handle_add_user(bot, message: Message) -> None:
     
     parts = message.text.split()
     if len(parts) != 2:
-        bot.reply_to(message, "Usage: /add_user <username>")
+        bot.reply_to(message, "Usage: /add_user <user_id>")
         return
     
-    username = parts[1]
-    if username.startswith('@'):
-        username = username[1:]
+    user_id = parts[1]
+    if not user_id.isdigit():
+        bot.reply_to(message, "Invalid user ID. Please provide a numeric ID.")
+        return
     
-    result = add_allowed_user(username)
+    result = add_allowed_user(int(user_id))
     if result:
-        bot.reply_to(message, f"User {username} has been added to the allowed users list.")
+        bot.reply_to(message, f"User with ID {user_id} has been added to the allowed users list.")
     else:
-        bot.reply_to(message, f"Failed to add user {username}. The user might already be in the allowed list.")
+        bot.reply_to(message, f"Failed to add user with ID {user_id}. The user might already be in the allowed list.")
 
 def handle_remove_user(bot, message: Message) -> None:
     if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
@@ -82,15 +83,19 @@ def handle_remove_user(bot, message: Message) -> None:
     
     parts = message.text.split()
     if len(parts) != 2:
-        bot.reply_to(message, "Usage: /remove_user <username>")
+        bot.reply_to(message, "Usage: /remove_user <user_id>")
         return
     
-    username = parts[1]
-    result = remove_allowed_user(username)
+    user_id = parts[1]
+    if not user_id.isdigit():
+        bot.reply_to(message, "Invalid user ID. Please provide a numeric ID.")
+        return
+    
+    result = remove_allowed_user(int(user_id))
     if result:
-        bot.reply_to(message, f"User {username} has been removed from the allowed users list.")
+        bot.reply_to(message, f"User with ID {user_id} has been removed from the allowed users list.")
     else:
-        bot.reply_to(message, f"Failed to remove user {username}. Make sure the username is correct.")
+        bot.reply_to(message, f"Failed to remove user with ID {user_id}. Make sure the ID is correct.")
 
 def handle_broadcast(bot, message: Message) -> None:
     if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:

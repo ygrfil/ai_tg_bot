@@ -66,35 +66,22 @@ def get_user_monthly_usage(user_id):
     ''', (user_id,)).fetchone())
 
 def get_allowed_users():
-    return db_operation(lambda c: c.execute('SELECT username FROM allowed_users').fetchall())
+    return db_operation(lambda c: c.execute('SELECT user_id, username FROM allowed_users').fetchall())
 
-def add_allowed_user(username):
-    db_operation(lambda c: c.execute('INSERT OR REPLACE INTO allowed_users (username) VALUES (?)', (username,)))
+def add_allowed_user(user_id):
+    db_operation(lambda c: c.execute('INSERT OR REPLACE INTO allowed_users (user_id) VALUES (?)', (user_id,)))
     return True
 
 def is_user_allowed(user_id):
-    username = get_username_by_id(user_id)
-    result = db_operation(lambda c: c.execute('SELECT 1 FROM allowed_users WHERE username = ?', (username,)).fetchone())
+    result = db_operation(lambda c: c.execute('SELECT 1 FROM allowed_users WHERE user_id = ?', (user_id,)).fetchone())
     return bool(result)
 
-def get_username_by_id(user_id):
-    # This function should be implemented to get the username from the Telegram API
-    # For now, we'll return None as a placeholder
-    return None
-
-def remove_allowed_user(username):
-    result = db_operation(lambda c: c.execute('DELETE FROM allowed_users WHERE username = ?', (username,)))
+def remove_allowed_user(user_id):
+    result = db_operation(lambda c: c.execute('DELETE FROM allowed_users WHERE user_id = ?', (user_id,)))
     return result.rowcount > 0
 
-def is_user_allowed(user_id):
-    username = get_username_by_id(user_id)
-    result = db_operation(lambda c: c.execute('SELECT 1 FROM allowed_users WHERE username = ?', (username,)).fetchone())
-    return bool(result)
-
-def get_username_by_id(user_id):
-    # This function should be implemented to get the username from the Telegram API
-    # For now, we'll return None as a placeholder
-    return None
+def update_username(user_id, username):
+    db_operation(lambda c: c.execute('UPDATE allowed_users SET username = ? WHERE user_id = ?', (username, user_id)))
 
 def init_db():
     db_operation(lambda c: c.execute('''
@@ -115,6 +102,7 @@ def init_db():
     '''))
     db_operation(lambda c: c.execute('''
         CREATE TABLE IF NOT EXISTS allowed_users (
-            username TEXT PRIMARY KEY
+            user_id INTEGER PRIMARY KEY,
+            username TEXT
         )
     '''))
