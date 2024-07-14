@@ -87,12 +87,14 @@ def remove_allowed_user(username):
     return result.rowcount > 0
 
 def is_user_allowed(user_id):
-    result = db_operation(lambda c: c.execute('SELECT 1 FROM allowed_users WHERE user_id = ? OR username = ?', (user_id, get_username_by_id(user_id))).fetchone())
+    username = get_username_by_id(user_id)
+    result = db_operation(lambda c: c.execute('SELECT 1 FROM allowed_users WHERE username = ?', (username,)).fetchone())
     return bool(result)
 
 def get_username_by_id(user_id):
-    result = db_operation(lambda c: c.execute('SELECT username FROM allowed_users WHERE user_id = ?', (user_id,)).fetchone())
-    return result[0] if result else None
+    # This function should be implemented to get the username from the Telegram API
+    # For now, we'll return None as a placeholder
+    return None
 
 def init_db():
     db_operation(lambda c: c.execute('''

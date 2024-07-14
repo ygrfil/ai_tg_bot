@@ -17,7 +17,7 @@ from src.database.database import is_user_allowed, get_allowed_users, add_allowe
 user_conversation_history = {}
 
 def handle_commands(bot, message: Message) -> None:
-    if not is_user_allowed(message.from_user.id) and str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
+    if not is_authorized(message):
         bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
         return
 
