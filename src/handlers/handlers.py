@@ -67,16 +67,15 @@ def handle_add_user(bot, message: Message) -> None:
     
     parts = message.text.split()
     if len(parts) != 2:
-        bot.reply_to(message, "Usage: /add_user <user_id or @username>")
+        bot.reply_to(message, "Usage: /add_user <user_id>")
         return
     
-    user_input = parts[1]
-    user_id = get_user_id(bot, user_input)
-    
-    if user_id is None:
-        bot.reply_to(message, "Invalid user ID or username. Please provide a valid numeric ID or @username.")
+    user_id = parts[1]
+    if not user_id.isdigit():
+        bot.reply_to(message, "Invalid user ID. Please provide a numeric ID.")
         return
     
+    user_id = int(user_id)
     result = add_allowed_user(user_id)
     if result:
         username = get_username(bot, user_id)
@@ -99,7 +98,8 @@ def handle_remove_user(bot, message: Message) -> None:
         bot.reply_to(message, "Invalid user ID. Please provide a numeric ID.")
         return
     
-    result = remove_allowed_user(int(user_id))
+    user_id = int(user_id)
+    result = remove_allowed_user(user_id)
     if result:
         bot.reply_to(message, f"User with ID {user_id} has been removed from the allowed users list.")
     else:
