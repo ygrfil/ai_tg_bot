@@ -125,11 +125,17 @@ def handle_usage(bot, message: Message) -> None:
         return
     usage_stats = get_monthly_usage()
     usage_report = "Monthly Usage Report (from the start of the current month):\n\n"
-    for user_id, messages, tokens in usage_stats:
-        username = get_username(bot, user_id)
-        usage_report += f"User: {username}\n"
-        usage_report += f"Total Messages: {messages}\n"
-        usage_report += f"Estimated Tokens: {tokens}\n\n"
+    current_user = None
+    for user_id, model, messages, tokens in usage_stats:
+        if current_user != user_id:
+            if current_user is not None:
+                usage_report += "\n"
+            username = get_username(bot, user_id)
+            usage_report += f"User: {username}\n"
+            current_user = user_id
+        usage_report += f"  Model: {model}\n"
+        usage_report += f"    Messages: {messages}\n"
+        usage_report += f"    Estimated Tokens: {tokens}\n"
     bot.reply_to(message, usage_report)
 
 def send_broadcast(bot, user_id: int, message: str) -> bool:

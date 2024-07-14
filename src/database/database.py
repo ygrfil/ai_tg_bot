@@ -49,12 +49,13 @@ def log_usage(user_id, model, messages_count, tokens_count):
 def get_monthly_usage():
     return db_operation(lambda c: c.execute('''
         SELECT user_id, 
+               model,
                SUM(messages_count) as total_messages, 
                SUM(tokens_count) as total_tokens
         FROM usage_stats
         WHERE date >= date('now', 'start of month')
-        GROUP BY user_id
-        ORDER BY total_messages DESC
+        GROUP BY user_id, model
+        ORDER BY user_id, total_messages DESC
     ''').fetchall())
 
 def get_user_monthly_usage(user_id):
