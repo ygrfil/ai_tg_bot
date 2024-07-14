@@ -52,8 +52,13 @@ def handle_list_users(bot, message: Message) -> None:
         return
     
     users = get_allowed_users()
-    user_list = "\n".join([f"ID: {user[0]}, Username: {user[1]}" for user in users])
-    bot.reply_to(message, f"List of allowed users:\n{user_list}")
+    user_list = []
+    for user in users:
+        username = get_username(bot, user[0])
+        user_list.append(f"ID: {user[0]}, Username: {username}")
+    
+    user_list_str = "\n".join(user_list)
+    bot.reply_to(message, f"List of allowed users:\n{user_list_str}")
 
 def handle_add_user(bot, message: Message) -> None:
     if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
