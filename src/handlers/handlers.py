@@ -45,6 +45,8 @@ def handle_commands(bot, message: Message) -> None:
         handle_add_user(bot, message)
     elif command == 'remove_user':
         handle_remove_user(bot, message)
+    elif command == 'remove_prompt':
+        handle_remove_prompt(bot, message)
 
 def handle_list_users(bot, message: Message) -> None:
     if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
@@ -104,6 +106,23 @@ def handle_remove_user(bot, message: Message) -> None:
         bot.reply_to(message, f"User with ID {user_id} has been removed from the allowed users list.")
     else:
         bot.reply_to(message, f"Failed to remove user with ID {user_id}. Make sure the ID is correct.")
+
+def handle_remove_prompt(bot, message: Message) -> None:
+    if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
+        bot.reply_to(message, "Sorry, you are not authorized to use this command.")
+        return
+    
+    parts = message.text.split()
+    if len(parts) != 2:
+        bot.reply_to(message, "Usage: /remove_prompt <prompt_name>")
+        return
+    
+    prompt_name = parts[1]
+    result = remove_system_prompt(prompt_name)
+    if result:
+        bot.reply_to(message, f"System prompt '{prompt_name}' has been removed successfully.")
+    else:
+        bot.reply_to(message, f"Failed to remove system prompt '{prompt_name}'. Make sure the prompt name is correct.")
 
 def handle_broadcast(bot, message: Message) -> None:
     if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
