@@ -204,7 +204,8 @@ def startadmin_command(bot, message: Message) -> None:
                           "/usage: View usage statistics.\n"
                           "/list_users: List all allowed users.\n"
                           "/add_user: Add a new allowed user.\n"
-                          "/remove_user: Remove an allowed user.")
+                          "/remove_user: Remove an allowed user.\n"
+                          "/remove_prompt: Remove a system prompt.")
 
 def reset_command(bot, message: Message) -> None:
     if not is_authorized(message):
