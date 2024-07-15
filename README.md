@@ -12,6 +12,8 @@ This is a Telegram bot that uses various AI models to respond to user messages a
 
 ## Installation
 
+### Option 1: Standard Installation
+
 1. Clone this repository:
    ```
    git clone https://github.com/yourusername/tg_ai_bot.git
@@ -32,12 +34,36 @@ This is a Telegram bot that uses various AI models to respond to user messages a
    ALLOWED_USER_IDS=comma_separated_allowed_user_ids
    ```
 
+### Option 2: Docker Installation
+
+1. Clone this repository:
+   ```
+   git clone https://github.com/yourusername/tg_ai_bot.git
+   cd tg_ai_bot
+   ```
+
+2. Create a `.env` file in the root directory with your API keys (as shown in Option 1, step 3).
+
+3. Build and run the Docker container:
+   ```
+   docker-compose up --build
+   ```
+
 ## Usage
+
+### For Standard Installation:
 
 1. Start the bot:
    ```
    python main.py
    ```
+
+### For Docker Installation:
+
+The bot will start automatically when you run `docker-compose up`. To stop the bot, use:
+```
+docker-compose down
+```
 
 2. In Telegram, start a conversation with your bot and use the following commands:
 
