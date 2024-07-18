@@ -224,9 +224,13 @@ def callback_query_handler(bot, call):
         bot.edit_message_text(f"System message set to {prompt_name}.", call.message.chat.id, call.message.message_id, reply_markup=None)
     elif call.data.startswith('creative_'):
         creativity_level = call.data.split('_')[1]
+        user_prefs = get_user_preferences(user_id)
+        current_model = user_prefs['selected_model']
         save_user_preferences(user_id, creativity_level=creativity_level)
+        # Re-select the current model to apply new creativity parameters
+        save_user_preferences(user_id, selected_model=current_model)
         bot.answer_callback_query(call.id, f"Switched to {creativity_level} creativity level.")
-        bot.edit_message_text(f"Creativity level set to {creativity_level}.", call.message.chat.id, call.message.message_id, reply_markup=None)
+        bot.edit_message_text(f"Creativity level set to {creativity_level}. Model updated to apply new settings.", call.message.chat.id, call.message.message_id, reply_markup=None)
     elif call.data.startswith('creative_'):
         creativity_level = call.data.split('_')[1]
         save_user_preferences(user_id, creativity_level=creativity_level)
