@@ -88,11 +88,12 @@ class StreamHandler(BaseCallbackHandler):
         try:
             update_text = self.response[-self.max_message_length:] if len(self.response) > self.max_message_length else self.response
             if update_text.strip():
-                self.bot.edit_message_text(update_text, chat_id=self.chat_id, message_id=self.message_id)
+                current_message = self.bot.get_message(self.chat_id, self.message_id)
+                if current_message.text != update_text:
+                    self.bot.edit_message_text(update_text, chat_id=self.chat_id, message_id=self.message_id)
                 self.last_update_time = time.time()
         except Exception as e:
-            if not str(e).startswith("Message is not modified"):
-                print(f"Error updating message: {e}")
+            print(f"Error updating message: {e}")
 
     def on_llm_end(self, response: str, **kwargs) -> None:
         self.update_message()
