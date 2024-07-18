@@ -4,7 +4,7 @@ import os
 from config import ENV
 from langchain.callbacks.base import BaseCallbackHandler
 import time
-from src.database.database import is_user_allowed
+from src.database.database import is_user_allowed, get_user_preferences
 
 last_interaction_time = {}
 
@@ -13,14 +13,20 @@ def is_authorized(message) -> bool:
     return is_user_allowed(user_id) or str(user_id) in ENV["ADMIN_USER_IDS"]
 
 def reset_conversation_if_needed(user_id: int) -> None:
-    if datetime.now() - last_interaction_time.get(user_id, datetime.min) > timedelta(hours=2):
-        # Reset conversation logic should be handled in the main handler
-        pass
+    if datetime.now() - last_interaction_time.get(user_id, datetime.min) > timedelta(minutes=150):
+        return True
     last_interaction_time[user_id] = datetime.now()
+    return False
 
-def limit_conversation_history(user_id: int) -> None:
-    # Conversation history limiting should be handled in the main handler
-    pass
+def get_system_prompt(user_id: int) -> str:
+    user_prefs = get_user_preferences(user_id)
+    system_prompts = get_system_prompts()
+    return system_prompts.get(user_prefs.get('system_prompt', 'standard'), system_prompts['standard'])
+
+def limit_conversation_history(user_id: int, history: list, max_length: int = 10) -> list:
+    if len(history) > max_length:
+        return [history[0]] + history[-max_length+1:]
+    return history
 
 def create_keyboard(buttons) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[InlineKeyboardButton(text, callback_data=data)] for text, data in buttons])
