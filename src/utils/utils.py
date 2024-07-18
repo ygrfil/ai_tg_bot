@@ -88,9 +88,11 @@ class StreamHandler(BaseCallbackHandler):
         try:
             update_text = self.response[-self.max_message_length:] if len(self.response) > self.max_message_length else self.response
             if update_text.strip():
-                current_message = self.bot.get_message(self.chat_id, self.message_id)
-                if current_message.text != update_text:
+                try:
                     self.bot.edit_message_text(update_text, chat_id=self.chat_id, message_id=self.message_id)
+                except Exception as e:
+                    if "message is not modified" not in str(e).lower():
+                        raise
                 self.last_update_time = time.time()
         except Exception as e:
             print(f"Error updating message: {e}")
