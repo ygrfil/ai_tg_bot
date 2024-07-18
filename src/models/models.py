@@ -16,7 +16,7 @@ def get_llm(selected_model: str, stream_handler, user_id: int):
         'maximum': 0.9
     }
     
-    temperature = temperature_map.get(creativity_level, 0.5)
+    temperature = temperature_map.get(creativity_level, 0.0)
     
     llm_config = {
         "openai": (ChatOpenAI, {"api_key": ENV["OPENAI_API_KEY"], "model": "gpt-4o", "temperature": temperature}),
