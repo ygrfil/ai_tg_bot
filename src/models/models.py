@@ -30,9 +30,16 @@ def get_conversation_messages(user_conversation_history, user_id: int, selected_
     
     messages = [msg if isinstance(msg, (SystemMessage, HumanMessage, AIMessage)) else SystemMessage(content=msg['content']) for msg in user_conversation_history[user_id]]
     
-    if selected_model == "anthropic":
+    if selected_model in ["anthropic", "groq"]:
         first_non_system = next((i for i, msg in enumerate(messages) if not isinstance(msg, SystemMessage)), None)
         if first_non_system is not None and not isinstance(messages[first_non_system], HumanMessage):
             messages[first_non_system] = HumanMessage(content=messages[first_non_system].content)
+    
+    # Ensure all message contents are strings for Groq
+    if selected_model == "groq":
+        messages = [
+            msg.__class__(content=str(msg.content) if isinstance(msg.content, (list, dict)) else msg.content)
+            for msg in messages
+        ]
     
     return messages
