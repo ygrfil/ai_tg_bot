@@ -10,7 +10,7 @@ except Exception as e:
     print(f"Error initializing bot: {e}")
     raise
 
-@bot.message_handler(commands=['model', 'sm', 'creative', 'broadcast', 'usage', 'list_users', 'add_user', 'remove_user', 'remove_prompt', 'status'])
+@bot.message_handler(commands=['model', 'sm', 'broadcast', 'usage', 'list_users', 'add_user', 'remove_user', 'remove_prompt', 'status'])
 def command_handler(message):
     handle_commands(bot, message)
 
