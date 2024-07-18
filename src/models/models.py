@@ -3,13 +3,26 @@ from langchain_anthropic import ChatAnthropic
 from langchain_community.chat_models import ChatPerplexity
 from langchain_groq import ChatGroq
 from config import ENV
+from src.database.database import get_user_preferences
 
-def get_llm(selected_model: str, stream_handler):
+def get_llm(selected_model: str, stream_handler, user_id: int):
+    user_prefs = get_user_preferences(user_id)
+    creativity_level = user_prefs['creativity_level']
+    
+    temperature_map = {
+        'precise': 0.0,
+        'moderate': 0.5,
+        'high': 0.7,
+        'maximum': 0.9
+    }
+    
+    temperature = temperature_map.get(creativity_level, 0.5)
+    
     llm_config = {
-        "openai": (ChatOpenAI, {"api_key": ENV["OPENAI_API_KEY"], "model": "gpt-4o"}),
-        "anthropic": (ChatAnthropic, {"api_key": ENV["ANTHROPIC_API_KEY"], "model": "claude-3-5-sonnet-20240620"}),
+        "openai": (ChatOpenAI, {"api_key": ENV["OPENAI_API_KEY"], "model": "gpt-4o", "temperature": temperature}),
+        "anthropic": (ChatAnthropic, {"api_key": ENV["ANTHROPIC_API_KEY"], "model": "claude-3-5-sonnet-20240620", "temperature": temperature}),
         "perplexity": (ChatPerplexity, {"model": "llama-3-sonar-large-32k-online"}),
-        "groq": (ChatGroq, {"model_name": "llama3-70b-8192"}),
+        "groq": (ChatGroq, {"model_name": "llama3-70b-8192", "temperature": temperature}),
     }
     
     if selected_model not in llm_config:

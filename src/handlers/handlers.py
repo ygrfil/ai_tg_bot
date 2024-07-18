@@ -34,6 +34,14 @@ def handle_commands(bot, message: Message) -> None:
     elif command == 'sm':
         ensure_user_preferences(message.from_user.id)
         bot.send_message(message.chat.id, "Select a system message:", reply_markup=create_keyboard([(name, f"sm_{name}") for name in get_system_prompts()]))
+    elif command == 'creative':
+        ensure_user_preferences(message.from_user.id)
+        bot.send_message(message.chat.id, "Select creativity level:", reply_markup=create_keyboard([
+            ("Precise", "creative_precise"),
+            ("Moderate", "creative_moderate"),
+            ("High", "creative_high"),
+            ("Maximum", "creative_maximum")
+        ]))
     elif command == 'broadcast':
         handle_broadcast(bot, message)
     elif command == 'usage':
@@ -196,6 +204,10 @@ def callback_query_handler(bot, call):
         save_user_preferences(user_id, system_prompt=prompt_name)
         user_conversation_history[user_id] = [{"role": "system", "content": system_message}]
         bot.answer_callback_query(call.id, f"Switched to {prompt_name} system message.")
+    elif call.data.startswith('creative_'):
+        creativity_level = call.data.split('_')[1]
+        save_user_preferences(user_id, creativity_level=creativity_level)
+        bot.answer_callback_query(call.id, f"Switched to {creativity_level} creativity level.")
     bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
 
 def start_command(bot, message: Message) -> None:
@@ -322,7 +334,7 @@ def handle_message(bot, message: Message) -> None:
 
     try:
         stream_handler = StreamHandler(bot, message.chat.id, placeholder_message.message_id)
-        llm = get_llm(selected_model, stream_handler)
+        llm = get_llm(selected_model, stream_handler, user_id)
         messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
         
         response = llm.invoke(messages)

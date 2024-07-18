@@ -16,7 +16,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS user_preferences (
             user_id INTEGER PRIMARY KEY,
             selected_model TEXT DEFAULT 'anthropic',
-            system_prompt TEXT DEFAULT 'standard'
+            system_prompt TEXT DEFAULT 'standard',
+            creativity_level TEXT DEFAULT 'moderate'
         )
     '''))
     db_operation(lambda c: c.execute('''
@@ -31,17 +32,18 @@ def init_db():
     '''))
 
 def get_user_preferences(user_id):
-    result = db_operation(lambda c: c.execute('SELECT selected_model, system_prompt FROM user_preferences WHERE user_id = ?', (user_id,)).fetchone())
-    return {'selected_model': result[0] if result else 'anthropic', 'system_prompt': result[1] if result else 'standard'}
+    result = db_operation(lambda c: c.execute('SELECT selected_model, system_prompt, creativity_level FROM user_preferences WHERE user_id = ?', (user_id,)).fetchone())
+    return {'selected_model': result[0] if result else 'anthropic', 'system_prompt': result[1] if result else 'standard', 'creativity_level': result[2] if result else 'moderate'}
 
-def save_user_preferences(user_id, selected_model=None, system_prompt=None):
+def save_user_preferences(user_id, selected_model=None, system_prompt=None, creativity_level=None):
     current_prefs = get_user_preferences(user_id)
     new_model = selected_model if selected_model is not None else current_prefs['selected_model']
     new_prompt = system_prompt if system_prompt is not None else current_prefs['system_prompt']
-    db_operation(lambda c: c.execute('INSERT OR REPLACE INTO user_preferences (user_id, selected_model, system_prompt) VALUES (?, ?, ?)', (user_id, new_model, new_prompt)))
+    new_creativity = creativity_level if creativity_level is not None else current_prefs['creativity_level']
+    db_operation(lambda c: c.execute('INSERT OR REPLACE INTO user_preferences (user_id, selected_model, system_prompt, creativity_level) VALUES (?, ?, ?, ?)', (user_id, new_model, new_prompt, new_creativity)))
 
 def ensure_user_preferences(user_id):
-    db_operation(lambda c: c.execute('INSERT OR IGNORE INTO user_preferences (user_id, selected_model, system_prompt) VALUES (?, ?, ?)', (user_id, 'anthropic', 'standard')))
+    db_operation(lambda c: c.execute('INSERT OR IGNORE INTO user_preferences (user_id, selected_model, system_prompt, creativity_level) VALUES (?, ?, ?, ?)', (user_id, 'anthropic', 'standard', 'moderate')))
 
 def log_usage(user_id, model, messages_count, tokens_count):
     today = datetime.now().strftime('%Y-%m-%d')
