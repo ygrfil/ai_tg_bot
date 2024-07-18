@@ -310,12 +310,12 @@ def handle_message(bot, message: Message) -> None:
     user_prefs = get_user_preferences(user_id)
     selected_model = user_prefs['selected_model']
 
-    if reset_conversation_if_needed(user_id):
+    if user_id not in user_conversation_history or reset_conversation_if_needed(user_id):
         system_prompt = get_system_prompt(user_id)
         user_conversation_history[user_id] = [SystemMessage(content=system_prompt)]
 
     user_message = process_message_content(message, bot)
-    user_conversation_history.setdefault(user_id, []).append(user_message)
+    user_conversation_history[user_id].append(user_message)
     user_conversation_history[user_id] = limit_conversation_history(user_id, user_conversation_history[user_id])
 
     placeholder_message = bot.send_message(message.chat.id, "Generating...")

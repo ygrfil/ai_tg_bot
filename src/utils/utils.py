@@ -12,10 +12,12 @@ def is_authorized(message) -> bool:
     user_id = message.from_user.id
     return is_user_allowed(user_id) or str(user_id) in ENV["ADMIN_USER_IDS"]
 
-def reset_conversation_if_needed(user_id: int) -> None:
-    if datetime.now() - last_interaction_time.get(user_id, datetime.min) > timedelta(minutes=150):
+def reset_conversation_if_needed(user_id: int) -> bool:
+    current_time = datetime.now()
+    if current_time - last_interaction_time.get(user_id, datetime.min) > timedelta(minutes=150):
+        last_interaction_time[user_id] = current_time
         return True
-    last_interaction_time[user_id] = datetime.now()
+    last_interaction_time[user_id] = current_time
     return False
 
 def get_system_prompt(user_id: int) -> str:

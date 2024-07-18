@@ -21,14 +21,12 @@ def get_llm(selected_model: str, stream_handler):
 def get_conversation_messages(user_conversation_history, user_id: int, selected_model: str):
     from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
     
-    if selected_model == "perplexity":
-        messages = [msg for msg in user_conversation_history[user_id] if isinstance(msg, SystemMessage)]
-        human_messages = [msg for msg in user_conversation_history[user_id] if isinstance(msg, HumanMessage)]
-        if human_messages:
-            messages.append(human_messages[-1])
-        return messages
+    messages = user_conversation_history[user_id]
     
-    messages = [msg if isinstance(msg, (SystemMessage, HumanMessage, AIMessage)) else SystemMessage(content=msg['content']) for msg in user_conversation_history[user_id]]
+    if selected_model == "perplexity":
+        system_messages = [msg for msg in messages if isinstance(msg, SystemMessage)]
+        non_system_messages = [msg for msg in messages if not isinstance(msg, SystemMessage)]
+        return system_messages + non_system_messages[-1:]
     
     if selected_model in ["anthropic", "groq"]:
         first_non_system = next((i for i, msg in enumerate(messages) if not isinstance(msg, SystemMessage)), None)
