@@ -30,7 +30,8 @@ def get_system_prompts():
     for filename in os.listdir('system_prompts'):
         if filename.endswith('.txt'):
             with open(os.path.join('system_prompts', filename), 'r') as file:
-                prompts[filename[:-4]] = file.read().strip()
+                prompt_name = 'standard' if filename == 'standard.txt' else filename[:-4]
+                prompts[prompt_name] = file.read().strip()
     return prompts
 
 def remove_system_prompt(prompt_name: str) -> bool:
