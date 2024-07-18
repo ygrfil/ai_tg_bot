@@ -115,10 +115,7 @@ def init_db():
     '''))
     
     # Add system_prompt column if it doesn't exist
-    db_operation(lambda c: c.execute('''
-        PRAGMA table_info(user_preferences)
-    '''))
-    columns = c.fetchall()
+    columns = db_operation(lambda c: c.execute('PRAGMA table_info(user_preferences)').fetchall())
     if 'system_prompt' not in [column[1] for column in columns]:
         db_operation(lambda c: c.execute('''
             ALTER TABLE user_preferences
