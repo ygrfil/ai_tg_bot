@@ -12,7 +12,7 @@ from src.database.database import (get_user_preferences, save_user_preferences, 
 from src.models.models import get_llm, get_conversation_messages
 from src.utils.utils import (reset_conversation_if_needed, limit_conversation_history,
                    create_keyboard, get_system_prompts, get_username, get_user_id, StreamHandler, is_authorized,
-                   remove_system_prompt)
+                   remove_system_prompt, get_system_prompt)
 from src.database.database import is_user_allowed, get_allowed_users, add_allowed_user, remove_allowed_user
 
 user_conversation_history = {}
