@@ -218,8 +218,7 @@ def callback_query_handler(bot, call):
         creativity_level = call.data.split('_')[1]
         save_user_preferences(user_id, creativity_level=creativity_level)
         bot.answer_callback_query(call.id, f"Switched to {creativity_level} creativity level.")
-        bot.edit_message_text(f"Creativity level set to {creativity_level}.", call.message.chat.id, call.message.message_id)
-    bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
+        bot.edit_message_text(f"Creativity level set to {creativity_level}.", call.message.chat.id, call.message.message_id, reply_markup=None)
 
 def start_command(bot, message: Message) -> None:
     if not is_authorized(message):
