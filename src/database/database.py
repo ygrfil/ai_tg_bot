@@ -96,7 +96,8 @@ def init_db():
         CREATE TABLE IF NOT EXISTS user_preferences (
             user_id INTEGER PRIMARY KEY,
             selected_model TEXT DEFAULT 'anthropic',
-            system_prompt TEXT DEFAULT 'standard'
+            system_prompt TEXT DEFAULT 'standard',
+            creativity_level TEXT DEFAULT 'moderate'
         )
     '''))
     db_operation(lambda c: c.execute('''
@@ -122,4 +123,11 @@ def init_db():
         db_operation(lambda c: c.execute('''
             ALTER TABLE user_preferences
             ADD COLUMN system_prompt TEXT DEFAULT 'standard'
+        '''))
+    
+    # Add creativity_level column if it doesn't exist
+    if 'creativity_level' not in [column[1] for column in columns]:
+        db_operation(lambda c: c.execute('''
+            ALTER TABLE user_preferences
+            ADD COLUMN creativity_level TEXT DEFAULT 'moderate'
         '''))
