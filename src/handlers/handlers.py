@@ -8,7 +8,7 @@ import time
 import os
 from config import ENV
 from src.database.database import (get_user_preferences, save_user_preferences, ensure_user_preferences,
-                      log_usage, get_monthly_usage)
+                      log_usage, get_monthly_usage, get_user_monthly_usage)
 from src.models.models import get_llm, get_conversation_messages
 from src.utils.utils import (reset_conversation_if_needed, limit_conversation_history,
                    create_keyboard, get_system_prompts, get_username, get_user_id, StreamHandler, is_authorized,
@@ -48,6 +48,8 @@ def handle_commands(bot, message: Message) -> None:
         handle_remove_user(bot, message)
     elif command == 'remove_prompt':
         handle_remove_prompt(bot, message)
+    elif command == 'status':
+        handle_status(bot, message)
 
 def handle_list_users(bot, message: Message) -> None:
     if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
@@ -125,6 +127,21 @@ def handle_remove_prompt(bot, message: Message) -> None:
     else:
         bot.reply_to(message, f"Failed to remove system prompt '{prompt_name}'. Make sure the prompt name is correct.")
 
+def handle_status(bot, message: Message) -> None:
+    user_id = message.from_user.id
+    ensure_user_preferences(user_id)
+    user_prefs = get_user_preferences(user_id)
+    usage = get_user_monthly_usage(user_id)
+    
+    status_message = f"Your current status:\n\n"
+    status_message += f"Current model: {user_prefs['selected_model']}\n"
+    status_message += f"Current system prompt: {user_prefs['system_prompt']}\n\n"
+    status_message += f"Monthly usage:\n"
+    status_message += f"Total messages: {usage[0] if usage else 0}\n"
+    status_message += f"Total tokens: {usage[1] if usage else 0}\n"
+    
+    bot.reply_to(message, status_message)
+
 def handle_broadcast(bot, message: Message) -> None:
     if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
         bot.reply_to(message, "Sorry, you are not authorized to use this command.")
@@ -193,6 +210,7 @@ def start_command(bot, message: Message) -> None:
                           "/reset: Reset the conversation history.\n"
                           "/summarize: Summarize the current conversation.\n"
                           "/create_prompt: Create a new system prompt.\n"
+                          "/status: View your current status and usage.\n"
                           "Created by Yegor")
 
 def startadmin_command(bot, message: Message) -> None:
