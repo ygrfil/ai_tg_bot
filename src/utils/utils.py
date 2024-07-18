@@ -33,6 +33,16 @@ def get_system_prompts():
                 prompts[filename[:-4]] = file.read().strip()
     return prompts
 
+def remove_system_prompt(prompt_name: str) -> bool:
+    prompt_path = os.path.join('system_prompts', f"{prompt_name}.txt")
+    if os.path.exists(prompt_path):
+        try:
+            os.remove(prompt_path)
+            return True
+        except OSError:
+            return False
+    return False
+
 def get_username(bot, user_id):
     try:
         user = bot.get_chat_member(user_id, user_id).user
