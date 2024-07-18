@@ -93,7 +93,8 @@ def init_db():
     db_operation(lambda c: c.execute('''
         CREATE TABLE IF NOT EXISTS user_preferences (
             user_id INTEGER PRIMARY KEY,
-            selected_model TEXT DEFAULT 'anthropic'
+            selected_model TEXT DEFAULT 'anthropic',
+            system_prompt TEXT DEFAULT 'standard'
         )
     '''))
     db_operation(lambda c: c.execute('''
@@ -112,3 +113,14 @@ def init_db():
             username TEXT
         )
     '''))
+    
+    # Add system_prompt column if it doesn't exist
+    db_operation(lambda c: c.execute('''
+        PRAGMA table_info(user_preferences)
+    '''))
+    columns = c.fetchall()
+    if 'system_prompt' not in [column[1] for column in columns]:
+        db_operation(lambda c: c.execute('''
+            ALTER TABLE user_preferences
+            ADD COLUMN system_prompt TEXT DEFAULT 'standard'
+        '''))
