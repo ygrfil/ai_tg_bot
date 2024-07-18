@@ -171,11 +171,12 @@ def callback_query_handler(bot, call):
     ensure_user_preferences(user_id)
     if call.data.startswith('model_'):
         model_name = call.data.split('_')[1]
-        save_user_preferences(user_id, model_name)
+        save_user_preferences(user_id, selected_model=model_name)
         bot.answer_callback_query(call.id, f"Switched to {model_name} model.")
-    else:
+    elif call.data.startswith('sm_'):
         prompt_name = call.data.split('_')[1]
         system_message = get_system_prompts().get(prompt_name, "You are a helpful assistant.")
+        save_user_preferences(user_id, system_prompt=prompt_name)
         user_conversation_history[user_id] = [{"role": "system", "content": system_message}]
         bot.answer_callback_query(call.id, f"Switched to {prompt_name} system message.")
     bot.edit_message_reply_markup(call.message.chat.id, call.message.message_id, reply_markup=None)
