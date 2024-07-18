@@ -34,6 +34,14 @@ def handle_commands(bot, message: Message) -> None:
     elif command == 'sm':
         ensure_user_preferences(message.from_user.id)
         bot.send_message(message.chat.id, "Select a system message:", reply_markup=create_keyboard([(name, f"sm_{name}") for name in get_system_prompts()]))
+    elif command == 'creativity':
+        ensure_user_preferences(message.from_user.id)
+        bot.send_message(message.chat.id, "Select creativity level:", reply_markup=create_keyboard([
+            ("Precise", "creative_precise"),
+            ("Moderate", "creative_moderate"),
+            ("High", "creative_high"),
+            ("Maximum", "creative_maximum")
+        ]))
     elif command == 'creative':
         ensure_user_preferences(message.from_user.id)
         bot.send_message(message.chat.id, "Select creativity level:", reply_markup=create_keyboard([
@@ -214,6 +222,11 @@ def callback_query_handler(bot, call):
         user_conversation_history[user_id] = [{"role": "system", "content": system_message}]
         bot.answer_callback_query(call.id, f"Switched to {prompt_name} system message.")
         bot.edit_message_text(f"System message set to {prompt_name}.", call.message.chat.id, call.message.message_id, reply_markup=None)
+    elif call.data.startswith('creative_'):
+        creativity_level = call.data.split('_')[1]
+        save_user_preferences(user_id, creativity_level=creativity_level)
+        bot.answer_callback_query(call.id, f"Switched to {creativity_level} creativity level.")
+        bot.edit_message_text(f"Creativity level set to {creativity_level}.", call.message.chat.id, call.message.message_id, reply_markup=None)
     elif call.data.startswith('creative_'):
         creativity_level = call.data.split('_')[1]
         save_user_preferences(user_id, creativity_level=creativity_level)
