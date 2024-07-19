@@ -43,5 +43,7 @@ def get_conversation_messages(user_conversation_history, user_id: int, selected_
         ]
         # Additional check for dictionary messages without 'content' attribute
         messages = [msg for msg in messages if not isinstance(msg, dict) or 'content' in msg]
+        # Handle messages that might be dictionaries with a 'content' key
+        messages = [msg if not isinstance(msg, dict) else msg.__class__(content=msg['content']) for msg in messages]
     
     return messages
