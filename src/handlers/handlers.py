@@ -3,6 +3,7 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_anthropic import ChatAnthropic
+from src.models.models import summarize_conversation_history
 import base64
 import time
 import os
@@ -324,7 +325,12 @@ def handle_message(bot, message: Message) -> None:
     try:
         stream_handler = StreamHandler(bot, message.chat.id, placeholder_message.message_id)
         llm = get_llm(selected_model, stream_handler, user_id)
-        messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
+        
+        if selected_model == 'anthropic' and len(user_conversation_history[user_id]) > 5:
+            summarized_history = summarize_conversation_history(user_conversation_history[user_id][:-1])
+            messages = [SystemMessage(content=get_system_prompt(user_id))] + summarized_history + [user_conversation_history[user_id][-1]]
+        else:
+            messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
         
         response = llm.invoke(messages)
         
@@ -334,7 +340,10 @@ def handle_message(bot, message: Message) -> None:
         tokens_count = len(stream_handler.response.split())
         log_usage(user_id, selected_model, messages_count, tokens_count)
     except Exception as e:
-        bot.edit_message_text(f"An error occurred: {str(e)}", chat_id=message.chat.id, message_id=placeholder_message.message_id)
+        if 'overloaded_error' in str(e):
+            bot.edit_message_text("The AI model is currently overloaded. Please try again in a few moments.", chat_id=message.chat.id, message_id=placeholder_message.message_id)
+        else:
+            bot.edit_message_text(f"An error occurred: {str(e)}", chat_id=message.chat.id, message_id=placeholder_message.message_id)
 
 def process_message_content(message: Message, bot) -> HumanMessage:
     if message.content_type == 'photo':

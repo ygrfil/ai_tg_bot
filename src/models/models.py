@@ -4,6 +4,7 @@ from langchain_community.chat_models import ChatPerplexity
 from langchain_groq import ChatGroq
 from config import ENV
 from src.database.database import get_user_preferences
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 
 def get_llm(selected_model: str, stream_handler, user_id: int):
     llm_config = {
@@ -42,3 +43,16 @@ def get_conversation_messages(user_conversation_history, user_id: int, selected_
         ]
     
     return messages
+def summarize_conversation_history(conversation_history):
+    summarizer = ChatAnthropic(model="claude-3-haiku-20240307", temperature=0.2)
+    summary_prompt = "Summarize the following conversation concisely, preserving key information:\n\n"
+    for message in conversation_history:
+        if isinstance(message, SystemMessage):
+            summary_prompt += f"System: {message.content}\n"
+        elif isinstance(message, HumanMessage):
+            summary_prompt += f"Human: {message.content}\n"
+        elif isinstance(message, AIMessage):
+            summary_prompt += f"AI: {message.content}\n"
+    
+    summary = summarizer.invoke(summary_prompt)
+    return [HumanMessage(content=summary.content)]
