@@ -39,7 +39,7 @@ def get_conversation_messages(user_conversation_history, user_id: int, selected_
         messages = [
             msg.__class__(content=str(msg.content) if isinstance(msg.content, (list, dict)) else msg.content)
             for msg in messages
-            if hasattr(msg, 'content')
+            if hasattr(msg, 'content') and msg.content is not None
         ]
     
     return messages
