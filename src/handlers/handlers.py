@@ -251,7 +251,7 @@ def summarize_command(bot, message: Message) -> None:
 
 def summarize_conversation(conversation_history):
     summary_prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are a helpful assistant that summarizes conversations."),
+        ("system", "You make all conversation much shorter, summarize keeping style and most important points the same"),
         ("human", "Summarize the following conversation concisely:\n{conversation}")
     ])
     llm = ChatAnthropic(api_key=ENV["ANTHROPIC_API_KEY"], model="claude-3-5-sonnet-20240620")

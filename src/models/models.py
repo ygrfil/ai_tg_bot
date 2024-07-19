@@ -45,7 +45,7 @@ def get_conversation_messages(user_conversation_history, user_id: int, selected_
     return messages
 def summarize_conversation_history(conversation_history):
     summarizer = ChatAnthropic(model="claude-3-haiku-20240307", temperature=0.2)
-    summary_prompt = "Summarize the following conversation concisely, preserving key information:\n\n"
+    summary_prompt = "you make all conversation much shorter, summarize keeping style and most important points the same"
     for message in conversation_history:
         if isinstance(message, SystemMessage):
             summary_prompt += f"System: {message.content}\n"
@@ -55,4 +55,4 @@ def summarize_conversation_history(conversation_history):
             summary_prompt += f"AI: {message.content}\n"
     
     summary = summarizer.invoke(summary_prompt)
-    return [HumanMessage(content=summary.content)]
+    return [HumanMessage(content="Previous conversation summary: " + summary.content)]
