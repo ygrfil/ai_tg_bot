@@ -326,12 +326,10 @@ def handle_message(bot, message: Message) -> None:
         llm = get_llm(selected_model, stream_handler, user_id)
         
         if len(user_conversation_history[user_id]) > 5:
-            summarized_history = summarize_conversation_history(user_conversation_history[user_id][:-1])
+            summarized_history = summarize_conversation_history(user_conversation_history[user_id])
             store_summarized_history(user_id, summarized_history)
-            user_conversation_history[user_id] = [SystemMessage(content=get_system_prompt(user_id))] + [user_message]
-            messages = [SystemMessage(content=get_system_prompt(user_id))] + summarized_history + [user_message]
-        else:
-            messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
+            user_conversation_history[user_id] = [SystemMessage(content=get_system_prompt(user_id))] + summarized_history + [user_message]
+        messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
         
         response = llm.invoke(messages)
         
