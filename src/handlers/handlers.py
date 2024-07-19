@@ -195,9 +195,9 @@ def callback_query_handler(bot, call):
         prompt_name = call.data.split('_')[1]
         system_message = get_system_prompts().get(prompt_name, "You are a helpful assistant.")
         save_user_preferences(user_id, system_prompt=prompt_name)
-        user_conversation_history[user_id] = [{"role": "system", "content": system_message}]
-        bot.answer_callback_query(call.id, f"Switched to {prompt_name} system message.")
-        bot.edit_message_text(f"System message set to {prompt_name}.", call.message.chat.id, call.message.message_id, reply_markup=None)
+        user_conversation_history[user_id] = [SystemMessage(content=system_message)]
+        bot.answer_callback_query(call.id, f"Switched to {prompt_name} system message. Conversation has been reset.")
+        bot.edit_message_text(f"System message set to {prompt_name}. Conversation has been reset.", call.message.chat.id, call.message.message_id, reply_markup=None)
 
 def start_command(bot, message: Message) -> None:
     if not is_authorized(message):
