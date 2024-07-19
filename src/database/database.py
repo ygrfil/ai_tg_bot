@@ -132,16 +132,6 @@ def init_db():
             ALTER TABLE user_preferences
             ADD COLUMN creativity_level TEXT DEFAULT 'moderate'
         '''))
-def store_summarized_history(user_id, summarized_history):
-    summarized_content = summarized_history[0].content if summarized_history else ""
-    db_operation(lambda c: c.execute('''
-        INSERT OR REPLACE INTO summarized_history (user_id, summary)
-        VALUES (?, ?)
-    ''', (user_id, summarized_content)))
-
-def get_summarized_history(user_id):
-    result = db_operation(lambda c: c.execute('SELECT summary FROM summarized_history WHERE user_id = ?', (user_id,)).fetchone())
-    return [HumanMessage(content=result[0])] if result else []
 
 def init_db():
     db_operation(lambda c: c.execute('''
@@ -166,11 +156,5 @@ def init_db():
         CREATE TABLE IF NOT EXISTS allowed_users (
             user_id INTEGER PRIMARY KEY,
             username TEXT
-        )
-    '''))
-    db_operation(lambda c: c.execute('''
-        CREATE TABLE IF NOT EXISTS summarized_history (
-            user_id INTEGER PRIMARY KEY,
-            summary TEXT
         )
     '''))
