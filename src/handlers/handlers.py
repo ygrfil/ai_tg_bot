@@ -329,6 +329,11 @@ def handle_message(bot, message: Message) -> None:
             summarized_history = summarize_conversation_history(user_conversation_history[user_id])
             store_summarized_history(user_id, summarized_history)
             user_conversation_history[user_id] = [SystemMessage(content=get_system_prompt(user_id))] + summarized_history + [user_message]
+            
+            # Send the summary to the chat for testing
+            summary_content = summarized_history[0].content if summarized_history else "No summary generated"
+            bot.send_message(message.chat.id, f"Summary for testing:\n{summary_content}")
+        
         messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
         
         response = llm.invoke(messages)
