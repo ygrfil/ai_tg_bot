@@ -9,7 +9,7 @@ import time
 import os
 from config import ENV
 from src.database.database import (get_user_preferences, save_user_preferences, ensure_user_preferences,
-                      log_usage, get_monthly_usage, get_user_monthly_usage)
+                      log_usage, get_monthly_usage, get_user_monthly_usage, store_summarized_history, get_summarized_history)
 from src.models.models import get_llm, get_conversation_messages
 from src.utils.utils import (reset_conversation_if_needed, limit_conversation_history,
                    create_keyboard, get_system_prompts, get_username, get_user_id, StreamHandler, is_authorized,
@@ -312,13 +312,12 @@ def handle_message(bot, message: Message) -> None:
     user_prefs = get_user_preferences(user_id)
     selected_model = user_prefs['selected_model']
 
-    if user_id not in user_conversation_history or reset_conversation_if_needed(user_id):
+    if user_id not in user_conversation_history:
         system_prompt = get_system_prompt(user_id)
         user_conversation_history[user_id] = [SystemMessage(content=system_prompt)]
 
     user_message = process_message_content(message, bot)
     user_conversation_history[user_id].append(user_message)
-    user_conversation_history[user_id] = limit_conversation_history(user_id, user_conversation_history[user_id])
 
     placeholder_message = bot.send_message(message.chat.id, "Generating...")
 
@@ -326,9 +325,11 @@ def handle_message(bot, message: Message) -> None:
         stream_handler = StreamHandler(bot, message.chat.id, placeholder_message.message_id)
         llm = get_llm(selected_model, stream_handler, user_id)
         
-        if selected_model == 'anthropic' and len(user_conversation_history[user_id]) > 5:
+        if len(user_conversation_history[user_id]) > 5:
             summarized_history = summarize_conversation_history(user_conversation_history[user_id][:-1])
-            messages = [SystemMessage(content=get_system_prompt(user_id))] + summarized_history + [user_conversation_history[user_id][-1]]
+            store_summarized_history(user_id, summarized_history)
+            user_conversation_history[user_id] = [SystemMessage(content=get_system_prompt(user_id))] + [user_message]
+            messages = [SystemMessage(content=get_system_prompt(user_id))] + summarized_history + [user_message]
         else:
             messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
         
