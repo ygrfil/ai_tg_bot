@@ -344,12 +344,15 @@ def handle_message(bot, message: Message) -> None:
 
 def process_message_content(message: Message, bot, selected_model: str) -> HumanMessage:
     if message.content_type == 'photo':
-        file_info = bot.get_file(message.photo[-1].file_id)
-        downloaded_file = bot.download_file(file_info.file_path)
-        image_base64 = base64.b64encode(downloaded_file).decode('ascii')
-        
-        return HumanMessage(content=[
-            {"type": "text", "text": message.caption or "Describe this image in detail."},
-            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
-        ])
+        if selected_model != 'anthropic':
+            file_info = bot.get_file(message.photo[-1].file_id)
+            downloaded_file = bot.download_file(file_info.file_path)
+            image_base64 = base64.b64encode(downloaded_file).decode('ascii')
+            
+            return HumanMessage(content=[
+                {"type": "text", "text": message.caption or "Describe this image in detail."},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
+            ])
+        else:
+            return HumanMessage(content=message.caption or "I'm sorry, but I can't process images for the Anthropic model.")
     return HumanMessage(content=message.text)
