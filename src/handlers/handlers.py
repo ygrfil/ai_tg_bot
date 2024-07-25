@@ -360,11 +360,20 @@ def process_message_content(message: Message, bot, selected_model: str) -> Human
         image_base64 = base64.b64encode(img_byte_arr).decode('utf-8')
         
         if selected_model == 'anthropic':
-            return HumanMessage(content=f"""
-            {message.caption or 'Analyze this image.'}
-            
-            [Image: data:image/jpeg;base64,{image_base64}]
-            """)
+            return HumanMessage(content=[
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/jpeg",
+                        "data": image_base64
+                    }
+                },
+                {
+                    "type": "text",
+                    "text": message.caption or "Analyze this image."
+                }
+            ])
         else:
             return HumanMessage(content=[
                 {"type": "text", "text": message.caption or "Analyze this image."},
