@@ -318,23 +318,29 @@ def handle_message(bot, message: Message) -> None:
         system_prompt = get_system_prompt(user_id)
         user_conversation_history[user_id] = [SystemMessage(content=system_prompt)]
 
-    user_message = process_message_content(message, bot, selected_model)
-    user_conversation_history[user_id].append(user_message)
-
     placeholder_message = bot.send_message(message.chat.id, "Generating...")
 
     try:
-        stream_handler = StreamHandler(bot, message.chat.id, placeholder_message.message_id)
-        llm = get_llm(selected_model, stream_handler, user_id)
-        
-        messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
-        
-        response = llm.invoke(messages)
-        
-        user_conversation_history[user_id].append(AIMessage(content=stream_handler.response))
-        
+        if message.content_type == 'photo' and selected_model == 'anthropic':
+            response = process_image_for_anthropic(message, bot)
+            bot.edit_message_text(response, chat_id=message.chat.id, message_id=placeholder_message.message_id)
+            user_conversation_history[user_id].append(HumanMessage(content=message.caption or "Describe this image in detail."))
+            user_conversation_history[user_id].append(AIMessage(content=response))
+        else:
+            user_message = process_message_content(message, bot, selected_model)
+            user_conversation_history[user_id].append(user_message)
+
+            stream_handler = StreamHandler(bot, message.chat.id, placeholder_message.message_id)
+            llm = get_llm(selected_model, stream_handler, user_id)
+            
+            messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
+            
+            response = llm.invoke(messages)
+            
+            user_conversation_history[user_id].append(AIMessage(content=stream_handler.response))
+
         messages_count = 1
-        tokens_count = len(stream_handler.response.split())
+        tokens_count = len(response.split() if isinstance(response, str) else stream_handler.response.split())
         log_usage(user_id, selected_model, messages_count, tokens_count)
     except Exception as e:
         if 'overloaded_error' in str(e):
@@ -359,7 +365,7 @@ def process_message_content(message: Message, bot, selected_model: str) -> Human
             ])
     return HumanMessage(content=message.text)
 
-def process_image_for_anthropic(message: Message, bot) -> HumanMessage:
+def process_image_for_anthropic(message: Message, bot) -> str:
     file_info = bot.get_file(message.photo[-1].file_id)
     downloaded_file = bot.download_file(file_info.file_path)
     image_base64 = base64.b64encode(downloaded_file).decode('ascii')
@@ -390,7 +396,6 @@ def process_image_for_anthropic(message: Message, bot) -> HumanMessage:
     )
     
     if response.content:
-        model_response = response.content[0].text
-        return HumanMessage(content=model_response)
+        return response.content[0].text
     else:
-        return HumanMessage(content="I apologize, but I couldn't process the image. Could you please try uploading it again?")
+        return "I apologize, but I couldn't process the image. Could you please try uploading it again?"
