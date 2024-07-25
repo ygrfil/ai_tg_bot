@@ -7,6 +7,8 @@ from src.models.models import summarize_conversation
 import base64
 import time
 import os
+from PIL import Image
+import io
 from config import ENV
 from src.database.database import (get_user_preferences, save_user_preferences, ensure_user_preferences,
                       log_usage, get_monthly_usage, get_user_monthly_usage)
@@ -316,7 +318,7 @@ def handle_message(bot, message: Message) -> None:
         system_prompt = get_system_prompt(user_id)
         user_conversation_history[user_id] = [SystemMessage(content=system_prompt)]
 
-    user_message = process_message_content(message, bot)
+    user_message = process_message_content(message, bot, selected_model)
     user_conversation_history[user_id].append(user_message)
 
     placeholder_message = bot.send_message(message.chat.id, "Generating...")
@@ -340,13 +342,32 @@ def handle_message(bot, message: Message) -> None:
         else:
             bot.edit_message_text(f"An error occurred: {str(e)}", chat_id=message.chat.id, message_id=placeholder_message.message_id)
 
-def process_message_content(message: Message, bot) -> HumanMessage:
+def process_message_content(message: Message, bot, selected_model: str) -> HumanMessage:
     if message.content_type == 'photo':
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded_file = bot.download_file(file_info.file_path)
-        image_url = f"data:image/jpeg;base64,{base64.b64encode(downloaded_file).decode('utf-8')}"
-        return HumanMessage(content=[
-            {"type": "text", "text": message.caption or "Analyze this image."},
-            {"type": "image_url", "image_url": {"url": image_url}}
-        ])
+        
+        # Resize the image
+        img = Image.open(io.BytesIO(downloaded_file))
+        max_size = (1024, 1024)  # You can adjust this size
+        img.thumbnail(max_size, Image.LANCZOS)
+        
+        # Convert the resized image back to bytes
+        img_byte_arr = io.BytesIO()
+        img.save(img_byte_arr, format='JPEG')
+        img_byte_arr = img_byte_arr.getvalue()
+        
+        image_base64 = base64.b64encode(img_byte_arr).decode('utf-8')
+        
+        if selected_model == 'anthropic':
+            return HumanMessage(content=f"""
+            {message.caption or 'Analyze this image.'}
+            
+            [Image: data:image/jpeg;base64,{image_base64}]
+            """)
+        else:
+            return HumanMessage(content=[
+                {"type": "text", "text": message.caption or "Analyze this image."},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
+            ])
     return HumanMessage(content=message.text)
