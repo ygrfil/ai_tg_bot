@@ -360,7 +360,7 @@ def process_message_content(message: Message, bot, selected_model: str) -> Human
                 },
                 {
                     "type": "text",
-                    "text": message.caption or "Describe this image in detail."
+                    "text": message.caption or "What is in this image?"
                 }
             ])
         else:
