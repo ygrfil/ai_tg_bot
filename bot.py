@@ -30,9 +30,6 @@ def startadmin(message):
 def reset(message):
     reset_command(bot, message)
 
-@bot.message_handler(commands=['summarize'])
-def summarize(message):
-    summarize_command(bot, message)
 
 @bot.message_handler(commands=['create_prompt'])
 def create_prompt(message):

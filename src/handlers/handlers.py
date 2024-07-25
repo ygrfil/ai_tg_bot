@@ -238,28 +238,6 @@ def reset_command(bot, message: Message) -> None:
     user_conversation_history[message.from_user.id] = []
     bot.reply_to(message, "Conversation has been reset.")
 
-def summarize_command(bot, message: Message) -> None:
-    if not is_authorized(message):
-        bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
-        return
-    ensure_user_preferences(message.from_user.id)
-    user_id = message.from_user.id
-    if user_id not in user_conversation_history or not user_conversation_history[user_id]:
-        bot.reply_to(message, "There's no conversation to summarize.")
-        return
-    placeholder_message = bot.send_message(message.chat.id, "Generating summary...")
-    summary = summarize_conversation(user_conversation_history[user_id])
-    bot.edit_message_text(summary, chat_id=message.chat.id, message_id=placeholder_message.message_id)
-
-def summarize_conversation(conversation_history):
-    summary_prompt = ChatPromptTemplate.from_messages([
-        ("system", "You make all conversation much shorter, summarize keeping style and most important points the same"),
-        ("human", "Summarize the following conversation concisely:\n{conversation}")
-    ])
-    llm = ChatAnthropic(api_key=ENV["ANTHROPIC_API_KEY"], model="claude-3-5-sonnet-20240620")
-    chain = summary_prompt | llm | StrOutputParser()
-    conversation_text = "\n".join(f"{type(msg).__name__}: {msg['content'] if isinstance(msg, dict) else msg.content}" for msg in conversation_history)
-    return chain.invoke({"conversation": conversation_text})
 
 def create_prompt_command(bot, message: Message) -> None:
     if not is_authorized(message):

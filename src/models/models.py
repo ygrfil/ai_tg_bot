@@ -5,19 +5,6 @@ from langchain_groq import ChatGroq
 from config import ENV
 from src.database.database import get_user_preferences
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-from langchain_anthropic import ChatAnthropic
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
-
-def summarize_conversation(conversation_history):
-    summary_prompt = ChatPromptTemplate.from_messages([
-        ("system", "You make all conversation much shorter, summarize keeping style and most important points the same"),
-        ("human", "Summarize the following conversation concisely:\n{conversation}")
-    ])
-    llm = ChatAnthropic(api_key=ENV["ANTHROPIC_API_KEY"], model="claude-3-5-sonnet-20240620")
-    chain = summary_prompt | llm | StrOutputParser()
-    conversation_text = "\n".join(f"{type(msg).__name__}: {msg['content'] if isinstance(msg, dict) else msg.content}" for msg in conversation_history)
-    return chain.invoke({"conversation": conversation_text})
 
 def get_llm(selected_model: str, stream_handler, user_id: int):
     llm_config = {
