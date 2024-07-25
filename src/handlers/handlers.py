@@ -346,6 +346,8 @@ def process_message_content(message: Message, bot, selected_model: str) -> Human
     if message.content_type == 'photo':
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded_file = bot.download_file(file_info.file_path)
+        image_base64 = base64.b64encode(downloaded_file).decode('ascii')
+        
         if selected_model == 'anthropic':
             return HumanMessage(content=[
                 {
@@ -353,7 +355,7 @@ def process_message_content(message: Message, bot, selected_model: str) -> Human
                     "source": {
                         "type": "base64",
                         "media_type": "image/jpeg",
-                        "data": downloaded_file
+                        "data": image_base64
                     }
                 },
                 {
@@ -362,7 +364,6 @@ def process_message_content(message: Message, bot, selected_model: str) -> Human
                 }
             ])
         else:
-            image_base64 = base64.b64encode(downloaded_file).decode('ascii')
             return HumanMessage(content=[
                 {"type": "text", "text": message.caption or "Describe this image in detail."},
                 {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
