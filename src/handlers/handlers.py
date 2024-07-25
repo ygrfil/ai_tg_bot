@@ -367,7 +367,7 @@ def process_image_for_anthropic(message: Message, bot) -> HumanMessage:
     client = Anthropic(api_key=ENV["ANTHROPIC_API_KEY"])
     response = client.messages.create(
         model="claude-3-5-sonnet-20240620",
-        max_tokens=512,
+        max_tokens=1024,
         messages=[
             {
                 "role": "user",
@@ -382,11 +382,14 @@ def process_image_for_anthropic(message: Message, bot) -> HumanMessage:
                     },
                     {
                         "type": "text",
-                        "text": message.caption or "What is in this image?"
+                        "text": message.caption or "Describe this image in detail."
                     }
                 ]
             }
         ]
     )
     
-    return HumanMessage(content=response.content[0].text)
+    if response.content:
+        return HumanMessage(content=f"Image description: {response.content[0].text}")
+    else:
+        return HumanMessage(content="I apologize, but I couldn't process the image. Could you please try uploading it again?")
