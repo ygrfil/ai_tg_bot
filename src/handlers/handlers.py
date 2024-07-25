@@ -347,17 +347,7 @@ def process_message_content(message: Message, bot, selected_model: str) -> Human
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded_file = bot.download_file(file_info.file_path)
         
-        # Resize the image
-        img = Image.open(io.BytesIO(downloaded_file))
-        max_size = (1024, 1024)  # You can adjust this size
-        img.thumbnail(max_size, Image.LANCZOS)
-        
-        # Convert the resized image back to bytes
-        img_byte_arr = io.BytesIO()
-        img.save(img_byte_arr, format='JPEG')
-        img_byte_arr = img_byte_arr.getvalue()
-        
-        image_base64 = base64.b64encode(img_byte_arr).decode('utf-8')
+        image_base64 = base64.b64encode(downloaded_file).decode('utf-8')
         
         if selected_model == 'anthropic':
             return HumanMessage(content=[
