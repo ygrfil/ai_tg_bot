@@ -391,9 +391,6 @@ def process_image_for_anthropic(message: Message, bot) -> HumanMessage:
     
     if response.content:
         model_response = response.content[0].text
-        if "As an AI language model" in model_response or "I don't have the ability to see or analyze images" in model_response:
-            return HumanMessage(content="I apologize, but there was an error processing the image. The AI model couldn't analyze it correctly. Could you please try uploading the image again?")
-        else:
-            return HumanMessage(content=f"Image description: {model_response}")
+        return HumanMessage(content=model_response)
     else:
         return HumanMessage(content="I apologize, but I couldn't process the image. Could you please try uploading it again?")
