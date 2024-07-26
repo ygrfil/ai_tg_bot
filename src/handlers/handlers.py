@@ -348,38 +348,3 @@ def process_message_content(message: Message, bot, selected_model: str) -> Human
                 {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
             ])
     return HumanMessage(content=message.text)
-
-def process_image_for_anthropic(message: Message, bot) -> str:
-    file_info = bot.get_file(message.photo[-1].file_id)
-    downloaded_file = bot.download_file(file_info.file_path)
-    image_base64 = base64.b64encode(downloaded_file).decode('ascii')
-    
-    client = Anthropic(api_key=ENV["ANTHROPIC_API_KEY"])
-    response = client.messages.create(
-        model="claude-3-5-sonnet-20240620",
-        max_tokens=1024,
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": "image/jpeg",
-                            "data": image_base64
-                        }
-                    },
-                    {
-                        "type": "text",
-                        "text": message.caption or "Describe this image in detail."
-                    }
-                ]
-            }
-        ]
-    )
-    
-    if response.content:
-        return response.content[0].text
-    else:
-        return "I apologize, but I couldn't process the image. Could you please try uploading it again?"
