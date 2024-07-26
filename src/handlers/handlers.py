@@ -6,7 +6,6 @@ from langchain_anthropic import ChatAnthropic
 import base64
 import time
 import os
-from PIL import Image
 import io
 from config import ENV
 from src.database.database import (get_user_preferences, save_user_preferences, ensure_user_preferences,
