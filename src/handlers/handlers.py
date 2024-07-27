@@ -396,7 +396,7 @@ import base64
 
 def process_image_for_anthropic(image_data: bytes, caption: str = None) -> str:
     try:
-        image_base64 = base64.b64encode(image_data).decode('utf-8')
+        image_base64 = base64.b64encode(image_data).decode('ascii')
         
         content = [
             {
@@ -417,7 +417,7 @@ def process_image_for_anthropic(image_data: bytes, caption: str = None) -> str:
         
         chat = ChatAnthropic(model="claude-3-sonnet-20240229")
         response = chat.invoke([human_message])
-        
+        print(response.content)
         return response.content
     except Exception as e:
         print(f"Error in process_image_for_anthropic: {str(e)}")
