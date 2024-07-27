@@ -392,7 +392,7 @@ def process_image_for_openai(message: Message, bot) -> HumanMessage:
 
 def process_image_for_anthropic(message: Message, bot) -> HumanMessage:
     # try:
-    #     file_info = bot.get_file(message.photo[-1].file_id)
+        #     file_info = bot.get_file(message.photo[-1].file_id)
     #     downloaded_file = bot.download_file(file_info.file_path)
     #     image_base64 = base64.b64encode(downloaded_file).decode('ascii')
         
