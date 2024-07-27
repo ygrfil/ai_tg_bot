@@ -1,5 +1,6 @@
 import base64
 import os
+import logging
 from telebot.types import Message
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
