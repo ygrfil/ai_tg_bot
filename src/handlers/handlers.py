@@ -279,11 +279,11 @@ def handle_message(bot, message: Message) -> None:
         if not messages:
             messages = [HumanMessage(content=message.text)]
 
+        response = llm.invoke(messages)
+        ai_message_content = stream_handler.response
+
         if selected_model == 'anthropic' and message.content_type == 'photo':
             ai_message_content = process_image_for_anthropic(message, bot)
-        else:
-            response = llm.invoke(messages)
-            ai_message_content = stream_handler.response
 
         ai_message_content = str(ai_message_content)
         
@@ -335,7 +335,7 @@ def process_image_for_openai(message: Message, bot) -> HumanMessage:
     except Exception:
         return HumanMessage(content="An error occurred while processing the image. Please try again later.")
 
-def process_image_for_anthropic(message: Message, bot) -> str:
+def process_image_for_anthropic(message: Message, bot, stream_handler) -> str:
     try:
         from langchain_anthropic import ChatAnthropic
         import logging
@@ -347,7 +347,7 @@ def process_image_for_anthropic(message: Message, bot) -> str:
         downloaded_file = bot.download_file(file_info.file_path)
         image_base64 = base64.b64encode(downloaded_file).decode('utf-8')
         
-        chat = ChatAnthropic(model="claude-3-sonnet-20240229")
+        chat = ChatAnthropic(model="claude-3-sonnet-20240229", streaming=True, callbacks=[stream_handler])
         
         prompt = [
             HumanMessage(content=[
@@ -363,7 +363,7 @@ def process_image_for_anthropic(message: Message, bot) -> str:
         
         response = chat.invoke(prompt)
         
-        return response.content
+        return stream_handler.response
     except Exception as e:
         logger.error(f"Error in process_image_for_anthropic: {str(e)}", exc_info=True)
         return f"An error occurred while processing the image. Error details: {str(e)}"
