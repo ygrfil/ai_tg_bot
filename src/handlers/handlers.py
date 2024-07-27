@@ -26,92 +26,67 @@ def handle_commands(bot, message: Message) -> None:
         return
 
     command = message.text.split()[0][1:]
-    if command == 'model':
-        ensure_user_preferences(message.from_user.id)
-        bot.send_message(message.chat.id, "Select a model:", reply_markup=create_keyboard([
-            ("OpenAI", "model_openai"),
-            ("Anthropic", "model_anthropic"),
-            ("Perplexity", "model_perplexity"),
-            ("Groq", "model_groq")
-        ]))
-    elif command == 'sm':
-        ensure_user_preferences(message.from_user.id)
-        bot.send_message(message.chat.id, "Select a system message:", reply_markup=create_keyboard([(name, f"sm_{name}") for name in get_system_prompts()]))
-    elif command == 'broadcast':
-        handle_broadcast(bot, message)
-    elif command == 'usage':
-        handle_usage(bot, message)
-    elif command == 'create_prompt':
-        create_prompt_command(bot, message)
-    elif command == 'list_users':
-        handle_list_users(bot, message)
-    elif command == 'add_user':
-        handle_add_user(bot, message)
-    elif command == 'remove_user':
-        handle_remove_user(bot, message)
-    elif command == 'remove_prompt':
-        handle_remove_prompt(bot, message)
-    elif command == 'status':
-        handle_status(bot, message)
-
-def handle_list_users(bot, message: Message) -> None:
-    if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
-        bot.reply_to(message, "Sorry, you are not authorized to use this command.")
-        return
+    command_handlers = {
+        'model': lambda: handle_model_selection(bot, message),
+        'sm': lambda: handle_system_message_selection(bot, message),
+        'broadcast': lambda: handle_broadcast(bot, message),
+        'usage': lambda: handle_usage(bot, message),
+        'create_prompt': lambda: create_prompt_command(bot, message),
+        'list_users': lambda: handle_user_management(bot, message, 'list'),
+        'add_user': lambda: handle_user_management(bot, message, 'add'),
+        'remove_user': lambda: handle_user_management(bot, message, 'remove'),
+        'remove_prompt': lambda: handle_remove_prompt(bot, message),
+        'status': lambda: handle_status(bot, message)
+    }
     
-    users = get_allowed_users()
-    user_list = []
-    for user in users:
-        username = get_username(bot, user[0])
-        user_list.append(f"ID: {user[0]}, Username: {username}")
-    
-    user_list_str = "\n".join(user_list)
-    bot.reply_to(message, f"List of allowed users:\n{user_list_str}")
-
-def handle_add_user(bot, message: Message) -> None:
-    if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
-        bot.reply_to(message, "Sorry, you are not authorized to use this command.")
-        return
-    
-    parts = message.text.split()
-    if len(parts) != 2:
-        bot.reply_to(message, "Usage: /add_user <user_id>")
-        return
-    
-    user_id = parts[1]
-    if not user_id.isdigit():
-        bot.reply_to(message, "Invalid user ID. Please provide a numeric ID.")
-        return
-    
-    user_id = int(user_id)
-    result = add_allowed_user(user_id)
-    if result:
-        username = get_username(bot, user_id)
-        bot.reply_to(message, f"User {username} (ID: {user_id}) has been added to the allowed users list.")
+    handler = command_handlers.get(command)
+    if handler:
+        handler()
     else:
-        bot.reply_to(message, f"Failed to add user. The user might already be in the allowed list.")
+        bot.reply_to(message, "Unknown command.")
 
-def handle_remove_user(bot, message: Message) -> None:
+def handle_model_selection(bot, message: Message) -> None:
+    ensure_user_preferences(message.from_user.id)
+    bot.send_message(message.chat.id, "Select a model:", reply_markup=create_keyboard([
+        ("OpenAI", "model_openai"),
+        ("Anthropic", "model_anthropic"),
+        ("Perplexity", "model_perplexity"),
+        ("Groq", "model_groq")
+    ]))
+
+def handle_system_message_selection(bot, message: Message) -> None:
+    ensure_user_preferences(message.from_user.id)
+    bot.send_message(message.chat.id, "Select a system message:", reply_markup=create_keyboard([(name, f"sm_{name}") for name in get_system_prompts()]))
+
+def handle_user_management(bot, message: Message, action: str) -> None:
     if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
         bot.reply_to(message, "Sorry, you are not authorized to use this command.")
         return
     
-    parts = message.text.split()
-    if len(parts) != 2:
-        bot.reply_to(message, "Usage: /remove_user <user_id>")
-        return
-    
-    user_id = parts[1]
-    if not user_id.isdigit():
-        bot.reply_to(message, "Invalid user ID. Please provide a numeric ID.")
-        return
-    
-    user_id = int(user_id)
-    result = remove_allowed_user(user_id)
-    if result:
-        bot.reply_to(message, f"User with ID {user_id} has been removed from the allowed users list.")
-    else:
-        bot.reply_to(message, f"Failed to remove user with ID {user_id}. Make sure the ID is correct.")
+    if action == 'list':
+        users = get_allowed_users()
+        user_list = [f"ID: {user[0]}, Username: {get_username(bot, user[0])}" for user in users]
+        bot.reply_to(message, f"List of allowed users:\n{chr(10).join(user_list)}")
+    elif action in ['add', 'remove']:
+        parts = message.text.split()
+        if len(parts) != 2:
+            bot.reply_to(message, f"Usage: /{action}_user <user_id>")
+            return
+        
+        user_id = parts[1]
+        if not user_id.isdigit():
+            bot.reply_to(message, "Invalid user ID. Please provide a numeric ID.")
+            return
+        
+        user_id = int(user_id)
+        result = add_allowed_user(user_id) if action == 'add' else remove_allowed_user(user_id)
+        
+        if result:
+            action_text = "added to" if action == 'add' else "removed from"
+            username = get_username(bot, user_id) if action == 'add' else ""
+            bot.reply_to(message, f"User {username}(ID: {user_id}) has been {action_text} the allowed users list.")
+        else:
+            bot.reply_to(message, f"Failed to {action} user. Please check the user ID and try again.")
 
 def handle_remove_prompt(bot, message: Message) -> None:
     if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
@@ -125,10 +100,7 @@ def handle_remove_prompt(bot, message: Message) -> None:
     
     prompt_name = parts[1]
     result = remove_system_prompt(prompt_name)
-    if result:
-        bot.reply_to(message, f"System prompt '{prompt_name}' has been removed successfully.")
-    else:
-        bot.reply_to(message, f"Failed to remove system prompt '{prompt_name}'. Make sure the prompt name is correct.")
+    bot.reply_to(message, f"System prompt '{prompt_name}' has been {'removed successfully' if result else 'failed to remove. Make sure the prompt name is correct'}.")
 
 def handle_status(bot, message: Message) -> None:
     user_id = message.from_user.id
