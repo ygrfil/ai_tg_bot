@@ -400,7 +400,7 @@ def process_image_for_anthropic(message: Message, bot):
             "type": "image",
             "source": {
                 "type": "base64",
-                "media_type": "image/jpeg",  # Assuming JPEG format, adjust if needed
+                "media_type": "image/png",  # Assuming PNG format, adjust if needed
                 "data": image_base64
             }
         }, message.caption or "Please describe this image in detail."
