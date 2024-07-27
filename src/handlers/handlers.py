@@ -393,37 +393,24 @@ def process_image_for_openai(message: Message, bot) -> HumanMessage:
         print(f"Error in process_image_for_openai: {str(e)}")  # Log the error
         return HumanMessage(content="An error occurred while processing the image. Please try again later.")
 
-def process_image_for_anthropic(message: Message, bot) -> str:
-    file_info = bot.get_file(message.photo[-1].file_id)
-    downloaded_file = bot.download_file(file_info.file_path)
-    image_base64 = base64.b64encode(downloaded_file).decode('ascii')
-    
-    client = Anthropic(api_key=ENV["ANTHROPIC_API_KEY"])
-    response = client.messages.create(
-        model="claude-3-5-sonnet-20240620",
-        max_tokens=1024,
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": "image/jpeg",
-                            "data": image_base64
-                        }
-                    },
-                    {
-                        "type": "text",
-                        "text": message.caption or "Describe this image in detail."
-                    }
-                ]
+def process_image_for_anthropic(message: Message, bot):
+    try:
+        file_info = bot.get_file(message.photo[-1].file_id)
+        downloaded_file = bot.download_file(file_info.file_path)
+        image_base64 = base64.b64encode(downloaded_file).decode('ascii')
+        
+        image_content = {
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": "image/jpeg",
+                "data": image_base64
             }
-        ]
-    )
-    
-    if response.content:
-        return response.content[0].text
-    else:
-        return "I apologize, but I couldn't process the image. Could you please try uploading it again?"
+        }
+        
+        text_content = message.caption or "Please describe this image in detail."
+        
+        return image_content, text_content
+    except Exception as e:
+        print(f"Error in process_image_for_anthropic: {str(e)}")  # Log the error
+        return None, "An error occurred while processing the image. Please try again later."
