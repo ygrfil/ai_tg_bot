@@ -422,7 +422,7 @@ def process_image_for_anthropic(message: Message, bot) -> str:
         response = chat.invoke([HumanMessage(content=content)])
         
         # Extract the first sentence of the response as the image description
-        image_description = response.content.split('.')[0] + '.'
+        # image_description = response.content.split('.')[0] + '.'
         
         return response.content
     except Exception as e:
