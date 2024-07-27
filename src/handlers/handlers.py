@@ -314,21 +314,9 @@ def handle_message(bot, message: Message) -> None:
         messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
         
         if selected_model == 'anthropic' and message.content_type == 'photo':
-            client = Anthropic(api_key=ENV["ANTHROPIC_API_KEY"])
-            image_content, text_content = process_image_for_anthropic(message, bot)
-            if image_content is None:
-                bot.edit_message_text(text_content, chat_id=message.chat.id, message_id=placeholder_message.message_id)
-                return
-            anthropic_messages = [{"role": "user", "content": [image_content, {"type": "text", "text": text_content}]}]
-            response = client.messages.create(
-                model="claude-3-sonnet-20240229",
-                max_tokens=1024,
-                system=get_system_prompt(user_id),
-                messages=anthropic_messages
-            )
-            ai_response = response.content[0].text
+            ai_response = process_image_for_anthropic(message, bot)
             stream_handler.response = ai_response
-            tokens_count = response.usage.output_tokens
+            tokens_count = len(ai_response.split())
         else:
             response = llm.invoke(messages)
             ai_response = stream_handler.response
@@ -389,24 +377,41 @@ def process_image_for_openai(message: Message, bot) -> HumanMessage:
         print(f"Error in process_image_for_openai: {str(e)}")  # Log the error
         return HumanMessage(content="An error occurred while processing the image. Please try again later.")
 
-def process_image_for_anthropic(message: Message, bot):
+def process_image_for_anthropic(message: Message, bot) -> str:
     try:
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded_file = bot.download_file(file_info.file_path)
         image_base64 = base64.b64encode(downloaded_file).decode('ascii')
         
-        image_content = {
-            "type": "image",
-            "source": {
-                "type": "base64",
-                "media_type": "image/jpeg",
-                "data": image_base64
-            }
-        }
+        client = Anthropic(api_key=ENV["ANTHROPIC_API_KEY"])
+        response = client.messages.create(
+            model="claude-3-sonnet-20240229",
+            max_tokens=1024,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/jpeg",
+                                "data": image_base64
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": message.caption or "Describe this image in detail."
+                        }
+                    ]
+                }
+            ]
+        )
         
-        text_content = message.caption or "Please describe this image in detail."
-        
-        return image_content, text_content
+        if response.content:
+            return response.content[0].text
+        else:
+            return "I apologize, but I couldn't process the image. Could you please try uploading it again?"
     except Exception as e:
         print(f"Error in process_image_for_anthropic: {str(e)}")  # Log the error
-        return None, "An error occurred while processing the image. Please try again later."
+        return "An error occurred while processing the image. Please try again later."
