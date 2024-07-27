@@ -314,13 +314,10 @@ def handle_message(bot, message: Message) -> None:
         messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
         
         if selected_model == 'anthropic' and message.content_type == 'photo':
-            ai_response = process_image_for_anthropic(message, bot)
-            stream_handler.response = ai_response.content if isinstance(ai_response, HumanMessage) else ai_response
+            ai_message_content = process_image_for_anthropic(message, bot)
         else:
             response = llm.invoke(messages)
-            ai_response = stream_handler.response
-
-        ai_message_content = ai_response.content if isinstance(ai_response, HumanMessage) else str(ai_response)
+            ai_message_content = stream_handler.response
         
         # Debug information
         print(f"Debug - ai_response type: {type(ai_response)}")
@@ -412,7 +409,7 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage
 import base64
 
-def process_image_for_anthropic(message: Message, bot) -> HumanMessage:
+def process_image_for_anthropic(message: Message, bot) -> str:
     try:
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded_file = bot.download_file(file_info.file_path)
@@ -426,21 +423,20 @@ def process_image_for_anthropic(message: Message, bot) -> HumanMessage:
                     "media_type": "image/jpeg",
                     "data": image_base64
                 }
+            },
+            {
+                "type": "text",
+                "text": message.caption or "Please describe this image in detail."
             }
         ]
         
-        if message.caption:
-            content.append({
-                "type": "text",
-                "text": message.caption
-            })
-        else:
-            content.append({
-                "type": "text",
-                "text": "Please describe this image in detail."
-            })
+        chat = ChatAnthropic(model="claude-3-sonnet-20240229")
+        response = chat.invoke([HumanMessage(content=content)])
         
-        return HumanMessage(content=content)
+        # Extract the first sentence of the response as the image description
+        image_description = response.content.split('.')[0] + '.'
+        
+        return image_description
     except Exception as e:
         print(f"Error in process_image_for_anthropic: {str(e)}")
-        return HumanMessage(content=f"An error occurred while processing the image: {str(e)}")
+        return f"An error occurred while processing the image: {str(e)}"
