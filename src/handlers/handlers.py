@@ -7,7 +7,6 @@ import base64
 import time
 import tempfile
 import os
-from PIL import Image
 import io
 import requests
 from config import ENV
