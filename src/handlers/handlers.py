@@ -2,7 +2,6 @@ from telebot.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from anthropic import Anthropic
 import base64
 import time
 import tempfile
