@@ -320,7 +320,6 @@ def handle_message(bot, message: Message) -> None:
             ai_message_content = stream_handler.response
         
         # Debug information
-        print(f"Debug - ai_response type: {type(ai_response)}")
         print(f"Debug - ai_message_content type: {type(ai_message_content)}")
         print(f"Debug - ai_message_content: {ai_message_content}")
         
