@@ -5,6 +5,8 @@ from langchain_groq import ChatGroq
 from config import ENV
 from src.database.database import get_user_preferences
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
 
 def get_llm(selected_model: str, stream_handler, user_id: int):
     llm_config = {
