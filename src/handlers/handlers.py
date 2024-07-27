@@ -336,6 +336,8 @@ def process_message_content(message: Message, bot, selected_model: str) -> Human
     if message.content_type == 'photo':
         if selected_model == 'anthropic':
             return process_image_for_anthropic(message, bot)
+        elif selected_model == 'openai':
+            return HumanMessage(content="I'm sorry, but I can't process images with the current OpenAI model. Please try using the Anthropic model for image analysis.")
         else:
             file_info = bot.get_file(message.photo[-1].file_id)
             downloaded_file = bot.download_file(file_info.file_path)
