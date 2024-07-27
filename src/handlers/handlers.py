@@ -291,15 +291,17 @@ def handle_message(bot, message: Message) -> None:
 
         try:
             bot.edit_message_text(ai_message_content, chat_id=message.chat.id, message_id=placeholder_message.message_id)
-        except Exception:
+        except Exception as edit_error:
+            logging.error(f"Error editing message: {str(edit_error)}")
             bot.send_message(message.chat.id, ai_message_content)
 
         user_conversation_history[user_id].append(AIMessage(content=ai_message_content))
 
         messages_count = 1
         log_usage(user_id, selected_model, messages_count, tokens_count)
-    except Exception:
-        error_message = "An error occurred while processing your request. Please try again later."
+    except Exception as e:
+        logging.error(f"Error in handle_message: {str(e)}", exc_info=True)
+        error_message = f"An error occurred while processing your request: {str(e)}. Please try again later."
         bot.send_message(message.chat.id, error_message)
 
 def process_message_content(message: Message, bot, selected_model: str) -> HumanMessage:
@@ -338,6 +340,10 @@ def process_image_for_openai(message: Message, bot) -> HumanMessage:
 def process_image_for_anthropic(message: Message, bot) -> str:
     try:
         from langchain_anthropic import ChatAnthropic
+        import logging
+
+        logging.basicConfig(level=logging.ERROR)
+        logger = logging.getLogger(__name__)
 
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded_file = bot.download_file(file_info.file_path)
@@ -361,4 +367,5 @@ def process_image_for_anthropic(message: Message, bot) -> str:
         
         return response.content
     except Exception as e:
-        return f"An error occurred while processing the image: {str(e)}"
+        logger.error(f"Error in process_image_for_anthropic: {str(e)}", exc_info=True)
+        return f"An error occurred while processing the image. Error details: {str(e)}"
