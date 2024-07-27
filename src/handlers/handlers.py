@@ -275,11 +275,8 @@ def handle_message(bot, message: Message) -> None:
         
         messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
         
-        if selected_model == 'anthropic' and message.content_type == 'photo':
-            ai_message_content = process_image_for_anthropic(message, bot)
-        else:
-            response = llm.invoke(messages)
-            ai_message_content = stream_handler.response
+        response = llm.invoke(messages)
+        ai_message_content = stream_handler.response
 
         ai_message_content = str(ai_message_content)
         
