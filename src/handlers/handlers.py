@@ -276,6 +276,9 @@ def handle_message(bot, message: Message) -> None:
         
         messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
         
+        if not messages:
+            messages = [HumanMessage(content=message.text)]
+
         if selected_model == 'anthropic' and message.content_type == 'photo':
             ai_message_content = process_image_for_anthropic(message, bot)
         else:

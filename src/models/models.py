@@ -32,7 +32,10 @@ def get_llm(selected_model: str, stream_handler, user_id: int):
 def get_conversation_messages(user_conversation_history, user_id: int, selected_model: str):
     from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
     
-    messages = user_conversation_history[user_id]
+    messages = user_conversation_history.get(user_id, [])
+    
+    if not messages:
+        return []
     
     if selected_model == "perplexity":
         system_messages = [msg for msg in messages if isinstance(msg, SystemMessage)]
@@ -49,14 +52,15 @@ def get_conversation_messages(user_conversation_history, user_id: int, selected_
     
     # Ensure all message contents are strings for Groq and Anthropic
     if selected_model in ["groq", "anthropic"]:
-        messages = []
+        processed_messages = []
         for msg in messages:
             if isinstance(msg, str):
-                messages.append(HumanMessage(content=msg))
+                processed_messages.append(HumanMessage(content=msg))
             elif hasattr(msg, 'content'):
-                messages.append(msg.__class__(content=str(msg.content)))
+                processed_messages.append(msg.__class__(content=str(msg.content)))
             else:
-                messages.append(HumanMessage(content=str(msg)))
+                processed_messages.append(HumanMessage(content=str(msg)))
+        messages = processed_messages
     
     return messages
 
