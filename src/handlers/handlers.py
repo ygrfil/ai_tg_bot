@@ -334,6 +334,9 @@ def handle_message(bot, message: Message) -> None:
             ai_response = stream_handler.response
             tokens_count = len(ai_response.split())
 
+        # Update the placeholder message with the AI response
+        bot.edit_message_text(ai_response, chat_id=message.chat.id, message_id=placeholder_message.message_id)
+
         user_conversation_history[user_id].append(AIMessage(content=ai_response))
 
         messages_count = 1
