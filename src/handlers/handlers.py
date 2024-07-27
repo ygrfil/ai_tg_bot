@@ -291,7 +291,7 @@ def handle_message(bot, message: Message) -> None:
         system_prompt = get_system_prompt(user_id)
         user_conversation_history[user_id] = [SystemMessage(content=system_prompt)]
 
-    user_message = process_message_content(message, bot)
+    user_message = process_message_content(message, bot, selected_model)
     user_conversation_history[user_id].append(user_message)
 
     placeholder_message = bot.send_message(message.chat.id, "Generating...")
@@ -315,19 +315,19 @@ def handle_message(bot, message: Message) -> None:
         else:
             bot.edit_message_text(f"An error occurred: {str(e)}", chat_id=message.chat.id, message_id=placeholder_message.message_id)
 
-def process_message_content(message: Message, bot) -> HumanMessage:
+def process_message_content(message: Message, bot, selected_model: str) -> HumanMessage:
     if message.content_type == 'photo':
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded_file = bot.download_file(file_info.file_path)
         image_url = f"data:image/jpeg;base64,{base64.b64encode(downloaded_file).decode('utf-8')}"
         if selected_model == 'anthropic':
-            return llm.invoke(HumanMessage(content=[
+            return HumanMessage(content=[
                 {"type": "text", "text": message.caption or "Analyze this image."},
                 {"type": "image_url", "image_url": {"url": image_url}}
-            ]))
+            ])
         else:
             return HumanMessage(content=[
                 {"type": "text", "text": message.caption or "Analyze this image."},
                 {"type": "image_url", "image_url": {"url": image_url}}
-        ])
+            ])
     return HumanMessage(content=message.text)
