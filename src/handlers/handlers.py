@@ -3,11 +3,11 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_anthropic import ChatAnthropic
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
-from langchain_core.pydantic_v1 import BaseModel, Field
+from src.models.models import summarize_conversation
 import base64
 import time
 import os
+from PIL import Image
 import io
 from config import ENV
 from src.database.database import (get_user_preferences, save_user_preferences, ensure_user_preferences,
@@ -299,17 +299,23 @@ def handle_message(bot, message: Message) -> None:
     placeholder_message = bot.send_message(message.chat.id, "Generating...")
 
     try:
-        new_messages = process_message_content(message, bot, selected_model)
-        user_conversation_history[user_id].extend(new_messages)
+        if message.content_type == 'photo' and selected_model == 'anthropic':
+            response = process_image_for_anthropic(message, bot)
+            bot.edit_message_text(response, chat_id=message.chat.id, message_id=placeholder_message.message_id)
+            user_conversation_history[user_id].append(HumanMessage(content=message.caption or "Describe this image in detail."))
+            user_conversation_history[user_id].append(AIMessage(content=response))
+        else:
+            user_message = process_message_content(message, bot, selected_model)
+            user_conversation_history[user_id].append(user_message)
 
-        stream_handler = StreamHandler(bot, message.chat.id, placeholder_message.message_id)
-        llm = get_llm(selected_model, stream_handler, user_id)
+            stream_handler = StreamHandler(bot, message.chat.id, placeholder_message.message_id)
+            llm = get_llm(selected_model, stream_handler, user_id)
             
-        messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
+            messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
             
-        response = llm.invoke(messages)
+            response = llm.invoke(messages)
             
-        user_conversation_history[user_id].append(AIMessage(content=stream_handler.response))
+            user_conversation_history[user_id].append(AIMessage(content=stream_handler.response))
 
         messages_count = 1
         tokens_count = len(response.split() if isinstance(response, str) else stream_handler.response.split())
@@ -320,51 +326,54 @@ def handle_message(bot, message: Message) -> None:
         else:
             bot.edit_message_text(f"An error occurred: {str(e)}", chat_id=message.chat.id, message_id=placeholder_message.message_id)
 
+from anthropic import Anthropic
 
-def process_message_content(message: Message, bot, selected_model: str) -> list:
+def process_message_content(message: Message, bot, selected_model: str) -> HumanMessage:
     if message.content_type == 'photo':
-        file_info = bot.get_file(message.photo[-1].file_id)
-        downloaded_file = bot.download_file(file_info.file_path)
-        image_base64 = base64.b64encode(downloaded_file).decode('utf-8')
-       
         if selected_model == 'anthropic':
-            return [
-                HumanMessage(content=message.caption or "Describe this image in detail."),
-                AIMessage(
-                    content=[
-                        {
-                            "type": "tool_use",
-                            "id": "fetch_image",
-                            "name": "FetchImage",
-                            "input": {"should_fetch": True},
-                        },
-                    ],
-                    tool_calls=[
-                        {
-                            "name": "FetchImage",
-                            "args": {"should_fetch": True},
-                            "id": "fetch_image",
-                        },
-                    ],
-                ),
-                ToolMessage(
-                    name="FetchImage",
-                    content=[
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": "image/jpeg",
-                                "data": image_base64,
-                            },
-                        },
-                    ],
-                    tool_call_id="fetch_image",
-                ),
-            ]
+            return process_image_for_anthropic(message, bot)
         else:
-            return [HumanMessage(content=[
+            file_info = bot.get_file(message.photo[-1].file_id)
+            downloaded_file = bot.download_file(file_info.file_path)
+            image_base64 = base64.b64encode(downloaded_file).decode('ascii')
+            
+            return HumanMessage(content=[
                 {"type": "text", "text": message.caption or "Describe this image in detail."},
                 {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
-            ])]
-    return [HumanMessage(content=message.text)]
+            ])
+    return HumanMessage(content=message.text)
+
+def process_image_for_anthropic(message: Message, bot) -> str:
+    file_info = bot.get_file(message.photo[-1].file_id)
+    downloaded_file = bot.download_file(file_info.file_path)
+    image_base64 = base64.b64encode(downloaded_file).decode('ascii')
+    
+    client = Anthropic(api_key=ENV["ANTHROPIC_API_KEY"])
+    response = client.messages.create(
+        model="claude-3-5-sonnet-20240620",
+        max_tokens=1024,
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/jpeg",
+                            "data": image_base64
+                        }
+                    },
+                    {
+                        "type": "text",
+                        "text": message.caption or "Describe this image in detail."
+                    }
+                ]
+            }
+        ]
+    )
+    
+    if response.content:
+        return response.content[0].text
+    else:
+        return "I apologize, but I couldn't process the image. Could you please try uploading it again?"

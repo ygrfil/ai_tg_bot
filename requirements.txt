@@ -1,7 +1,7 @@
 python-dotenv==1.0.1
 pyTelegramBotAPI==4.16.1
-langchain-core==0.2.13
-langchain-openai==0.1.15
-langchain-anthropic==0.1.19
+langchain-core==0.2.20
+langchain-openai==0.1.17
+langchain-anthropic==0.1.20
 langchain-community==0.2.7
 langchain-groq==0.1.6
