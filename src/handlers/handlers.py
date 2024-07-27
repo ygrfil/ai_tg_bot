@@ -293,12 +293,6 @@ def handle_message(bot, message: Message) -> None:
         
         tokens_count = len(ai_message_content.split())
 
-        try:
-            bot.edit_message_text(ai_message_content, chat_id=message.chat.id, message_id=placeholder_message.message_id)
-        except Exception as edit_error:
-            logging.error(f"Error editing message: {str(edit_error)}")
-            bot.send_message(message.chat.id, ai_message_content)
-
         user_conversation_history[user_id].append(AIMessage(content=ai_message_content))
 
         messages_count = 1
