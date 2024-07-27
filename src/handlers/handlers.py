@@ -337,17 +337,16 @@ def process_image_for_openai(message: Message, bot) -> HumanMessage:
 
 def process_image_for_anthropic(message: Message, bot) -> str:
     try:
-        from langchain_anthropic import AnthropicClient
+        from langchain_anthropic import ChatAnthropic
 
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded_file = bot.download_file(file_info.file_path)
         image_base64 = base64.b64encode(downloaded_file).decode('utf-8')
         
-        client = AnthropicClient()
+        chat = ChatAnthropic(model="claude-3-sonnet-20240229")
         
-        prompt = {
-            "role": "user",
-            "content": [
+        prompt = [
+            HumanMessage(content=[
                 {"type": "text", "text": message.caption or "Describe the image in detail"},
                 {
                     "type": "image_url",
@@ -355,10 +354,10 @@ def process_image_for_anthropic(message: Message, bot) -> str:
                         "url": f"data:image/jpeg;base64,{image_base64}",
                     },
                 },
-            ],
-        }
+            ])
+        ]
         
-        response = client.generate(prompt, model="claude-3-sonnet-20240229")
+        response = chat.invoke(prompt)
         
         return response.content
     except Exception as e:
