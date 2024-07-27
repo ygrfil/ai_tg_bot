@@ -394,9 +394,11 @@ from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage
 import base64
 
-def process_image_for_anthropic(image_data: bytes, caption: str = None) -> str:
+def process_image_for_anthropic(message: Message, bot) -> HumanMessage:
     try:
-        image_base64 = base64.b64encode(image_data).decode('ascii')
+        file_info = bot.get_file(message.photo[-1].file_id)
+        downloaded_file = bot.download_file(file_info.file_path)
+        image_base64 = base64.b64encode(downloaded_file).decode('utf-8')
         
         content = [
             {
@@ -409,16 +411,11 @@ def process_image_for_anthropic(image_data: bytes, caption: str = None) -> str:
             },
             {
                 "type": "text",
-                "text": caption or "Please describe this image in detail."
+                "text": message.caption or "Please describe this image in detail."
             }
         ]
         
-        human_message = HumanMessage(content=content)
-        
-        chat = ChatAnthropic(model="claude-3-sonnet-20240229")
-        response = chat.invoke([human_message])
-        print(response.content)
-        return response.content
+        return HumanMessage(content=content)
     except Exception as e:
         print(f"Error in process_image_for_anthropic: {str(e)}")
-        return f"An error occurred while processing the image: {str(e)}"
+        return HumanMessage(content=f"An error occurred while processing the image: {str(e)}")
