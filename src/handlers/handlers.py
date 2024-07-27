@@ -297,23 +297,17 @@ def handle_message(bot, message: Message) -> None:
     placeholder_message = bot.send_message(message.chat.id, "Generating...")
 
     try:
-        if message.content_type == 'photo' and selected_model == 'anthropic':
-            response = process_image_for_anthropic(message, bot)
-            bot.edit_message_text(response, chat_id=message.chat.id, message_id=placeholder_message.message_id)
-            user_conversation_history[user_id].append(HumanMessage(content=message.caption or "Describe this image in detail."))
-            user_conversation_history[user_id].append(AIMessage(content=response))
-        else:
-            user_message = process_message_content(message, bot, selected_model)
-            user_conversation_history[user_id].append(user_message)
+        user_message = process_message_content(message, bot, selected_model)
+        user_conversation_history[user_id].append(user_message)
 
-            stream_handler = StreamHandler(bot, message.chat.id, placeholder_message.message_id)
-            llm = get_llm(selected_model, stream_handler, user_id)
+        stream_handler = StreamHandler(bot, message.chat.id, placeholder_message.message_id)
+        llm = get_llm(selected_model, stream_handler, user_id)
             
-            messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
+        messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
             
-            response = llm.invoke(messages)
+        response = llm.invoke(messages)
             
-            user_conversation_history[user_id].append(AIMessage(content=stream_handler.response))
+        user_conversation_history[user_id].append(AIMessage(content=stream_handler.response))
 
         messages_count = 1
         tokens_count = len(response.split() if isinstance(response, str) else stream_handler.response.split())
@@ -324,26 +318,15 @@ def handle_message(bot, message: Message) -> None:
         else:
             bot.edit_message_text(f"An error occurred: {str(e)}", chat_id=message.chat.id, message_id=placeholder_message.message_id)
 
-from anthropic import Anthropic
 
 def process_message_content(message: Message, bot, selected_model: str) -> HumanMessage:
     if message.content_type == 'photo':
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded_file = bot.download_file(file_info.file_path)
         image_base64 = base64.b64encode(downloaded_file).decode('ascii')
-        if selected_model == 'anthropic':
-            return HumanMessage(content=[
-                {"type": "text", "text": message.caption or "Describe this image in detail."},
-                { "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": "image/jpeg",
-                            "data": image_base64
-                        }}
-            ])
-        else:            
-            return HumanMessage(content=[
-                {"type": "text", "text": message.caption or "Describe this image in detail."},
+       
+        return HumanMessage(content=[
+            {"type": "text", "text": message.caption or "Describe this image in detail."},
                 {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
             ])
     return HumanMessage(content=message.text)
