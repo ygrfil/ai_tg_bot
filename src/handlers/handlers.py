@@ -5,6 +5,8 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_anthropic import ChatAnthropic
 import base64
 import time
+import tempfile
+import os
 import os
 from PIL import Image
 import io
@@ -371,22 +373,26 @@ def process_image_for_anthropic(message: Message, bot) -> HumanMessage:
     try:
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded_file = bot.download_file(file_info.file_path)
-        image_base64 = base64.b64encode(downloaded_file).decode('ascii')
         
-        content = [
-            {
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": "image/jpeg",
-                    "data": image_base64
-                }
-            },
-            {
-                "type": "text",
-                "text": message.caption or "Describe this image in detail."
-            }
-        ]
+        # Create a temporary file to save the image
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as temp_file:
+            temp_file.write(downloaded_file)
+            temp_file_path = temp_file.name
+        
+        # Open the image file and create a base64 encoded string
+        with open(temp_file_path, "rb") as image_file:
+            image_base64 = base64.b64encode(image_file.read()).decode('utf-8')
+        
+        # Remove the temporary file
+        os.unlink(temp_file_path)
+        
+        content = f"""
+        Here's the image in base64 format:
+
+        data:image/jpeg;base64,{image_base64}
+
+        {message.caption or "Please describe this image in detail."}
+        """
         
         return HumanMessage(content=content)
     except Exception as e:
