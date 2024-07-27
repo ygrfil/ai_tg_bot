@@ -268,10 +268,10 @@ def handle_message(bot, message: Message) -> None:
     placeholder_message = bot.send_message(message.chat.id, "Generating...")
 
     try:
-        user_message = process_message_content(message, bot, selected_model)
+        stream_handler = StreamHandler(bot, message.chat.id, placeholder_message.message_id)
+        user_message = process_message_content(message, bot, selected_model, stream_handler)
         user_conversation_history[user_id].append(user_message)
 
-        stream_handler = StreamHandler(bot, message.chat.id, placeholder_message.message_id)
         llm = get_llm(selected_model, stream_handler, user_id)
         
         messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
@@ -302,10 +302,10 @@ def handle_message(bot, message: Message) -> None:
         error_message = f"An error occurred while processing your request: {str(e)}. Please try again later."
         bot.send_message(message.chat.id, error_message)
 
-def process_message_content(message: Message, bot, selected_model: str) -> HumanMessage:
+def process_message_content(message: Message, bot, selected_model: str, stream_handler) -> HumanMessage:
     if message.content_type == 'photo':
         if selected_model == 'anthropic':
-            return process_image_for_anthropic(message, bot)
+            return process_image_for_anthropic(message, bot, stream_handler)
         elif selected_model == 'openai':
             return process_image_for_openai(message, bot)
         else:
