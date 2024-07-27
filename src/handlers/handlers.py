@@ -3,7 +3,6 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from anthropic import Anthropic
-from PIL import Image
 import base64
 import time
 import tempfile
@@ -395,18 +394,13 @@ def process_image_for_anthropic(message: Message, bot):
         response = requests.get(file_url)
         response.raise_for_status()
         
-        image = Image.open(io.BytesIO(response.content))
-        png_buffer = io.BytesIO()
-        image.save(png_buffer, format='PNG')
-        png_buffer.seek(0)
-        
-        image_base64 = base64.b64encode(png_buffer.getvalue()).decode('utf-8')
+        image_base64 = base64.b64encode(response.content).decode('utf-8')
         
         return {
             "type": "image",
             "source": {
                 "type": "base64",
-                "media_type": "image/png",
+                "media_type": "image/jpeg",  # Assuming JPEG format, adjust if needed
                 "data": image_base64
             }
         }, message.caption or "Please describe this image in detail."
