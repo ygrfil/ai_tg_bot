@@ -301,7 +301,7 @@ def handle_message(bot, message: Message) -> None:
 
     if user_id not in user_conversation_history:
         system_prompt = get_system_prompt(user_id)
-        user_conversation_history[user_id] = [{"role": "system", "content": system_prompt}]
+        user_conversation_history[user_id] = []
 
     placeholder_message = bot.send_message(message.chat.id, "Generating...")
 
@@ -309,23 +309,25 @@ def handle_message(bot, message: Message) -> None:
         if selected_model == 'anthropic':
             client = Anthropic(api_key=ENV["ANTHROPIC_API_KEY"])
             
+            anthropic_messages = []
             if message.content_type == 'photo':
                 image_content, text_content = process_image_for_anthropic(message, bot)
                 if image_content is None:
                     bot.edit_message_text(text_content, chat_id=message.chat.id, message_id=placeholder_message.message_id)
                     return
-                user_message = {"type": "text", "text": text_content}
-                user_conversation_history[user_id].append({"role": "user", "content": [image_content, user_message]})
+                anthropic_messages.append({"role": "user", "content": [image_content, {"type": "text", "text": text_content}]})
             else:
-                user_conversation_history[user_id].append({"role": "user", "content": message.text})
+                anthropic_messages.append({"role": "user", "content": message.text})
 
             response = client.messages.create(
                 model="claude-3-sonnet-20240229",
                 max_tokens=1024,
-                messages=user_conversation_history[user_id]
+                system=get_system_prompt(user_id),
+                messages=anthropic_messages
             )
 
             ai_response = response.content[0].text
+            user_conversation_history[user_id].append({"role": "user", "content": message.text})
             user_conversation_history[user_id].append({"role": "assistant", "content": ai_response})
 
             bot.edit_message_text(ai_response, chat_id=message.chat.id, message_id=placeholder_message.message_id)
