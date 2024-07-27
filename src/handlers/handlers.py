@@ -340,7 +340,7 @@ def process_image_for_openai(message: Message, bot) -> HumanMessage:
     try:
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded_file = bot.download_file(file_info.file_path)
-        image_base64 = base64.b64encode(downloaded_file).decode('ascii')
+        image_base64 = base64.b64encode(downloaded_file).decode('utf-8')
         
         content = [
             {
@@ -348,12 +348,19 @@ def process_image_for_openai(message: Message, bot) -> HumanMessage:
                 "image_url": {
                     "url": f"data:image/jpeg;base64,{image_base64}"
                 }
-            },
-            {
-                "type": "text",
-                "text": message.caption or "Please describe this image in detail."
             }
         ]
+        
+        if message.caption:
+            content.append({
+                "type": "text",
+                "text": message.caption
+            })
+        else:
+            content.append({
+                "type": "text",
+                "text": "Please describe this image in detail."
+            })
         
         return HumanMessage(content=content)
     except Exception as e:
