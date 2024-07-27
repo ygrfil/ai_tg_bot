@@ -305,52 +305,39 @@ def handle_message(bot, message: Message) -> None:
     placeholder_message = bot.send_message(message.chat.id, "Generating...")
 
     try:
-        if selected_model == 'anthropic':
-            client = Anthropic(api_key=ENV["ANTHROPIC_API_KEY"])
-            
-            anthropic_messages = []
-            if message.content_type == 'photo':
-                image_content, text_content = process_image_for_anthropic(message, bot)
-                if image_content is None:
-                    bot.edit_message_text(text_content, chat_id=message.chat.id, message_id=placeholder_message.message_id)
-                    return
-                anthropic_messages.append({"role": "user", "content": [image_content, {"type": "text", "text": text_content}]})
-            else:
-                anthropic_messages.append({"role": "user", "content": message.text})
+        user_message = process_message_content(message, bot, selected_model)
+        user_conversation_history[user_id].append(user_message)
 
+        stream_handler = StreamHandler(bot, message.chat.id, placeholder_message.message_id)
+        llm = get_llm(selected_model, stream_handler, user_id)
+        
+        messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
+        
+        if selected_model == 'anthropic' and message.content_type == 'photo':
+            client = Anthropic(api_key=ENV["ANTHROPIC_API_KEY"])
+            image_content, text_content = process_image_for_anthropic(message, bot)
+            if image_content is None:
+                bot.edit_message_text(text_content, chat_id=message.chat.id, message_id=placeholder_message.message_id)
+                return
+            anthropic_messages = [{"role": "user", "content": [image_content, {"type": "text", "text": text_content}]}]
             response = client.messages.create(
                 model="claude-3-sonnet-20240229",
                 max_tokens=1024,
                 system=get_system_prompt(user_id),
                 messages=anthropic_messages
             )
-
             ai_response = response.content[0].text
-            user_conversation_history[user_id].append({"role": "user", "content": message.text})
-            user_conversation_history[user_id].append({"role": "assistant", "content": ai_response})
-
-            bot.edit_message_text(ai_response, chat_id=message.chat.id, message_id=placeholder_message.message_id)
-
-            messages_count = 1
+            stream_handler.response = ai_response
             tokens_count = response.usage.output_tokens
-            log_usage(user_id, selected_model, messages_count, tokens_count)
         else:
-            # Handle other models (OpenAI, Perplexity, Groq) as before
-            user_message = process_message_content(message, bot, selected_model)
-            user_conversation_history[user_id].append(user_message)
-
-            stream_handler = StreamHandler(bot, message.chat.id, placeholder_message.message_id)
-            llm = get_llm(selected_model, stream_handler, user_id)
-            
-            messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
-            
             response = llm.invoke(messages)
-            
-            user_conversation_history[user_id].append(AIMessage(content=stream_handler.response))
+            ai_response = stream_handler.response
+            tokens_count = len(ai_response.split())
 
-            messages_count = 1
-            tokens_count = len(stream_handler.response.split())
-            log_usage(user_id, selected_model, messages_count, tokens_count)
+        user_conversation_history[user_id].append(AIMessage(content=ai_response))
+
+        messages_count = 1
+        log_usage(user_id, selected_model, messages_count, tokens_count)
     except Exception as e:
         error_message = "The AI model is currently overloaded. Please try again in a few moments." if 'overloaded_error' in str(e) else f"An error occurred: {str(e)}"
         bot.edit_message_text(error_message, chat_id=message.chat.id, message_id=placeholder_message.message_id)
