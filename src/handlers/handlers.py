@@ -279,11 +279,11 @@ def handle_message(bot, message: Message) -> None:
         if not messages:
             messages = [HumanMessage(content=message.text)]
 
-        response = llm.invoke(messages)
-        ai_message_content = stream_handler.response
-
         if selected_model == 'anthropic' and message.content_type == 'photo':
-            ai_message_content = process_image_for_anthropic(message, bot)
+            ai_message_content = process_image_for_anthropic(message, bot, stream_handler)
+        else:
+            response = llm.invoke(messages)
+            ai_message_content = stream_handler.response
 
         ai_message_content = str(ai_message_content)
         
