@@ -329,6 +329,10 @@ def handle_message(bot, message: Message) -> None:
             ai_response = response.content[0].text
             stream_handler.response = ai_response
             tokens_count = response.usage.output_tokens
+        elif selected_model == 'openai' and message.content_type == 'photo':
+            response = llm.invoke(messages)
+            ai_response = stream_handler.response
+            tokens_count = len(ai_response.split())
         else:
             response = llm.invoke(messages)
             ai_response = stream_handler.response
