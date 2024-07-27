@@ -49,10 +49,14 @@ def get_conversation_messages(user_conversation_history, user_id: int, selected_
     
     # Ensure all message contents are strings for Groq and Anthropic
     if selected_model in ["groq", "anthropic"]:
-        messages = [
-            msg.__class__(content=str(msg.content) if hasattr(msg, 'content') else str(msg))
-            for msg in messages
-        ]
+        messages = []
+        for msg in messages:
+            if isinstance(msg, str):
+                messages.append(HumanMessage(content=msg))
+            elif hasattr(msg, 'content'):
+                messages.append(msg.__class__(content=str(msg.content)))
+            else:
+                messages.append(HumanMessage(content=str(msg)))
     
     return messages
 
