@@ -275,8 +275,11 @@ def handle_message(bot, message: Message) -> None:
         
         messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
         
-        response = llm.invoke(messages)
-        ai_message_content = stream_handler.response
+        if selected_model == 'anthropic' and message.content_type == 'photo':
+            ai_message_content = process_image_for_anthropic(message, bot)
+        else:
+            response = llm.invoke(messages)
+            ai_message_content = stream_handler.response
 
         ai_message_content = str(ai_message_content)
         
@@ -301,49 +304,59 @@ def handle_message(bot, message: Message) -> None:
 
 def process_message_content(message: Message, bot, selected_model: str) -> HumanMessage:
     if message.content_type == 'photo':
-        if selected_model in ['anthropic', 'openai']:
-            return process_image(message, bot, selected_model)
+        if selected_model == 'anthropic':
+            return process_image_for_anthropic(message, bot)
+        elif selected_model == 'openai':
+            return process_image_for_openai(message, bot)
         else:
             return HumanMessage(content="I'm sorry, but I can't process images with the current model. Please try using the Anthropic or OpenAI model for image analysis.")
     return HumanMessage(content=message.text)
 
-def process_image(message: Message, bot, selected_model: str) -> HumanMessage:
+def process_image_for_openai(message: Message, bot) -> HumanMessage:
     try:
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded_file = bot.download_file(file_info.file_path)
         image_base64 = base64.b64encode(downloaded_file).decode('utf-8')
         
-        if selected_model == 'anthropic':
-            chat = ChatAnthropic(model="claude-3-sonnet-20240229")
-            content = [
-                {
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "image/jpeg",
-                        "data": image_base64
-                    }
-                },
-                {
-                    "type": "text",
-                    "text": message.caption or "Please describe this image in detail."
+        content = [
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{image_base64}"
                 }
-            ]
-            response = chat.invoke([HumanMessage(content=content)])
-            return response
-        else:
-            content = [
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/jpeg;base64,{image_base64}"
-                    }
-                },
-                {
-                    "type": "text",
-                    "text": message.caption or "Please describe this image in detail."
+            },
+            {
+                "type": "text",
+                "text": message.caption or "Please describe this image in detail."
+            }
+        ]
+        
+        return HumanMessage(content=content)
+    except Exception:
+        return HumanMessage(content="An error occurred while processing the image. Please try again later.")
+
+def process_image_for_anthropic(message: Message, bot) -> str:
+    try:
+        file_info = bot.get_file(message.photo[-1].file_id)
+        downloaded_file = bot.download_file(file_info.file_path)
+        image_base64 = base64.b64encode(downloaded_file).decode('utf-8')
+        
+        content = [
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{image_base64}"
                 }
-            ]
-            return HumanMessage(content=content)
-    except Exception as e:
-        return HumanMessage(content=f"An error occurred while processing the image: {str(e)}")
+            },
+            {
+                "type": "text",
+                "text": message.caption or "Please describe this image in detail."
+            }
+        ]
+        
+        chat = ChatAnthropic(model="claude-3-sonnet-20240229")
+        response = chat.invoke([HumanMessage(content=content)])
+        
+        return response.content
+    except Exception:
+        return "An error occurred while processing the image. Please try again later."
