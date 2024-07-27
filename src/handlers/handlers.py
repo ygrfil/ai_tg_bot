@@ -323,10 +323,9 @@ def handle_message(bot, message: Message) -> None:
         print(f"Debug - ai_message_content type: {type(ai_message_content)}")
         print(f"Debug - ai_message_content: {ai_message_content}")
         
-        # Check if ai_message_content is a list
-        if isinstance(ai_message_content, list):
-            # If it's a list, join the elements into a single string
-            ai_message_content = " ".join(map(str, ai_message_content))
+        # Ensure ai_message_content is a string
+        if not isinstance(ai_message_content, str):
+            ai_message_content = str(ai_message_content)
         
         # Truncate the message if it's too long
         max_message_length = 4096  # Telegram's maximum message length
@@ -340,26 +339,18 @@ def handle_message(bot, message: Message) -> None:
             bot.edit_message_text(ai_message_content, chat_id=message.chat.id, message_id=placeholder_message.message_id)
         except Exception as edit_error:
             print(f"Debug - Edit message error: {str(edit_error)}")
-            if "message is not modified" in str(edit_error):
-                # If the message content is the same, we don't need to update it
-                pass
-            else:
-                # If it's a different error, re-raise it
-                raise
+            if "message is not modified" not in str(edit_error).lower():
+                # If it's not a "message not modified" error, send a new message
+                bot.send_message(message.chat.id, ai_message_content)
 
         user_conversation_history[user_id].append(AIMessage(content=ai_message_content))
 
         messages_count = 1
         log_usage(user_id, selected_model, messages_count, tokens_count)
     except Exception as e:
-        error_message = "The AI model is currently overloaded. Please try again in a few moments." if 'overloaded_error' in str(e) else f"An error occurred: {str(e)}"
-        try:
-            bot.edit_message_text(error_message, chat_id=message.chat.id, message_id=placeholder_message.message_id)
-        except Exception as send_error:
-            print(f"Debug - Send error message error: {str(send_error)}")
-            # If editing fails, try sending a new message
-            bot.send_message(message.chat.id, error_message)
+        error_message = "An error occurred while processing your request. Please try again later."
         print(f"Error in handle_message: {str(e)}")  # Log the error
+        bot.send_message(message.chat.id, error_message)
 
 from anthropic import Anthropic
 
