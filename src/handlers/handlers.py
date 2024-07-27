@@ -408,12 +408,19 @@ def process_image_for_anthropic(message: Message, bot) -> HumanMessage:
                     "media_type": "image/jpeg",
                     "data": image_base64
                 }
-            },
-            {
-                "type": "text",
-                "text": message.caption or "Please describe this image in detail."
             }
         ]
+        
+        if message.caption:
+            content.append({
+                "type": "text",
+                "text": message.caption
+            })
+        else:
+            content.append({
+                "type": "text",
+                "text": "Please describe this image in detail."
+            })
         
         return HumanMessage(content=content)
     except Exception as e:
