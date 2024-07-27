@@ -302,30 +302,48 @@ def handle_message(bot, message: Message) -> None:
 def process_message_content(message: Message, bot, selected_model: str) -> HumanMessage:
     if message.content_type == 'photo':
         if selected_model in ['anthropic', 'openai']:
-            return process_image(message, bot)
+            return process_image(message, bot, selected_model)
         else:
             return HumanMessage(content="I'm sorry, but I can't process images with the current model. Please try using the Anthropic or OpenAI model for image analysis.")
     return HumanMessage(content=message.text)
 
-def process_image(message: Message, bot) -> HumanMessage:
+def process_image(message: Message, bot, selected_model: str) -> HumanMessage:
     try:
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded_file = bot.download_file(file_info.file_path)
         image_base64 = base64.b64encode(downloaded_file).decode('utf-8')
         
-        content = [
-            {
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:image/jpeg;base64,{image_base64}"
+        if selected_model == 'anthropic':
+            chat = ChatAnthropic(model="claude-3-sonnet-20240229")
+            content = [
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": "image/jpeg",
+                        "data": image_base64
+                    }
+                },
+                {
+                    "type": "text",
+                    "text": message.caption or "Please describe this image in detail."
                 }
-            },
-            {
-                "type": "text",
-                "text": message.caption or "Please describe this image in detail."
-            }
-        ]
-        
-        return HumanMessage(content=content)
-    except Exception:
-        return HumanMessage(content="An error occurred while processing the image. Please try again later.")
+            ]
+            response = chat.invoke([HumanMessage(content=content)])
+            return response
+        else:
+            content = [
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{image_base64}"
+                    }
+                },
+                {
+                    "type": "text",
+                    "text": message.caption or "Please describe this image in detail."
+                }
+            ]
+            return HumanMessage(content=content)
+    except Exception as e:
+        return HumanMessage(content=f"An error occurred while processing the image: {str(e)}")
