@@ -322,6 +322,11 @@ def handle_message(bot, message: Message) -> None:
             ai_response = stream_handler.response
             tokens_count = len(ai_response.split())
 
+        if isinstance(ai_response, str):
+            ai_message_content = ai_response
+        else:
+            ai_message_content = ai_response.content
+
         # Update the placeholder message with the AI response
         try:
             bot.edit_message_text(ai_response, chat_id=message.chat.id, message_id=placeholder_message.message_id)
@@ -389,7 +394,7 @@ def process_image_for_openai(message: Message, bot) -> HumanMessage:
         print(f"Error in process_image_for_openai: {str(e)}")  # Log the error
         return HumanMessage(content="An error occurred while processing the image. Please try again later.")
 
-def process_image_for_anthropic(message: Message, bot) -> str:
+def process_image_for_anthropic(message: Message, bot) -> HumanMessage:
     try:
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded_file = bot.download_file(file_info.file_path)
@@ -421,9 +426,9 @@ def process_image_for_anthropic(message: Message, bot) -> str:
         )
         
         if response.content:
-            return response.content[0].text
+            return HumanMessage(content=response.content[0].text)
         else:
-            return "I apologize, but I couldn't process the image. Could you please try uploading it again?"
+            return HumanMessage(content="I apologize, but I couldn't process the image. Could you please try uploading it again?")
     except Exception as e:
         print(f"Error in process_image_for_anthropic: {str(e)}")  # Log the error
-        return "An error occurred while processing the image. Please try again later."
+        return HumanMessage(content="An error occurred while processing the image. Please try again later.")
