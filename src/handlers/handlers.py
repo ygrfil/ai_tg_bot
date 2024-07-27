@@ -332,22 +332,16 @@ def handle_message(bot, message: Message) -> None:
         # Update the placeholder message with the AI response
         try:
             bot.edit_message_text(ai_message_content, chat_id=message.chat.id, message_id=placeholder_message.message_id)
-        except Exception as edit_error:
-            print(f"Debug - Edit message error: {str(edit_error)}")
-            if "message is not modified" not in str(edit_error).lower():
-                # If it's not a "message not modified" error, send a new message
-                bot.send_message(message.chat.id, ai_message_content)
+        except Exception:
+            # If editing fails, send a new message
+            bot.send_message(message.chat.id, ai_message_content)
 
         user_conversation_history[user_id].append(AIMessage(content=ai_message_content))
 
         messages_count = 1
         log_usage(user_id, selected_model, messages_count, tokens_count)
-    except Exception as e:
+    except Exception:
         error_message = "An error occurred while processing your request. Please try again later."
-        print(f"Error in handle_message: {str(e)}")  # Log the error
-        print(f"Debug - Full traceback:")
-        import traceback
-        traceback.print_exc()
         bot.send_message(message.chat.id, error_message)
 
 from anthropic import Anthropic
@@ -389,8 +383,7 @@ def process_image_for_openai(message: Message, bot) -> HumanMessage:
             })
         
         return HumanMessage(content=content)
-    except Exception as e:
-        print(f"Error in process_image_for_openai: {str(e)}")  # Log the error
+    except Exception:
         return HumanMessage(content="An error occurred while processing the image. Please try again later.")
 
 from langchain_anthropic import ChatAnthropic
@@ -425,6 +418,5 @@ def process_image_for_anthropic(message: Message, bot) -> str:
         # image_description = response.content.split('.')[0] + '.'
         
         return response.content
-    except Exception as e:
-        print(f"Error in process_image_for_anthropic: {str(e)}")
-        return f"An error occurred while processing the image: {str(e)}"
+    except Exception:
+        return "An error occurred while processing the image. Please try again later."
