@@ -322,10 +322,17 @@ def handle_message(bot, message: Message) -> None:
         # Debug information
         print(f"Debug - ai_message_content type: {type(ai_message_content)}")
         print(f"Debug - ai_message_content: {ai_message_content}")
+        print(f"Debug - response type: {type(response)}")
+        print(f"Debug - response: {response}")
         
         # Ensure ai_message_content is a string
-        if not isinstance(ai_message_content, str):
+        if isinstance(response, AIMessage):
+            ai_message_content = response.content
+        elif not isinstance(ai_message_content, str):
             ai_message_content = str(ai_message_content)
+        
+        print(f"Debug - Final ai_message_content type: {type(ai_message_content)}")
+        print(f"Debug - Final ai_message_content: {ai_message_content}")
         
         # Truncate the message if it's too long
         max_message_length = 4096  # Telegram's maximum message length
@@ -350,6 +357,9 @@ def handle_message(bot, message: Message) -> None:
     except Exception as e:
         error_message = "An error occurred while processing your request. Please try again later."
         print(f"Error in handle_message: {str(e)}")  # Log the error
+        print(f"Debug - Full traceback:")
+        import traceback
+        traceback.print_exc()
         bot.send_message(message.chat.id, error_message)
 
 from anthropic import Anthropic
