@@ -3,6 +3,8 @@ from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_anthropic import ChatAnthropic
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.pydantic_v1 import BaseModel, Field
 import base64
 import time
 import os
@@ -297,8 +299,8 @@ def handle_message(bot, message: Message) -> None:
     placeholder_message = bot.send_message(message.chat.id, "Generating...")
 
     try:
-        user_message = process_message_content(message, bot, selected_model)
-        user_conversation_history[user_id].append(user_message)
+        new_messages = process_message_content(message, bot, selected_model)
+        user_conversation_history[user_id].extend(new_messages)
 
         stream_handler = StreamHandler(bot, message.chat.id, placeholder_message.message_id)
         llm = get_llm(selected_model, stream_handler, user_id)
@@ -319,27 +321,50 @@ def handle_message(bot, message: Message) -> None:
             bot.edit_message_text(f"An error occurred: {str(e)}", chat_id=message.chat.id, message_id=placeholder_message.message_id)
 
 
-def process_message_content(message: Message, bot, selected_model: str) -> HumanMessage:
+def process_message_content(message: Message, bot, selected_model: str) -> list:
     if message.content_type == 'photo':
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded_file = bot.download_file(file_info.file_path)
         image_base64 = base64.b64encode(downloaded_file).decode('utf-8')
        
         if selected_model == 'anthropic':
-            return HumanMessage(content=[
-                {"type": "text", "text": message.caption or "Describe this image in detail."},
-                {
-                    "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": "image/jpeg",
-                        "data": image_base64
-                    }
-                }
-            ])
+            return [
+                HumanMessage(content=message.caption or "Describe this image in detail."),
+                AIMessage(
+                    content=[
+                        {
+                            "type": "tool_use",
+                            "id": "fetch_image",
+                            "name": "FetchImage",
+                            "input": {"should_fetch": True},
+                        },
+                    ],
+                    tool_calls=[
+                        {
+                            "name": "FetchImage",
+                            "args": {"should_fetch": True},
+                            "id": "fetch_image",
+                        },
+                    ],
+                ),
+                ToolMessage(
+                    name="FetchImage",
+                    content=[
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/jpeg",
+                                "data": image_base64,
+                            },
+                        },
+                    ],
+                    tool_call_id="fetch_image",
+                ),
+            ]
         else:
-            return HumanMessage(content=[
+            return [HumanMessage(content=[
                 {"type": "text", "text": message.caption or "Describe this image in detail."},
                 {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"}}
-            ])
-    return HumanMessage(content=message.text)
+            ])]
+    return [HumanMessage(content=message.text)]
