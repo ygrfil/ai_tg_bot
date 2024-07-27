@@ -321,13 +321,13 @@ def process_message_content(message: Message, bot, selected_model: str) -> Human
         downloaded_file = bot.download_file(file_info.file_path)
         image_url = f"data:image/jpeg;base64,{base64.b64encode(downloaded_file).decode('utf-8')}"
         if selected_model == 'anthropic':
-            process_image_for_anthropic
+            return process_image_for_anthropic(message, bot, None)  # Note: stream_handler is not available here
         else:
             return HumanMessage(content=[
                 {"type": "text", "text": message.caption or "Analyze this image."},
                 {"type": "image_url", "image_url": {"url": image_url}}
             ])
-    return HumanMessage(content=message.text)
+    return HumanMessage(content=message.text or "")  # Use empty string if message.text is None
 
 def process_image_for_anthropic(message: Message, bot, stream_handler) -> str:
     try:
