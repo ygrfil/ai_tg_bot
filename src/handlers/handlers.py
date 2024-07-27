@@ -323,7 +323,15 @@ def handle_message(bot, message: Message) -> None:
             tokens_count = len(ai_response.split())
 
         # Update the placeholder message with the AI response
-        bot.edit_message_text(ai_response, chat_id=message.chat.id, message_id=placeholder_message.message_id)
+        try:
+            bot.edit_message_text(ai_response, chat_id=message.chat.id, message_id=placeholder_message.message_id)
+        except Exception as edit_error:
+            if "message is not modified" in str(edit_error):
+                # If the message content is the same, we don't need to update it
+                pass
+            else:
+                # If it's a different error, re-raise it
+                raise
 
         user_conversation_history[user_id].append(AIMessage(content=ai_response))
 
@@ -331,7 +339,11 @@ def handle_message(bot, message: Message) -> None:
         log_usage(user_id, selected_model, messages_count, tokens_count)
     except Exception as e:
         error_message = "The AI model is currently overloaded. Please try again in a few moments." if 'overloaded_error' in str(e) else f"An error occurred: {str(e)}"
-        bot.edit_message_text(error_message, chat_id=message.chat.id, message_id=placeholder_message.message_id)
+        try:
+            bot.edit_message_text(error_message, chat_id=message.chat.id, message_id=placeholder_message.message_id)
+        except Exception:
+            # If editing fails, try sending a new message
+            bot.send_message(message.chat.id, error_message)
         print(f"Error in handle_message: {str(e)}")  # Log the error
 
 from anthropic import Anthropic
