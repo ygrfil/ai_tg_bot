@@ -320,12 +320,12 @@ def handle_message(bot, message: Message) -> None:
             response = llm.invoke(messages)
             ai_response = stream_handler.response
 
-        ai_message_content = ai_response.content if isinstance(ai_response, HumanMessage) else ai_response
+        ai_message_content = ai_response.content if isinstance(ai_response, HumanMessage) else str(ai_response)
         tokens_count = len(ai_message_content.split())
 
         # Update the placeholder message with the AI response
         try:
-            bot.edit_message_text(ai_response, chat_id=message.chat.id, message_id=placeholder_message.message_id)
+            bot.edit_message_text(ai_message_content, chat_id=message.chat.id, message_id=placeholder_message.message_id)
         except Exception as edit_error:
             if "message is not modified" in str(edit_error):
                 # If the message content is the same, we don't need to update it
@@ -334,7 +334,7 @@ def handle_message(bot, message: Message) -> None:
                 # If it's a different error, re-raise it
                 raise
 
-        user_conversation_history[user_id].append(AIMessage(content=ai_response))
+        user_conversation_history[user_id].append(AIMessage(content=ai_message_content))
 
         messages_count = 1
         log_usage(user_id, selected_model, messages_count, tokens_count)
