@@ -401,7 +401,7 @@ def process_image_for_anthropic(message: Message, bot) -> str:
     try:
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded_file = bot.download_file(file_info.file_path)
-        image_base64 = base64.b64encode(downloaded_file).decode('utf-8')
+        image_base64 = base64.b64encode(downloaded_file).decode('ascii')
         
         content = [
             {
@@ -424,7 +424,7 @@ def process_image_for_anthropic(message: Message, bot) -> str:
         # Extract the first sentence of the response as the image description
         image_description = response.content.split('.')[0] + '.'
         
-        return image_description
+        return response.content
     except Exception as e:
         print(f"Error in process_image_for_anthropic: {str(e)}")
         return f"An error occurred while processing the image: {str(e)}"
