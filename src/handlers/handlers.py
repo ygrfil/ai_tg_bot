@@ -332,6 +332,11 @@ def handle_message(bot, message: Message) -> None:
             # If it's a list, join the elements into a single string
             ai_message_content = " ".join(map(str, ai_message_content))
         
+        # Truncate the message if it's too long
+        max_message_length = 4096  # Telegram's maximum message length
+        if len(ai_message_content) > max_message_length:
+            ai_message_content = ai_message_content[:max_message_length - 3] + "..."
+        
         tokens_count = len(ai_message_content.split())
 
         # Update the placeholder message with the AI response
