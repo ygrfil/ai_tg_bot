@@ -398,32 +398,29 @@ def process_image_for_openai(message: Message, bot) -> HumanMessage:
         print(f"Error in process_image_for_openai: {str(e)}")  # Log the error
         return HumanMessage(content="An error occurred while processing the image. Please try again later.")
 
-def process_image_for_anthropic(message: Message, bot) -> HumanMessage:
+def process_image_for_anthropic(message: Message, bot):
     try:
         file_info = bot.get_file(message.photo[-1].file_id)
-        downloaded_file = bot.download_file(file_info.file_path)
+        file_url = f"https://api.telegram.org/file/bot{bot.token}/{file_info.file_path}"
         
-        # Create a temporary file to save the image
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as temp_file:
-            temp_file.write(downloaded_file)
-            temp_file_path = temp_file.name
+        response = requests.get(file_url)
+        response.raise_for_status()
         
-        # Open the image file and create a base64 encoded string
-        with open(temp_file_path, "rb") as image_file:
-            image_base64 = base64.b64encode(image_file.read()).decode('utf-8')
+        image = Image.open(io.BytesIO(response.content))
+        png_buffer = io.BytesIO()
+        image.save(png_buffer, format='PNG')
+        png_buffer.seek(0)
         
-        # Remove the temporary file
-        os.unlink(temp_file_path)
+        image_base64 = base64.b64encode(png_buffer.getvalue()).decode('utf-8')
         
-        content = f"""
-        Here's the image in base64 format:
-
-        data:image/jpeg;base64,{image_base64}
-
-        {message.caption or "Please describe this image in detail."}
-        """
-        
-        return HumanMessage(content=content)
+        return {
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": "image/png",
+                "data": image_base64
+            }
+        }, message.caption or "Please describe this image in detail."
     except Exception as e:
         print(f"Error in process_image_for_anthropic: {str(e)}")  # Log the error
-        return HumanMessage(content="An error occurred while processing the image. Please try again later.")
+        return None, "An error occurred while processing the image. Please try again later."
