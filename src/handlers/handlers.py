@@ -319,16 +319,17 @@ def process_message_content(message: Message, bot, selected_model: str) -> Human
     if message.content_type == 'photo':
         file_info = bot.get_file(message.photo[-1].file_id)
         downloaded_file = bot.download_file(file_info.file_path)
-        image_url = f"data:image/jpeg;base64,{base64.b64encode(downloaded_file).decode('utf-8')}"
+        image_base64 = base64.b64encode(downloaded_file).decode('utf-8')
+        image_url = f"data:image/jpeg;base64,{image_base64}"
+        
         if selected_model == 'anthropic':
-            image_base64 = base64.b64encode(downloaded_file).decode('utf-8')  
-            HumanMessage(content=[
+            return HumanMessage(content=[
                 {"type": "text", "text": message.caption or "Describe the image in detail"},
-                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}",}, },
-            ])  
+                {"type": "image_url", "image_url": {"url": image_url}}
+            ])
         else:
             return HumanMessage(content=[
                 {"type": "text", "text": message.caption or "Analyze this image."},
                 {"type": "image_url", "image_url": {"url": image_url}}
             ])
-    return HumanMessage(content=message.text or "")  # Use empty string if message.text is None
+    return HumanMessage(content=message.text or "Please provide a message or an image.")
