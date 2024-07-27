@@ -43,3 +43,16 @@ def get_conversation_messages(user_conversation_history, user_id: int, selected_
         ]
     
     return messages
+
+def summarize_conversation(conversation_history, llm):
+    summary_prompt = ChatPromptTemplate.from_messages([
+        ("system", "You are a helpful assistant that summarizes conversations."),
+        ("human", "Please summarize the following conversation:\n\n{conversation}")
+    ])
+    
+    conversation_text = "\n".join([f"{msg.__class__.__name__}: {msg.content}" for msg in conversation_history])
+    
+    chain = summary_prompt | llm | StrOutputParser()
+    summary = chain.invoke({"conversation": conversation_text})
+    
+    return summary
