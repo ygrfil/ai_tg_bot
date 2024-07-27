@@ -331,10 +331,34 @@ def process_message_content(message: Message, bot, selected_model: str) -> Human
         if selected_model == 'anthropic':
             return process_image_for_anthropic(message, bot)
         elif selected_model == 'openai':
-            return HumanMessage(content=message.caption or "Please describe this image in detail.")
+            return process_image_for_openai(message, bot)
         else:
             return HumanMessage(content="I'm sorry, but I can't process images with the current model. Please try using the Anthropic or OpenAI model for image analysis.")
     return HumanMessage(content=message.text)
+
+def process_image_for_openai(message: Message, bot) -> HumanMessage:
+    try:
+        file_info = bot.get_file(message.photo[-1].file_id)
+        downloaded_file = bot.download_file(file_info.file_path)
+        image_base64 = base64.b64encode(downloaded_file).decode('ascii')
+        
+        content = [
+            {
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{image_base64}"
+                }
+            },
+            {
+                "type": "text",
+                "text": message.caption or "Please describe this image in detail."
+            }
+        ]
+        
+        return HumanMessage(content=content)
+    except Exception as e:
+        print(f"Error in process_image_for_openai: {str(e)}")  # Log the error
+        return HumanMessage(content="An error occurred while processing the image. Please try again later.")
 
 def process_image_for_anthropic(message: Message, bot) -> HumanMessage:
     try:
