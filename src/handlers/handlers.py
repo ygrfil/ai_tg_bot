@@ -282,6 +282,12 @@ def process_prompt_content(bot, message: Message, prompt_name: str) -> None:
     bot.reply_to(message, f"System prompt '{prompt_name}' has been created and saved successfully!")
 
 def handle_message(bot, message: Message) -> None:
+    """
+    Handle incoming messages from users.
+    
+    :param bot: The bot instance
+    :param message: The incoming message
+    """
     if not is_authorized(message):
         bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
         return
@@ -320,10 +326,9 @@ def handle_message(bot, message: Message) -> None:
         tokens_count = len(response.split() if isinstance(response, str) else stream_handler.response.split())
         log_usage(user_id, selected_model, messages_count, tokens_count)
     except Exception as e:
-        if 'overloaded_error' in str(e):
-            bot.edit_message_text("The AI model is currently overloaded. Please try again in a few moments.", chat_id=message.chat.id, message_id=placeholder_message.message_id)
-        else:
-            bot.edit_message_text(f"An error occurred: {str(e)}", chat_id=message.chat.id, message_id=placeholder_message.message_id)
+        error_message = "The AI model is currently overloaded. Please try again in a few moments." if 'overloaded_error' in str(e) else f"An error occurred: {str(e)}"
+        bot.edit_message_text(error_message, chat_id=message.chat.id, message_id=placeholder_message.message_id)
+        print(f"Error in handle_message: {str(e)}")  # Log the error
 
 from anthropic import Anthropic
 
@@ -343,36 +348,37 @@ def process_message_content(message: Message, bot, selected_model: str) -> Human
     return HumanMessage(content=message.text)
 
 def process_image_for_anthropic(message: Message, bot) -> str:
-    file_info = bot.get_file(message.photo[-1].file_id)
-    downloaded_file = bot.download_file(file_info.file_path)
-    image_base64 = base64.b64encode(downloaded_file).decode('ascii')
-    
-    client = Anthropic(api_key=ENV["ANTHROPIC_API_KEY"])
-    response = client.messages.create(
-        model="claude-3-5-sonnet-20240620",
-        max_tokens=1024,
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": "image/jpeg",
-                            "data": image_base64
+    try:
+        file_info = bot.get_file(message.photo[-1].file_id)
+        downloaded_file = bot.download_file(file_info.file_path)
+        image_base64 = base64.b64encode(downloaded_file).decode('ascii')
+        
+        client = Anthropic(api_key=ENV["ANTHROPIC_API_KEY"])
+        response = client.messages.create(
+            model="claude-3-5-sonnet-20240620",
+            max_tokens=1024,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": "image/jpeg",
+                                "data": image_base64
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": message.caption or "Describe this image in detail."
                         }
-                    },
-                    {
-                        "type": "text",
-                        "text": message.caption or "Describe this image in detail."
-                    }
-                ]
-            }
-        ]
-    )
-    
-    if response.content:
-        return response.content[0].text
-    else:
-        return "I apologize, but I couldn't process the image. Could you please try uploading it again?"
+                    ]
+                }
+            ]
+        )
+        
+        return response.content[0].text if response.content else "I apologize, but I couldn't process the image content. Could you please try uploading it again?"
+    except Exception as e:
+        print(f"Error in process_image_for_anthropic: {str(e)}")  # Log the error
+        return "An error occurred while processing the image. Please try again later."

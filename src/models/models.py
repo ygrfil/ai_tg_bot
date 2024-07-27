@@ -10,7 +10,7 @@ from langchain_core.output_parsers import StrOutputParser
 
 def get_llm(selected_model: str, stream_handler, user_id: int):
     llm_config = {
-        "openai": (ChatOpenAI, {"api_key": ENV["OPENAI_API_KEY"], "model": "gpt-4o", "temperature": 0.2}),
+        "openai": (ChatOpenAI, {"api_key": ENV["OPENAI_API_KEY"], "model": "gpt-4", "temperature": 0.2}),
         "anthropic": (ChatAnthropic, {"api_key": ENV["ANTHROPIC_API_KEY"], "model": "claude-3-5-sonnet-20240620", "temperature": 0.2}),
         "perplexity": (ChatPerplexity, {"model": "llama-3-sonar-large-32k-online"}),
         "groq": (ChatGroq, {"model_name": "llama-3.1-405b-reasoning", "temperature": 0.2}),
@@ -20,7 +20,10 @@ def get_llm(selected_model: str, stream_handler, user_id: int):
         raise ValueError(f"Unknown model: {selected_model}")
     
     LLMClass, kwargs = llm_config[selected_model]
-    return LLMClass(streaming=True, callbacks=[stream_handler], **kwargs)
+    try:
+        return LLMClass(streaming=True, callbacks=[stream_handler], **kwargs)
+    except Exception as e:
+        raise ValueError(f"Error initializing {selected_model} model: {str(e)}")
 
 def get_conversation_messages(user_conversation_history, user_id: int, selected_model: str):
     from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
