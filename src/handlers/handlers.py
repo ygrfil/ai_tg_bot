@@ -321,12 +321,24 @@ def handle_message(bot, message: Message) -> None:
             ai_response = stream_handler.response
 
         ai_message_content = ai_response.content if isinstance(ai_response, HumanMessage) else str(ai_response)
+        
+        # Debug information
+        print(f"Debug - ai_response type: {type(ai_response)}")
+        print(f"Debug - ai_message_content type: {type(ai_message_content)}")
+        print(f"Debug - ai_message_content: {ai_message_content}")
+        
+        # Check if ai_message_content is a list
+        if isinstance(ai_message_content, list):
+            # If it's a list, join the elements into a single string
+            ai_message_content = " ".join(map(str, ai_message_content))
+        
         tokens_count = len(ai_message_content.split())
 
         # Update the placeholder message with the AI response
         try:
             bot.edit_message_text(ai_message_content, chat_id=message.chat.id, message_id=placeholder_message.message_id)
         except Exception as edit_error:
+            print(f"Debug - Edit message error: {str(edit_error)}")
             if "message is not modified" in str(edit_error):
                 # If the message content is the same, we don't need to update it
                 pass
@@ -342,7 +354,8 @@ def handle_message(bot, message: Message) -> None:
         error_message = "The AI model is currently overloaded. Please try again in a few moments." if 'overloaded_error' in str(e) else f"An error occurred: {str(e)}"
         try:
             bot.edit_message_text(error_message, chat_id=message.chat.id, message_id=placeholder_message.message_id)
-        except Exception:
+        except Exception as send_error:
+            print(f"Debug - Send error message error: {str(send_error)}")
             # If editing fails, try sending a new message
             bot.send_message(message.chat.id, error_message)
         print(f"Error in handle_message: {str(e)}")  # Log the error
