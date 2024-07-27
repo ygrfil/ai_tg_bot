@@ -321,43 +321,14 @@ def process_message_content(message: Message, bot, selected_model: str) -> Human
         downloaded_file = bot.download_file(file_info.file_path)
         image_url = f"data:image/jpeg;base64,{base64.b64encode(downloaded_file).decode('utf-8')}"
         if selected_model == 'anthropic':
-            return HumanMessage(content=process_image_for_anthropic(message, bot))
+            image_base64 = base64.b64encode(downloaded_file).decode('utf-8')  
+            HumanMessage(content=[
+                {"type": "text", "text": message.caption or "Describe the image in detail"},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_base64}",}, },
+            ])  
         else:
             return HumanMessage(content=[
                 {"type": "text", "text": message.caption or "Analyze this image."},
                 {"type": "image_url", "image_url": {"url": image_url}}
             ])
     return HumanMessage(content=message.text or "")  # Use empty string if message.text is None
-
-def process_image_for_anthropic(message: Message, bot) -> str:
-    try:
-        from langchain_anthropic import ChatAnthropic
-        import logging
-
-        logging.basicConfig(level=logging.ERROR)
-        logger = logging.getLogger(__name__)
-
-        file_info = bot.get_file(message.photo[-1].file_id)
-        downloaded_file = bot.download_file(file_info.file_path)
-        image_base64 = base64.b64encode(downloaded_file).decode('utf-8')
-        
-        chat = ChatAnthropic(model="claude-3-sonnet-20240229")
-        
-        prompt = [
-            HumanMessage(content=[
-                {"type": "text", "text": message.caption or "Describe the image in detail"},
-                {
-                    "type": "image_url",
-                    "image_url": {
-                        "url": f"data:image/jpeg;base64,{image_base64}",
-                    },
-                },
-            ])
-        ]
-        
-        response = chat.invoke(prompt)
-        
-        return response.content
-    except Exception as e:
-        logger.error(f"Error in process_image_for_anthropic: {str(e)}", exc_info=True)
-        return f"An error occurred while processing the image. Error details: {str(e)}"
