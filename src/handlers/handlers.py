@@ -315,17 +315,13 @@ def handle_message(bot, message: Message) -> None:
         
         if selected_model == 'anthropic' and message.content_type == 'photo':
             ai_response = process_image_for_anthropic(message, bot)
-            stream_handler.response = ai_response
-            tokens_count = len(ai_response.split())
+            stream_handler.response = ai_response.content if isinstance(ai_response, HumanMessage) else ai_response
         else:
             response = llm.invoke(messages)
             ai_response = stream_handler.response
-            tokens_count = len(ai_response.split())
 
-        if isinstance(ai_response, str):
-            ai_message_content = ai_response
-        else:
-            ai_message_content = ai_response.content
+        ai_message_content = ai_response.content if isinstance(ai_response, HumanMessage) else ai_response
+        tokens_count = len(ai_message_content.split())
 
         # Update the placeholder message with the AI response
         try:
