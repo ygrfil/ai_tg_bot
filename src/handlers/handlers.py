@@ -318,19 +318,15 @@ def handle_message(bot, message: Message) -> None:
         else:
             response = llm.invoke(messages)
             ai_message_content = stream_handler.response
-        
+
         # Debug information
         print(f"Debug - ai_message_content type: {type(ai_message_content)}")
         print(f"Debug - ai_message_content: {ai_message_content}")
-        print(f"Debug - response type: {type(response)}")
-        print(f"Debug - response: {response}")
-        
+
         # Ensure ai_message_content is a string
-        if isinstance(response, AIMessage):
-            ai_message_content = response.content
-        elif not isinstance(ai_message_content, str):
+        if not isinstance(ai_message_content, str):
             ai_message_content = str(ai_message_content)
-        
+
         print(f"Debug - Final ai_message_content type: {type(ai_message_content)}")
         print(f"Debug - Final ai_message_content: {ai_message_content}")
         
