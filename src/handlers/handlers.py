@@ -319,16 +319,8 @@ def handle_message(bot, message: Message) -> None:
             response = llm.invoke(messages)
             ai_message_content = stream_handler.response
 
-        # Debug information
-        print(f"Debug - ai_message_content type: {type(ai_message_content)}")
-        print(f"Debug - ai_message_content: {ai_message_content}")
-
         # Ensure ai_message_content is a string
-        if not isinstance(ai_message_content, str):
-            ai_message_content = str(ai_message_content)
-
-        print(f"Debug - Final ai_message_content type: {type(ai_message_content)}")
-        print(f"Debug - Final ai_message_content: {ai_message_content}")
+        ai_message_content = str(ai_message_content)
         
         # Truncate the message if it's too long
         max_message_length = 4096  # Telegram's maximum message length
