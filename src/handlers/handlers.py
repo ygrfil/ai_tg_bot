@@ -332,7 +332,7 @@ def process_message_content(message: Message, bot, selected_model: str) -> Human
             ])
         else:
             return HumanMessage(content=[
-                {"type": "text", "text": message.caption or "Analyze this image."},
+                {"type": "text", "text": message.caption or "Describe the image in detail"},
                 {"type": "image_url", "image_url": {"url": image_url}}
             ])
     return HumanMessage(content=message.text or "Please provide a message or an image.")
