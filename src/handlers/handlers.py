@@ -293,21 +293,16 @@ def handle_message(bot, message: Message) -> None:
         stream_handler = StreamHandler(bot, message.chat.id, placeholder_message.message_id)
         llm = get_llm(selected_model, stream_handler, user_id)
         
-        if message.content_type == 'photo' and selected_model == 'anthropic':
-            user_message = process_message_content(message, bot, selected_model)
-            response = llm.invoke([user_message])
-        else:
-            if user_id not in user_conversation_history:
-                system_prompt = get_system_prompt(user_id)
-                user_conversation_history[user_id] = [SystemMessage(content=system_prompt)]
+        if user_id not in user_conversation_history:
+            system_prompt = get_system_prompt(user_id)
+            user_conversation_history[user_id] = [SystemMessage(content=system_prompt)]
 
-            user_message = process_message_content(message, bot, selected_model)
-            user_conversation_history[user_id].append(user_message)
-            messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
-            response = llm.invoke(messages)
+        user_message = process_message_content(message, bot, selected_model)
+        user_conversation_history[user_id].append(user_message)
+        messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
+        response = llm.invoke(messages)
         
-        if selected_model != 'anthropic' or message.content_type != 'photo':
-            user_conversation_history[user_id].append(AIMessage(content=stream_handler.response))
+        user_conversation_history[user_id].append(AIMessage(content=stream_handler.response))
         
         messages_count = 1
         tokens_count = len(stream_handler.response.split())
@@ -325,14 +320,14 @@ def process_message_content(message: Message, bot, selected_model: str) -> Human
         image_base64 = base64.b64encode(downloaded_file).decode('utf-8')
         image_url = f"data:image/jpeg;base64,{image_base64}"
         
-        if selected_model == 'anthropic':
-            return HumanMessage(content=[
-                {"type": "text", "text": message.caption or "Describe the image in detail"},
-                {"type": "image_url", "image_url": {"url": image_url}}
-            ])
-        else:
-            return HumanMessage(content=[
-                {"type": "text", "text": message.caption or "Describe the image in detail"},
-                {"type": "image_url", "image_url": {"url": image_url}}
-            ])
+        content = [
+            {"type": "text", "text": message.caption or "Describe the image in detail"},
+            {"type": "image_url", "image_url": {"url": image_url}}
+        ]
+        
+        if selected_model != 'anthropic':
+            # For non-Anthropic models, convert the content to a string representation
+            content = str(content)
+        
+        return HumanMessage(content=content)
     return HumanMessage(content=message.text or "Please provide a message or an image.")
