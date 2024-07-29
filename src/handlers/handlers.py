@@ -287,24 +287,27 @@ def handle_message(bot, message: Message) -> None:
     user_prefs = get_user_preferences(user_id)
     selected_model = user_prefs['selected_model']
 
-    if user_id not in user_conversation_history:
-        system_prompt = get_system_prompt(user_id)
-        user_conversation_history[user_id] = [SystemMessage(content=system_prompt)]
-
-    user_message = process_message_content(message, bot, selected_model)
-    user_conversation_history[user_id].append(user_message)
-
     placeholder_message = bot.send_message(message.chat.id, "Generating...")
 
     try:
         stream_handler = StreamHandler(bot, message.chat.id, placeholder_message.message_id)
         llm = get_llm(selected_model, stream_handler, user_id)
         
-        messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
+        if message.content_type == 'photo' and selected_model == 'anthropic':
+            user_message = process_message_content(message, bot, selected_model)
+            response = llm.invoke([user_message])
+        else:
+            if user_id not in user_conversation_history:
+                system_prompt = get_system_prompt(user_id)
+                user_conversation_history[user_id] = [SystemMessage(content=system_prompt)]
+
+            user_message = process_message_content(message, bot, selected_model)
+            user_conversation_history[user_id].append(user_message)
+            messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
+            response = llm.invoke(messages)
         
-        response = llm.invoke(messages)
-        
-        user_conversation_history[user_id].append(AIMessage(content=stream_handler.response))
+        if selected_model != 'anthropic' or message.content_type != 'photo':
+            user_conversation_history[user_id].append(AIMessage(content=stream_handler.response))
         
         messages_count = 1
         tokens_count = len(stream_handler.response.split())
