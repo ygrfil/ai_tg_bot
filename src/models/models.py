@@ -42,27 +42,25 @@ def get_conversation_messages(user_conversation_history, user_id: int, selected_
         non_system_messages = [msg for msg in messages if not isinstance(msg, SystemMessage)]
         return system_messages + non_system_messages[-1:]
     
-    if selected_model in ["anthropic", "groq"]:
-        first_non_system = next((i for i, msg in enumerate(messages) if not isinstance(msg, SystemMessage)), None)
-        if first_non_system is not None:
-            if isinstance(messages[first_non_system], str):
-                messages[first_non_system] = HumanMessage(content=messages[first_non_system])
-            elif not isinstance(messages[first_non_system], HumanMessage):
-                messages[first_non_system] = HumanMessage(content=str(messages[first_non_system].content))
-    
-    # Ensure all message contents are strings for Groq and Anthropic
-    if selected_model in ["groq", "anthropic"]:
-        processed_messages = []
-        for msg in messages:
-            if isinstance(msg, str):
-                processed_messages.append(HumanMessage(content=msg))
-            elif hasattr(msg, 'content'):
-                processed_messages.append(msg.__class__(content=str(msg.content)))
+    processed_messages = []
+    for msg in messages:
+        if isinstance(msg, SystemMessage):
+            processed_messages.append(msg)
+        elif isinstance(msg, HumanMessage):
+            if selected_model == "anthropic" and isinstance(msg.content, list):
+                # Keep the original format for Anthropic
+                processed_messages.append(msg)
             else:
-                processed_messages.append(HumanMessage(content=str(msg)))
-        messages = processed_messages
+                # Convert to string for other models
+                processed_messages.append(HumanMessage(content=str(msg.content)))
+        elif isinstance(msg, AIMessage):
+            processed_messages.append(AIMessage(content=str(msg.content)))
+        elif isinstance(msg, str):
+            processed_messages.append(HumanMessage(content=msg))
+        else:
+            processed_messages.append(HumanMessage(content=str(msg)))
     
-    return messages
+    return processed_messages
 
 def summarize_conversation(conversation_history, llm):
     summary_prompt = ChatPromptTemplate.from_messages([
