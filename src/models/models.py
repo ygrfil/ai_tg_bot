@@ -10,7 +10,7 @@ from langchain_core.output_parsers import StrOutputParser
 
 def get_llm(selected_model: str, stream_handler, user_id: int):
     llm_config = {
-        "openai": (ChatOpenAI, {"api_key": ENV["OPENAI_API_KEY"], "model": "gpt-4o", "temperature": 0.4}),
+        "openai": (ChatOpenAI, {"api_key": ENV["OPENAI_API_KEY"], "model": "gpt-4-vision-preview", "temperature": 0.4, "max_tokens": 300}),
         "anthropic": (ChatAnthropic, {"api_key": ENV["ANTHROPIC_API_KEY"], "model": "claude-3-5-sonnet-20240620", "temperature": 0.4}),
         "perplexity": (ChatPerplexity, {"model": "llama-3.1-sonar-large-128k-online"}),
         "groq": (ChatGroq, {"model_name": "llama-3.1-70b-versatile", "temperature": 0.4}),
@@ -47,8 +47,8 @@ def get_conversation_messages(user_conversation_history, user_id: int, selected_
         if isinstance(msg, SystemMessage):
             processed_messages.append(msg)
         elif isinstance(msg, HumanMessage):
-            if selected_model == "anthropic" and isinstance(msg.content, list):
-                # Keep the original format for Anthropic
+            if (selected_model == "anthropic" or selected_model == "openai") and isinstance(msg.content, list):
+                # Keep the original format for Anthropic and OpenAI
                 processed_messages.append(msg)
             else:
                 # Convert to string for other models
