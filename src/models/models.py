@@ -10,7 +10,7 @@ from langchain_core.output_parsers import StrOutputParser
 
 def get_llm(selected_model: str, stream_handler, user_id: int):
     llm_config = {
-        "openai": (ChatOpenAI, {"api_key": ENV["OPENAI_API_KEY"], "model": "gpt-4-vision-preview", "temperature": 0.4, "max_tokens": 1024}),
+        "openai": (ChatOpenAI, {"api_key": ENV["OPENAI_API_KEY"], "model": "gpt-4o", "temperature": 0.4, "max_tokens": 1024}),
         "anthropic": (ChatAnthropic, {"api_key": ENV["ANTHROPIC_API_KEY"], "model": "claude-3-5-sonnet-20240620", "temperature": 0.4}),
         "perplexity": (ChatPerplexity, {"model": "llama-3.1-sonar-large-128k-online"}),
         "groq": (ChatGroq, {"model_name": "llama-3.1-70b-versatile", "temperature": 0.4}),
