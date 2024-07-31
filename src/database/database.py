@@ -27,8 +27,7 @@ def init_db():
             date TEXT,
             user_id INTEGER,
             model TEXT,
-            messages_count INTEGER,
-            tokens_count INTEGER
+            messages_count INTEGER
         )
     '''))
 
@@ -46,19 +45,18 @@ def save_user_preferences(user_id, selected_model=None, system_prompt=None, crea
 def ensure_user_preferences(user_id):
     db_operation(lambda c: c.execute('INSERT OR IGNORE INTO user_preferences (user_id, selected_model, system_prompt, creativity_level) VALUES (?, ?, ?, ?)', (user_id, 'anthropic', 'standard', 'moderate')))
 
-def log_usage(user_id, model, messages_count, tokens_count):
+def log_usage(user_id, model, messages_count):
     today = datetime.now().strftime('%Y-%m-%d')
     db_operation(lambda c: c.execute('''
-        INSERT INTO usage_stats (date, user_id, model, messages_count, tokens_count)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (today, user_id, model, messages_count, tokens_count)))
+        INSERT INTO usage_stats (date, user_id, model, messages_count)
+        VALUES (?, ?, ?, ?)
+    ''', (today, user_id, model, messages_count)))
 
 def get_monthly_usage():
     return db_operation(lambda c: c.execute('''
         SELECT user_id, 
                model,
-               SUM(messages_count) as total_messages, 
-               SUM(tokens_count) as total_tokens
+               SUM(messages_count) as total_messages
         FROM usage_stats
         WHERE date >= date('now', 'start of month')
         GROUP BY user_id, model
@@ -67,8 +65,7 @@ def get_monthly_usage():
 
 def get_user_monthly_usage(user_id):
     return db_operation(lambda c: c.execute('''
-        SELECT SUM(messages_count) as total_messages, 
-               SUM(tokens_count) as total_tokens
+        SELECT SUM(messages_count) as total_messages
         FROM usage_stats
         WHERE date >= date('now', 'start of month')
         AND user_id = ?
