@@ -138,7 +138,6 @@ def handle_status(bot, message: Message) -> None:
     status_message += f"Current system prompt: {user_prefs['system_prompt']}\n\n"
     status_message += f"Monthly usage:\n"
     status_message += f"Total messages: {usage[0] if usage else 0}\n"
-    status_message += f"Total tokens: {usage[1] if usage else 0}\n"
     
     bot.reply_to(message, status_message)
 
@@ -163,7 +162,7 @@ def handle_usage(bot, message: Message) -> None:
     usage_stats = get_monthly_usage()
     usage_report = "Monthly Usage Report (from the start of the current month):\n\n"
     current_user = None
-    for user_id, model, messages, tokens in usage_stats:
+    for user_id, model, messages in usage_stats:
         if current_user != user_id:
             if current_user is not None:
                 usage_report += "\n"
@@ -172,7 +171,6 @@ def handle_usage(bot, message: Message) -> None:
             current_user = user_id
         usage_report += f"  Model: {model}\n"
         usage_report += f"    Messages: {messages}\n"
-        usage_report += f"    Estimated Tokens: {tokens}\n"
     bot.reply_to(message, usage_report)
 
 def send_broadcast(bot, user_id: int, message: str) -> bool:
@@ -305,8 +303,7 @@ def handle_message(bot, message: Message) -> None:
         user_conversation_history[user_id].append(AIMessage(content=stream_handler.response))
         
         messages_count = 1
-        tokens_count = len(stream_handler.response.split())
-        log_usage(user_id, selected_model, messages_count, tokens_count)
+        log_usage(user_id, selected_model, messages_count)
     except Exception as e:
         if 'overloaded_error' in str(e):
             bot.edit_message_text("The AI model is currently overloaded. Please try again in a few moments.", chat_id=message.chat.id, message_id=placeholder_message.message_id)
