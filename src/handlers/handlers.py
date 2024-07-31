@@ -285,6 +285,11 @@ def handle_message(bot, message: Message) -> None:
     user_prefs = get_user_preferences(user_id)
     selected_model = user_prefs['selected_model']
 
+    # Check if the message contains an image and the selected model is not OpenAI or Anthropic
+    if message.content_type == 'photo' and selected_model not in ['openai', 'anthropic']:
+        bot.reply_to(message, "Image processing is only available with OpenAI or Anthropic models. Please change your model using the /model command.")
+        return
+
     placeholder_message = bot.send_message(message.chat.id, "Generating...")
 
     try:
