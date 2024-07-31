@@ -324,7 +324,7 @@ def process_message_content(message: Message, bot, selected_model: str) -> Human
         
         #if selected_model != 'anthropic':
             # For non-Anthropic models, convert the content to a string representation
-        #    content = str(content)
+            #content = str(content)
             
         return HumanMessage(content=content)
     return HumanMessage(content=message.text or "Please provide a message or an image.")
