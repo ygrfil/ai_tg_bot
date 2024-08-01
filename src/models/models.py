@@ -16,10 +16,6 @@ def get_llm(selected_model: str, stream_handler, user_id: int):
         "groq": (ChatGroq, {"model_name": "llama-3.1-70b-versatile", "temperature": 0.4}),
     }
     
-    # if selected_model == "openai":
-    #     kwargs = llm_config["openai"][1]
-    #     kwargs["model"] = "gpt-4o"  # Ensure gpt-4o is always used for OpenAI
-    
     if selected_model not in llm_config:
         raise ValueError(f"Unknown model: {selected_model}")
     
