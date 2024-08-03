@@ -1,13 +1,18 @@
+import logging
 from telebot import TeleBot
+from telebot.apihelper import ApiTelegramException
 from config import ENV
 from src.database.database import init_db, add_allowed_user
 from src.handlers.handlers import (handle_commands, callback_query_handler, start_command,
                       startadmin_command, reset_command, create_prompt_command, handle_message)
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 try:
     bot = TeleBot(ENV["TELEGRAM_BOT_TOKEN"])
 except Exception as e:
-    print(f"Error initializing bot: {e}")
+    logger.error(f"Error initializing bot: {e}")
     raise
 
 @bot.message_handler(commands=['model', 'sm', 'broadcast', 'usage', 'list_users', 'add_user', 'remove_user', 'remove_prompt', 'status'])
@@ -30,7 +35,6 @@ def startadmin(message):
 def reset(message):
     reset_command(bot, message)
 
-
 @bot.message_handler(commands=['create_prompt'])
 def create_prompt(message):
     create_prompt_command(bot, message)
@@ -51,9 +55,20 @@ def main():
     try:
         init_db()
         import_allowed_users()
-        bot.polling()
+        logger.info("Starting bot polling...")
+        while True:
+            try:
+                bot.polling(none_stop=True, timeout=60)
+            except ApiTelegramException as e:
+                logger.error(f"Telegram API error: {e}")
+                if "Conflict: terminated by other getUpdates request" in str(e):
+                    logger.info("Restarting polling due to conflict...")
+                    continue
+            except Exception as e:
+                logger.error(f"Unexpected error in polling: {e}")
+            logger.info("Restarting polling after error...")
     except Exception as e:
-        print(f"Error in main function: {e}")
+        logger.error(f"Error in main function: {e}")
         raise
 
 if __name__ == "__main__":
