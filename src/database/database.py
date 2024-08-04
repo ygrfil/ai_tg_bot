@@ -115,12 +115,6 @@ def init_db():
         )
     '''))
     
-    # Ensure the allowed_users table is populated with at least one user
-    db_operation(lambda c: c.execute('''
-        INSERT OR IGNORE INTO allowed_users (user_id, username)
-        VALUES (?, ?)
-    ''', (int(ENV["ADMIN_USER_IDS"][0]), "admin")))
-    
     # Add system_prompt column if it doesn't exist
     columns = db_operation(lambda c: c.execute('PRAGMA table_info(user_preferences)').fetchall())
     if 'system_prompt' not in [column[1] for column in columns]:
