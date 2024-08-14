@@ -14,7 +14,7 @@ def is_authorized(message) -> bool:
 
 def reset_conversation_if_needed(user_id: int) -> bool:
     current_time = datetime.now()
-    if current_time - last_interaction_time.get(user_id, datetime.min) > timedelta(minutes=150):
+    if current_time - last_interaction_time.get(user_id, datetime.min) > timedelta(hours=2):
         last_interaction_time[user_id] = current_time
         return True
     last_interaction_time[user_id] = current_time

@@ -285,6 +285,11 @@ def handle_message(bot, message: Message) -> None:
     user_prefs = get_user_preferences(user_id)
     selected_model = user_prefs['selected_model']
 
+    # Check if the conversation needs to be reset due to inactivity
+    if reset_conversation_if_needed(user_id):
+        user_conversation_history[user_id] = []
+        bot.send_message(message.chat.id, "Your conversation has been reset due to inactivity.")
+
     # Check if the message contains an image and the selected model is not OpenAI or Anthropic
     if message.content_type == 'photo' and selected_model not in ['openai', 'anthropic']:
         bot.reply_to(message, "Image processing is only available with OpenAI or Anthropic models. Please change your model using the /model command.")
