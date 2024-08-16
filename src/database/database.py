@@ -103,7 +103,8 @@ def init_db():
             user_id INTEGER PRIMARY KEY,
             selected_model TEXT DEFAULT 'anthropic',
             system_prompt TEXT DEFAULT 'standard',
-            creativity_level TEXT DEFAULT 'moderate'
+            creativity_level TEXT DEFAULT 'moderate',
+            last_interaction TEXT
         )
     '''))
     db_operation(lambda c: c.execute('''
@@ -122,6 +123,17 @@ def init_db():
             username TEXT
         )
     '''))
+    
+    # Add last_interaction column if it doesn't exist
+    db_operation(lambda c: c.execute('''
+        PRAGMA table_info(user_preferences)
+    '''))
+    columns = c.fetchall()
+    if 'last_interaction' not in [column[1] for column in columns]:
+        db_operation(lambda c: c.execute('''
+            ALTER TABLE user_preferences
+            ADD COLUMN last_interaction TEXT
+        '''))
     
     # Add indexes for better performance
     db_operation(lambda c: c.execute('CREATE INDEX IF NOT EXISTS idx_usage_stats_user_id ON usage_stats (user_id)'))
