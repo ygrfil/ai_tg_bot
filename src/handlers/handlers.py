@@ -301,9 +301,10 @@ def handle_message(bot, message: Message) -> None:
         stream_handler = StreamHandler(bot, message.chat.id, placeholder_message.message_id)
         llm = get_llm(selected_model, stream_handler, user_id)
         
-        if user_id not in user_conversation_history:
+        if reset_conversation_if_needed(user_id):
             system_prompt = get_system_prompt(user_id)
             user_conversation_history[user_id] = [SystemMessage(content=system_prompt)]
+            bot.send_message(message.chat.id, "Your conversation has been reset due to inactivity.")
 
         user_message = process_message_content(message, bot, selected_model)
         user_conversation_history[user_id].append(user_message)

@@ -18,7 +18,8 @@ def init_db():
             user_id INTEGER PRIMARY KEY,
             selected_model TEXT DEFAULT 'anthropic',
             system_prompt TEXT DEFAULT 'standard',
-            creativity_level TEXT DEFAULT 'moderate'
+            creativity_level TEXT DEFAULT 'moderate',
+            last_interaction TEXT
         )
     '''))
     db_operation(lambda c: c.execute('''
@@ -88,6 +89,13 @@ def remove_allowed_user(user_id):
 
 def update_username(user_id, username):
     db_operation(lambda c: c.execute('UPDATE allowed_users SET username = ? WHERE user_id = ?', (username, user_id)))
+
+def get_last_interaction_time(user_id):
+    result = db_operation(lambda c: c.execute('SELECT last_interaction FROM user_preferences WHERE user_id = ?', (user_id,)).fetchone())
+    return result[0] if result else None
+
+def update_last_interaction_time(user_id, timestamp):
+    db_operation(lambda c: c.execute('UPDATE user_preferences SET last_interaction = ? WHERE user_id = ?', (timestamp, user_id)))
 
 def init_db():
     db_operation(lambda c: c.execute('''

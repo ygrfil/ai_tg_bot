@@ -4,9 +4,7 @@ import os
 from config import ENV
 from langchain.callbacks.base import BaseCallbackHandler
 import time
-from src.database.database import is_user_allowed, get_user_preferences
-
-last_interaction_time = {}
+from src.database.database import is_user_allowed, get_user_preferences, get_last_interaction_time, update_last_interaction_time
 
 def is_authorized(message) -> bool:
     user_id = message.from_user.id
@@ -14,10 +12,13 @@ def is_authorized(message) -> bool:
 
 def reset_conversation_if_needed(user_id: int) -> bool:
     current_time = datetime.now()
-    if current_time - last_interaction_time.get(user_id, datetime.min) > timedelta(hours=2):
-        last_interaction_time[user_id] = current_time
-        return True
-    last_interaction_time[user_id] = current_time
+    last_interaction = get_last_interaction_time(user_id)
+    if last_interaction:
+        last_interaction = datetime.fromisoformat(last_interaction)
+        if current_time - last_interaction > timedelta(hours=2):
+            update_last_interaction_time(user_id, current_time.isoformat())
+            return True
+    update_last_interaction_time(user_id, current_time.isoformat())
     return False
 
 def get_system_prompt(user_id: int) -> str:
