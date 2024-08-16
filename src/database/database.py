@@ -125,10 +125,7 @@ def init_db():
     '''))
     
     # Add last_interaction column if it doesn't exist
-    db_operation(lambda c: c.execute('''
-        PRAGMA table_info(user_preferences)
-    '''))
-    columns = c.fetchall()
+    columns = db_operation(lambda c: c.execute('PRAGMA table_info(user_preferences)').fetchall())
     if 'last_interaction' not in [column[1] for column in columns]:
         db_operation(lambda c: c.execute('''
             ALTER TABLE user_preferences
