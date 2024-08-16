@@ -6,13 +6,20 @@ def download_and_encode_image(bot, file_id: str) -> str:
     downloaded_file = bot.download_file(file_info.file_path)
     return base64.b64encode(downloaded_file).decode('ascii')
 
-def process_image_message(message: Message, bot) -> dict:
+def process_image_message(message: Message, bot, selected_model: str) -> dict:
     file_id = message.photo[-1].file_id
     image_base64 = download_and_encode_image(bot, file_id)
-    image_url = f"data:image/jpeg;base64,{image_base64}"
     
-    return {
-        "type": "image_url",
-        "image_url": {"url": image_url},
-        "text": message.caption or "Describe the image in detail"
-    }
+    if selected_model == 'openai':
+        return {
+            "type": "image",
+            "image": image_base64,
+            "text": message.caption or "Describe the image in detail"
+        }
+    else:
+        image_url = f"data:image/jpeg;base64,{image_base64}"
+        return {
+            "type": "image_url",
+            "image_url": {"url": image_url},
+            "text": message.caption or "Describe the image in detail"
+        }

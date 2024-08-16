@@ -283,7 +283,10 @@ def handle_message(bot, message: Message) -> None:
     user_id = message.from_user.id
     ensure_user_preferences(user_id)
     user_prefs = get_user_preferences(user_id)
-    selected_model = user_prefs['selected_model']
+    selected_model = user_prefs.get('selected_model', 'anthropic')  # Default to 'anthropic' if not set
+
+    if user_id not in user_conversation_history:
+        user_conversation_history[user_id] = []
 
     # Check if the conversation needs to be reset due to inactivity
     if reset_conversation_if_needed(user_id):
@@ -325,6 +328,6 @@ from src.utils.image_utils import process_image_message
 
 def process_message_content(message: Message, bot, selected_model: str) -> HumanMessage:
     if message.content_type == 'photo':
-        content = process_image_message(message, bot)
+        content = process_image_message(message, bot, selected_model)
         return HumanMessage(content=[content])
     return HumanMessage(content=message.text or "Please provide a message or an image.")
