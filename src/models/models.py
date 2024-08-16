@@ -26,8 +26,6 @@ def get_llm(selected_model: str, stream_handler, user_id: int):
         raise ValueError(f"Error initializing {selected_model} model: {str(e)}")
 
 def get_conversation_messages(user_conversation_history, user_id: int, selected_model: str):
-    from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-    
     messages = user_conversation_history.get(user_id, [])
     
     if not messages:
@@ -38,25 +36,12 @@ def get_conversation_messages(user_conversation_history, user_id: int, selected_
         non_system_messages = [msg for msg in messages if not isinstance(msg, SystemMessage)]
         return system_messages + non_system_messages[-1:]
     
-    processed_messages = []
-    for msg in messages:
-        if isinstance(msg, SystemMessage):
-            processed_messages.append(msg)
-        elif isinstance(msg, HumanMessage):
-            if (selected_model == "anthropic" or selected_model == "openai") and isinstance(msg.content, list):
-                # Keep the original format for Anthropic and OpenAI
-                processed_messages.append(msg)
-            else:
-                # Convert to string for other models
-                processed_messages.append(HumanMessage(content=str(msg.content)))
-        elif isinstance(msg, AIMessage):
-            processed_messages.append(AIMessage(content=str(msg.content)))
-        elif isinstance(msg, str):
-            processed_messages.append(HumanMessage(content=msg))
-        else:
-            processed_messages.append(HumanMessage(content=str(msg)))
-    
-    return processed_messages
+    return [
+        msg if isinstance(msg, (SystemMessage, AIMessage)) or
+        (isinstance(msg, HumanMessage) and (selected_model in ["anthropic", "openai"]) and isinstance(msg.content, list))
+        else HumanMessage(content=str(msg.content) if isinstance(msg, HumanMessage) else str(msg))
+        for msg in messages
+    ]
 
 def summarize_conversation(conversation_history, llm):
     summary_prompt = ChatPromptTemplate.from_messages([

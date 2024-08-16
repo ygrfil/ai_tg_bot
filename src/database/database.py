@@ -124,13 +124,9 @@ def init_db():
         )
     '''))
     
-    # Add last_interaction column if it doesn't exist
-    columns = db_operation(lambda c: c.execute('PRAGMA table_info(user_preferences)').fetchall())
-    if 'last_interaction' not in [column[1] for column in columns]:
-        db_operation(lambda c: c.execute('''
-            ALTER TABLE user_preferences
-            ADD COLUMN last_interaction TEXT
-        '''))
+    # Add indexes for better performance
+    db_operation(lambda c: c.execute('CREATE INDEX IF NOT EXISTS idx_usage_stats_user_id ON usage_stats (user_id)'))
+    db_operation(lambda c: c.execute('CREATE INDEX IF NOT EXISTS idx_usage_stats_date ON usage_stats (date)'))
     
     # Add indexes for better performance
     db_operation(lambda c: c.execute('CREATE INDEX IF NOT EXISTS idx_usage_stats_user_id ON usage_stats (user_id)'))

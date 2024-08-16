@@ -321,21 +321,10 @@ def handle_message(bot, message: Message) -> None:
         else:
             bot.edit_message_text(f"An error occurred: {str(e)}", chat_id=message.chat.id, message_id=placeholder_message.message_id)
 
+from src.utils.image_utils import process_image_message
+
 def process_message_content(message: Message, bot, selected_model: str) -> HumanMessage:
     if message.content_type == 'photo':
-        file_info = bot.get_file(message.photo[-1].file_id)
-        downloaded_file = bot.download_file(file_info.file_path)
-        image_base64 = base64.b64encode(downloaded_file).decode('utf-8')
-        image_url = f"data:image/jpeg;base64,{image_base64}"
-        
-        content = [
-            {"type": "text", "text": message.caption or "Describe the image in detail"},
-            {"type": "image_url", "image_url": {"url": image_url}}
-        ]
-        
-        #if selected_model != 'anthropic':
-            # For non-Anthropic models, convert the content to a string representation
-            #content = str(content)
-            
-        return HumanMessage(content=content)
+        content = process_image_message(message, bot)
+        return HumanMessage(content=[content])
     return HumanMessage(content=message.text or "Please provide a message or an image.")
