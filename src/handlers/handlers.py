@@ -315,7 +315,7 @@ def handle_message(bot, message: Message) -> None:
         messages_count = 1
         log_usage(user_id, selected_model, messages_count)
     except Exception as e:
-        if 'overloaded_error' in str(e):
+        if 'overloaded_error' in str(e).lower():
             bot.edit_message_text("The AI model is currently overloaded. Please try again in a few moments.", chat_id=message.chat.id, message_id=placeholder_message.message_id)
         else:
             bot.edit_message_text(f"An error occurred: {str(e)}", chat_id=message.chat.id, message_id=placeholder_message.message_id)

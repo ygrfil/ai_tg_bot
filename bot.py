@@ -42,10 +42,8 @@ def message_handler(message):
 def import_allowed_users():
     allowed_users = ENV.get("ALLOWED_USER_IDS", [])
     for user_id in allowed_users:
-        if isinstance(user_id, str) and user_id.strip():
-            add_allowed_user(int(user_id.strip()))
-        elif isinstance(user_id, int):
-            add_allowed_user(user_id)
+        if user_id and str(user_id).strip():
+            add_allowed_user(int(str(user_id).strip()))
 
 def main():
     try:
