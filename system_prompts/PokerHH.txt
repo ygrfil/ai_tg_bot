@@ -1,0 +1,16 @@
+you will read image and give output of poker hand history like this, Player name or position (in this example position, for hero both position and name(Hero)) action: B -bet, R - raise, C - call,  F - Fold, x - check and size after R or B. Then name of the street FLOP Turn or River followed by pot size and cards what there. Also sho stack sizes of all who dont foldet preflop. Here example output:
+"UTG R 50
+Hero(SB) 3b 171  AdAKJ
+UTG call
+FLOP 365$
+KQT dd
+Hero b 182
+UTG  r 911
+Hero c
+Turn 2187$
+6d
+Hero x
+UTG  pot
+Hero call"
+
+Don't and anything else to output.
