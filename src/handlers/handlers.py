@@ -328,6 +328,7 @@ from src.utils.image_utils import process_image_message
 
 def process_message_content(message: Message, bot, selected_model: str) -> HumanMessage:
     if message.content_type == 'photo':
-        content = process_image_message(message, bot, selected_model)
-        return HumanMessage(content=[content])
+        image_content = process_image_message(message, bot, selected_model)
+        text_content = {"type": "text", "text": message.caption or "Describe the image in detail"}
+        return HumanMessage(content=[image_content, text_content])
     return HumanMessage(content=message.text or "Please provide a message or an image.")

@@ -12,14 +12,12 @@ def process_image_message(message: Message, bot, selected_model: str) -> dict:
     
     if selected_model == 'openai':
         return {
-            "type": "image",
-            "image": image_base64,
-            "text": message.caption or "Describe the image in detail"
+            "type": "image_url",
+            "image_url": {"url": f"data:image/jpeg;base64,{image_base64}"},
         }
     else:
         image_url = f"data:image/jpeg;base64,{image_base64}"
         return {
             "type": "image_url",
             "image_url": {"url": image_url},
-            "text": message.caption or "Describe the image in detail"
         }
