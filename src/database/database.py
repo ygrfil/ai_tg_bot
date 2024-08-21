@@ -12,25 +12,6 @@ def db_operation(operation, *args):
             conn.commit()
     return result
 
-def init_db():
-    db_operation(lambda c: c.execute('''
-        CREATE TABLE IF NOT EXISTS user_preferences (
-            user_id INTEGER PRIMARY KEY,
-            selected_model TEXT DEFAULT 'anthropic',
-            system_prompt TEXT DEFAULT 'standard',
-            creativity_level TEXT DEFAULT 'moderate',
-            last_interaction TEXT
-        )
-    '''))
-    db_operation(lambda c: c.execute('''
-        CREATE TABLE IF NOT EXISTS usage_stats (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            date TEXT,
-            user_id INTEGER,
-            model TEXT,
-            messages_count INTEGER
-        )
-    '''))
 
 def get_user_preferences(user_id):
     result = db_operation(lambda c: c.execute('SELECT selected_model, system_prompt, creativity_level FROM user_preferences WHERE user_id = ?', (user_id,)).fetchone())
@@ -97,55 +78,6 @@ def get_last_interaction_time(user_id):
 def update_last_interaction_time(user_id, timestamp):
     db_operation(lambda c: c.execute('UPDATE user_preferences SET last_interaction = ? WHERE user_id = ?', (timestamp, user_id)))
 
-def init_db():
-    db_operation(lambda c: c.execute('''
-        CREATE TABLE IF NOT EXISTS user_preferences (
-            user_id INTEGER PRIMARY KEY,
-            selected_model TEXT DEFAULT 'anthropic',
-            system_prompt TEXT DEFAULT 'standard',
-            creativity_level TEXT DEFAULT 'moderate',
-            last_interaction TEXT
-        )
-    '''))
-    db_operation(lambda c: c.execute('''
-        CREATE TABLE IF NOT EXISTS usage_stats (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            date TEXT,
-            user_id INTEGER,
-            model TEXT,
-            messages_count INTEGER,
-            tokens_count INTEGER
-        )
-    '''))
-    db_operation(lambda c: c.execute('''
-        CREATE TABLE IF NOT EXISTS allowed_users (
-            user_id INTEGER PRIMARY KEY,
-            username TEXT
-        )
-    '''))
-    
-    # Add indexes for better performance
-    db_operation(lambda c: c.execute('CREATE INDEX IF NOT EXISTS idx_usage_stats_user_id ON usage_stats (user_id)'))
-    db_operation(lambda c: c.execute('CREATE INDEX IF NOT EXISTS idx_usage_stats_date ON usage_stats (date)'))
-    
-    # Add indexes for better performance
-    db_operation(lambda c: c.execute('CREATE INDEX IF NOT EXISTS idx_usage_stats_user_id ON usage_stats (user_id)'))
-    db_operation(lambda c: c.execute('CREATE INDEX IF NOT EXISTS idx_usage_stats_date ON usage_stats (date)'))
-    
-    # Add system_prompt column if it doesn't exist
-    columns = db_operation(lambda c: c.execute('PRAGMA table_info(user_preferences)').fetchall())
-    if 'system_prompt' not in [column[1] for column in columns]:
-        db_operation(lambda c: c.execute('''
-            ALTER TABLE user_preferences
-            ADD COLUMN system_prompt TEXT DEFAULT 'standard'
-        '''))
-    
-    # Add creativity_level column if it doesn't exist
-    if 'creativity_level' not in [column[1] for column in columns]:
-        db_operation(lambda c: c.execute('''
-            ALTER TABLE user_preferences
-            ADD COLUMN creativity_level TEXT DEFAULT 'moderate'
-        '''))
 
 def init_db():
     db_operation(lambda c: c.execute('''
