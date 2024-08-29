@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from typing import Dict, List, Tuple, Any, Optional
 from config import ENV
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 import logging
 
 logger = logging.getLogger(__name__)
