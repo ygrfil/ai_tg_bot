@@ -6,8 +6,6 @@ from langchain_groq import ChatGroq
 from config import ENV
 from src.database.database import get_user_preferences
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
 from langchain_core.language_models import BaseChatModel
 
 def get_llm(selected_model: str, stream_handler: Any, user_id: int) -> BaseChatModel:
@@ -46,17 +44,3 @@ def get_conversation_messages(user_conversation_history: Dict[int, List[Union[Sy
         else HumanMessage(content=str(msg.content) if isinstance(msg, HumanMessage) else str(msg))
         for msg in messages
     ]
-
-def summarize_conversation(conversation_history: List[Union[SystemMessage, HumanMessage, AIMessage]], 
-                           llm: BaseChatModel) -> str:
-    summary_prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are a helpful assistant that summarizes conversations."),
-        ("human", "Please summarize the following conversation:\n\n{conversation}")
-    ])
-    
-    conversation_text = "\n".join([f"{msg.__class__.__name__}: {msg.content}" for msg in conversation_history])
-    
-    chain = summary_prompt | llm | StrOutputParser()
-    summary = chain.invoke({"conversation": conversation_text})
-    
-    return summary

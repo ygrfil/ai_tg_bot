@@ -103,8 +103,7 @@ def init_db() -> None:
             date TEXT,
             user_id INTEGER,
             model TEXT,
-            messages_count INTEGER,
-            tokens_count INTEGER
+            messages_count INTEGER
         )
     '''))
     db_operation(lambda c: c.execute('''
