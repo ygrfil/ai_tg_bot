@@ -30,10 +30,6 @@ def get_system_prompt(user_id: int) -> str:
     system_prompts = get_system_prompts()
     return system_prompts.get(user_prefs.get('system_prompt', 'standard'), system_prompts['standard'])
 
-def limit_conversation_history(user_id: int, history: List[Any], max_length: int = 10) -> List[Any]:
-    if len(history) > max_length:
-        return [history[0]] + history[-max_length+1:]
-    return history
 
 def create_keyboard(buttons: List[Tuple[str, str]]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[InlineKeyboardButton(text, callback_data=data)] for text, data in buttons])

@@ -304,10 +304,12 @@ def handle_message(bot, message: Message) -> None:
 
         user_message = process_message_content(message, bot, selected_model)
         user_conversation_history[user_id].append(user_message)
+        user_conversation_history[user_id] = user_conversation_history[user_id][-10:]  # Keep only the last 10 messages
         messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
         response = llm.invoke(messages)
         
         user_conversation_history[user_id].append(AIMessage(content=stream_handler.response))
+        user_conversation_history[user_id] = user_conversation_history[user_id][-10:]  # Ensure we still have only 10 messages after adding the response
         
         messages_count = 1
         log_usage(user_id, selected_model, messages_count)
