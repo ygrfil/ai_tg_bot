@@ -10,7 +10,7 @@ from langchain_core.language_models import BaseChatModel
 
 def get_llm(selected_model: str, stream_handler: Any, user_id: int) -> BaseChatModel:
     llm_config: Dict[str, tuple] = {
-        "openai": (ChatOpenAI, {"api_key": ENV["OPENAI_API_KEY"], "model": "chatgpt-4o-latest", "temperature": 0.4, "max_tokens": 1024}),
+        "openai": (ChatOpenAI, {"api_key": ENV["OPENAI_API_KEY"], "model": "gpt-4-turbo-preview", "temperature": 0.4, "max_tokens": 1024}),
         "anthropic": (ChatAnthropic, {"api_key": ENV["ANTHROPIC_API_KEY"], "model": "claude-3-5-sonnet-20240620", "temperature": 0.4}),
         "perplexity": (ChatPerplexity, {"model": "llama-3.1-sonar-large-128k-online"}),
         "groq": (ChatGroq, {"model_name": "llama-3.1-70b-versatile", "temperature": 0.4}),
