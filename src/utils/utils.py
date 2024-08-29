@@ -59,11 +59,11 @@ def remove_system_prompt(prompt_name: str) -> bool:
 
 def get_username(bot: Any, user_id: int) -> str:
     try:
-        user = bot.get_chat_member(user_id, user_id).user
+        user = bot.get_chat(user_id)
         return user.username or f"{user.first_name} {user.last_name}".strip() or f"User {user_id}"
     except Exception as e:
         logger.error(f"Error getting username: {e}")
-        return f"Unknown User ({user_id})"
+        return f"User {user_id}"
 
 def get_user_id(bot: Any, user_input: str) -> Optional[int]:
     if user_input.isdigit():
