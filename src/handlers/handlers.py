@@ -19,6 +19,7 @@ from src.database.database import is_user_allowed, get_allowed_users, add_allowe
 user_conversation_history: Dict[int, List[HumanMessage | AIMessage | SystemMessage]] = {}
 
 from typing import Dict, Callable
+from telebot import TeleBot
 
 def handle_commands(bot: TeleBot, message: Message) -> None:
     if not is_authorized(message):
