@@ -1,3 +1,4 @@
+from typing import Dict, List, Optional
 from telebot.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
@@ -15,7 +16,7 @@ from src.utils.utils import (reset_conversation_if_needed, limit_conversation_hi
                    remove_system_prompt, get_system_prompt)
 from src.database.database import is_user_allowed, get_allowed_users, add_allowed_user, remove_allowed_user
 
-user_conversation_history = {}
+user_conversation_history: Dict[int, List[HumanMessage | AIMessage | SystemMessage]] = {}
 
 def handle_commands(bot, message: Message) -> None:
     if not is_authorized(message):
@@ -23,33 +24,37 @@ def handle_commands(bot, message: Message) -> None:
         return
 
     command = message.text.split()[0][1:]
-    if command == 'model':
-        ensure_user_preferences(message.from_user.id)
-        bot.send_message(message.chat.id, "Select a model:", reply_markup=create_keyboard([
-            ("OpenAI", "model_openai"),
-            ("Anthropic", "model_anthropic"),
-            ("Perplexity", "model_perplexity"),
-            ("Groq", "model_groq")
-        ]))
-    elif command == 'sm':
-        ensure_user_preferences(message.from_user.id)
-        bot.send_message(message.chat.id, "Select a system message:", reply_markup=create_keyboard([(name, f"sm_{name}") for name in get_system_prompts()]))
-    elif command == 'broadcast':
-        handle_broadcast(bot, message)
-    elif command == 'usage':
-        handle_usage(bot, message)
-    elif command == 'create_prompt':
-        create_prompt_command(bot, message)
-    elif command == 'list_users':
-        handle_list_users(bot, message)
-    elif command == 'add_user':
-        handle_add_user(bot, message)
-    elif command == 'remove_user':
-        handle_remove_user(bot, message)
-    elif command == 'remove_prompt':
-        handle_remove_prompt(bot, message)
-    elif command == 'status':
-        handle_status(bot, message)
+    command_handlers = {
+        'model': lambda: handle_model_selection(bot, message),
+        'sm': lambda: handle_system_message_selection(bot, message),
+        'broadcast': lambda: handle_broadcast(bot, message),
+        'usage': lambda: handle_usage(bot, message),
+        'create_prompt': lambda: create_prompt_command(bot, message),
+        'list_users': lambda: handle_list_users(bot, message),
+        'add_user': lambda: handle_add_user(bot, message),
+        'remove_user': lambda: handle_remove_user(bot, message),
+        'remove_prompt': lambda: handle_remove_prompt(bot, message),
+        'status': lambda: handle_status(bot, message)
+    }
+
+    handler = command_handlers.get(command)
+    if handler:
+        handler()
+    else:
+        bot.reply_to(message, f"Unknown command: {command}")
+
+def handle_model_selection(bot, message: Message) -> None:
+    ensure_user_preferences(message.from_user.id)
+    bot.send_message(message.chat.id, "Select a model:", reply_markup=create_keyboard([
+        ("OpenAI", "model_openai"),
+        ("Anthropic", "model_anthropic"),
+        ("Perplexity", "model_perplexity"),
+        ("Groq", "model_groq")
+    ]))
+
+def handle_system_message_selection(bot, message: Message) -> None:
+    ensure_user_preferences(message.from_user.id)
+    bot.send_message(message.chat.id, "Select a system message:", reply_markup=create_keyboard([(name, f"sm_{name}") for name in get_system_prompts()]))
 
 def handle_list_users(bot, message: Message) -> None:
     if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:

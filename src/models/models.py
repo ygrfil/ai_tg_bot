@@ -1,3 +1,4 @@
+from typing import List, Dict, Any, Union
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 from langchain_community.chat_models import ChatPerplexity
@@ -7,9 +8,10 @@ from src.database.database import get_user_preferences
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from langchain_core.language_models import BaseChatModel
 
-def get_llm(selected_model: str, stream_handler, user_id: int):
-    llm_config = {
+def get_llm(selected_model: str, stream_handler: Any, user_id: int) -> BaseChatModel:
+    llm_config: Dict[str, tuple] = {
         "openai": (ChatOpenAI, {"api_key": ENV["OPENAI_API_KEY"], "model": "chatgpt-4o-latest", "temperature": 0.4, "max_tokens": 1024}),
         "anthropic": (ChatAnthropic, {"api_key": ENV["ANTHROPIC_API_KEY"], "model": "claude-3-5-sonnet-20240620", "temperature": 0.4}),
         "perplexity": (ChatPerplexity, {"model": "llama-3.1-sonar-large-128k-online"}),
@@ -25,7 +27,9 @@ def get_llm(selected_model: str, stream_handler, user_id: int):
     except Exception as e:
         raise ValueError(f"Error initializing {selected_model} model: {str(e)}")
 
-def get_conversation_messages(user_conversation_history, user_id: int, selected_model: str):
+def get_conversation_messages(user_conversation_history: Dict[int, List[Union[SystemMessage, HumanMessage, AIMessage]]], 
+                              user_id: int, 
+                              selected_model: str) -> List[Union[SystemMessage, HumanMessage, AIMessage]]:
     messages = user_conversation_history.get(user_id, [])
     
     if not messages:
@@ -43,7 +47,8 @@ def get_conversation_messages(user_conversation_history, user_id: int, selected_
         for msg in messages
     ]
 
-def summarize_conversation(conversation_history, llm):
+def summarize_conversation(conversation_history: List[Union[SystemMessage, HumanMessage, AIMessage]], 
+                           llm: BaseChatModel) -> str:
     summary_prompt = ChatPromptTemplate.from_messages([
         ("system", "You are a helpful assistant that summarizes conversations."),
         ("human", "Please summarize the following conversation:\n\n{conversation}")
