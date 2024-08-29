@@ -3,7 +3,7 @@ from typing import List, Tuple, Optional, Dict, Any
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
 import os
 from config import ENV
-from langchain.callbacks.base import BaseCallbackHandler
+from langchain_core.callbacks import BaseCallbackHandler
 import time
 import logging
 from src.database.database import is_user_allowed, get_user_preferences, get_last_interaction_time, update_last_interaction_time
@@ -12,13 +12,13 @@ logger = logging.getLogger(__name__)
 
 def is_authorized(message: Message) -> bool:
     user_id = message.from_user.id
-    return is_user_allowed(user_id) or str(user_id) in ENV["ADMIN_USER_IDS"]
+    return is_user_allowed(user_id) or str(user_id) in (ENV.get("ADMIN_USER_IDS") or [])
 
 def reset_conversation_if_needed(user_id: int) -> bool:
     current_time = datetime.now()
-    last_interaction = get_last_interaction_time(user_id)
-    if last_interaction:
-        last_interaction = datetime.fromisoformat(last_interaction)
+    last_interaction_str = get_last_interaction_time(user_id)
+    if last_interaction_str:
+        last_interaction = datetime.fromisoformat(last_interaction_str)
         if current_time - last_interaction > timedelta(hours=2):
             update_last_interaction_time(user_id, current_time.isoformat())
             return True

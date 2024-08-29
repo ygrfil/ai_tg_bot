@@ -18,13 +18,15 @@ from src.database.database import is_user_allowed, get_allowed_users, add_allowe
 
 user_conversation_history: Dict[int, List[HumanMessage | AIMessage | SystemMessage]] = {}
 
-def handle_commands(bot, message: Message) -> None:
+from typing import Dict, Callable
+
+def handle_commands(bot: TeleBot, message: Message) -> None:
     if not is_authorized(message):
         bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
         return
 
     command = message.text.split()[0][1:]
-    command_handlers = {
+    command_handlers: Dict[str, Callable[[], None]] = {
         'model': lambda: handle_model_selection(bot, message),
         'sm': lambda: handle_system_message_selection(bot, message),
         'broadcast': lambda: handle_broadcast(bot, message),
@@ -237,29 +239,14 @@ def reset_command(bot, message: Message) -> None:
     user_conversation_history[message.from_user.id] = []
     bot.reply_to(message, "Conversation has been reset.")
 
-def create_prompt_command(bot, message: Message) -> None:
-    if not is_authorized(message):
-        bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
-        return
-    bot.reply_to(message, "Please send the name for your new system prompt.")
-    bot.register_next_step_handler(message, process_prompt_name)
-
-def process_prompt_name(bot, message: Message) -> None:
-    prompt_name = message.text.strip()
-    if not prompt_name:
-        bot.reply_to(message, "Invalid prompt name. Please try again with a valid name.")
-        return
-    bot.reply_to(message, f"Great! Now send the content for the '{prompt_name}' system prompt.")
-    bot.register_next_step_handler(message, lambda m: process_prompt_content(bot, m, prompt_name))
-
-def create_prompt_command(bot, message: Message) -> None:
+def create_prompt_command(bot: TeleBot, message: Message) -> None:
     if not is_authorized(message):
         bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
         return
     bot.reply_to(message, "Please send the name for your new system prompt.")
     bot.register_next_step_handler(message, lambda m: process_prompt_name(bot, m))
 
-def process_prompt_name(bot, message: Message) -> None:
+def process_prompt_name(bot: TeleBot, message: Message) -> None:
     prompt_name = message.text.strip()
     if not prompt_name or '/' in prompt_name:
         bot.reply_to(message, "Invalid prompt name. Please try again with a valid name without '/'.")

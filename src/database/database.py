@@ -9,7 +9,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-def db_operation(operation: callable, *args: Any) -> Any:
+from typing import Callable
+
+def db_operation(operation: Callable, *args: Any) -> Any:
     try:
         with closing(sqlite3.connect('user_preferences.db')) as conn:
             with closing(conn.cursor()) as cursor:

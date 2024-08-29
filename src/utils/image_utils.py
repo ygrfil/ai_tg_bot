@@ -1,9 +1,10 @@
 import base64
-from typing import Dict
+from typing import Dict, Any
 from telebot.types import Message
+from telebot import TeleBot
 from telebot.apihelper import ApiException
 
-def download_and_encode_image(bot, file_id: str) -> str:
+def download_and_encode_image(bot: TeleBot, file_id: str) -> str:
     try:
         file_info = bot.get_file(file_id)
         downloaded_file = bot.download_file(file_info.file_path)
@@ -11,7 +12,7 @@ def download_and_encode_image(bot, file_id: str) -> str:
     except ApiException as e:
         raise ValueError(f"Failed to download image: {str(e)}")
 
-def process_image_message(message: Message, bot, selected_model: str) -> Dict[str, Dict[str, str]]:
+def process_image_message(message: Message, bot: TeleBot, selected_model: str) -> Dict[str, Any]:
     if not message.photo:
         raise ValueError("No photo found in the message")
     
