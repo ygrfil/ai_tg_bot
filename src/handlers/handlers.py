@@ -186,12 +186,12 @@ def handle_btc_price(bot: TeleBot, message: Message) -> None:
     request_times.append(current_time)
 
     try:
-        response = requests.get('https://api.bybit.com/v2/public/tickers', params={'symbol': 'BTCUSDT'}, timeout=10)
+        response = requests.get('https://api.coingecko.com/api/v3/simple/price', params={'ids': 'bitcoin', 'vs_currencies': 'usd'}, timeout=10)
         response.raise_for_status()  # Raise an exception for bad status codes
         data = response.json()
-        if data['ret_code'] == 0 and data['result']:
-            price = data['result'][0]['last_price']
-            bot.reply_to(message, f"The current BTC/USDT price on Bybit is: ${price}")
+        if 'bitcoin' in data and 'usd' in data['bitcoin']:
+            price = data['bitcoin']['usd']
+            bot.reply_to(message, f"The current BTC/USD price is: ${price:,.2f}")
         else:
             error_message = f"Unable to fetch the current BTC price. API response: {data}"
             logger.error(error_message)
