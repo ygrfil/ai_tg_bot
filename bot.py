@@ -6,7 +6,7 @@ from src.handlers.handlers import (handle_commands, callback_query_handler, star
                       startadmin_command, reset_command, create_prompt_command, handle_message)
 import logging
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 try:
