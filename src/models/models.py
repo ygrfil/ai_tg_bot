@@ -54,6 +54,11 @@ def get_conversation_messages(user_conversation_history: Dict[int, List[Union[Sy
                 anthropic_messages.append({"role": "user", "content": msg.content})
             elif isinstance(msg, AIMessage):
                 anthropic_messages.append({"role": "assistant", "content": msg.content})
+        
+        # Ensure the first message has the "user" role
+        if anthropic_messages and anthropic_messages[0]["role"] != "user":
+            anthropic_messages.insert(0, {"role": "user", "content": "Hello"})
+        
         return anthropic_messages
     
     return [
