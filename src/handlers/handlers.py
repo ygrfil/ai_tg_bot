@@ -18,6 +18,7 @@ from src.database.database import is_user_allowed, get_allowed_users, add_allowe
 
 user_conversation_history: Dict[int, List[HumanMessage | AIMessage | SystemMessage]] = {}
 
+import requests
 from typing import Dict, Callable
 from telebot import TeleBot
 
@@ -37,7 +38,8 @@ def handle_commands(bot: TeleBot, message: Message) -> None:
         'add_user': lambda: handle_add_user(bot, message),
         'remove_user': lambda: handle_remove_user(bot, message),
         'remove_prompt': lambda: handle_remove_prompt(bot, message),
-        'status': lambda: handle_status(bot, message)
+        'status': lambda: handle_status(bot, message),
+        'btc': lambda: handle_btc_price(bot, message)
     }
 
     handler = command_handlers.get(command)
@@ -148,6 +150,22 @@ def handle_status(bot, message: Message) -> None:
     status_message += f"Total messages: {usage[0] if usage else 0}\n"
     
     bot.reply_to(message, status_message)
+
+def handle_btc_price(bot: TeleBot, message: Message) -> None:
+    if not is_authorized(message):
+        bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
+        return
+
+    try:
+        response = requests.get('https://api.bybit.com/v2/public/tickers?symbol=BTCUSDT')
+        data = response.json()
+        if data['ret_code'] == 0 and data['result']:
+            price = data['result'][0]['last_price']
+            bot.reply_to(message, f"The current BTC/USDT price on Bybit is: ${price}")
+        else:
+            bot.reply_to(message, "Unable to fetch the current BTC price. Please try again later.")
+    except Exception as e:
+        bot.reply_to(message, f"An error occurred while fetching the BTC price: {str(e)}")
 
 def handle_broadcast(bot, message: Message) -> None:
     if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
