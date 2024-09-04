@@ -1,3 +1,4 @@
+import logging
 from typing import List, Dict, Any, Union
 from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
@@ -7,6 +8,8 @@ from config import ENV
 from src.database.database import get_user_preferences
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.language_models import BaseChatModel
+
+logger = logging.getLogger(__name__)
 
 def get_llm(selected_model: str, stream_handler: Any, user_id: int) -> BaseChatModel:
     llm_config: Dict[str, tuple] = {
