@@ -160,7 +160,7 @@ def handle_btc_price(bot: TeleBot, message: Message) -> None:
         return
 
     try:
-        response = requests.get('https://api.bybit.com/v2/public/tickers?symbol=BTCUSDT')
+        response = requests.get('https://api.bybit.com/v2/public/tickers', params={'symbol': 'BTCUSDT'})
         response.raise_for_status()  # Raise an exception for bad status codes
         data = response.json()
         if data['ret_code'] == 0 and data['result']:
@@ -173,15 +173,15 @@ def handle_btc_price(bot: TeleBot, message: Message) -> None:
     except requests.RequestException as e:
         error_message = f"Network error while fetching BTC price: {str(e)}"
         logger.error(error_message)
-        bot.reply_to(message, "A network error occurred while fetching the BTC price. Please try again later.")
+        bot.reply_to(message, f"A network error occurred while fetching the BTC price: {str(e)}. Please try again later.")
     except ValueError as e:
         error_message = f"JSON decoding error: {str(e)}"
         logger.error(error_message)
-        bot.reply_to(message, "An error occurred while processing the BTC price data. Please try again later.")
+        bot.reply_to(message, f"An error occurred while processing the BTC price data: {str(e)}. Please try again later.")
     except Exception as e:
         error_message = f"Unexpected error while fetching BTC price: {str(e)}"
         logger.error(error_message)
-        bot.reply_to(message, f"An unexpected error occurred while fetching the BTC price: {str(e)}")
+        bot.reply_to(message, f"An unexpected error occurred while fetching the BTC price: {str(e)}. Please try again later.")
 
 def handle_broadcast(bot, message: Message) -> None:
     if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
