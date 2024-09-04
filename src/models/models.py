@@ -21,8 +21,12 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int) -> BaseChatM
     
     LLMClass, kwargs = llm_config[selected_model]
     try:
-        return LLMClass(streaming=True, callbacks=[stream_handler], **kwargs)
+        logger.info(f"Initializing {selected_model} model for user {user_id}")
+        llm = LLMClass(streaming=True, callbacks=[stream_handler], **kwargs)
+        logger.info(f"Successfully initialized {selected_model} model for user {user_id}")
+        return llm
     except Exception as e:
+        logger.error(f"Error initializing {selected_model} model for user {user_id}: {str(e)}")
         raise ValueError(f"Error initializing {selected_model} model: {str(e)}")
 
 def get_conversation_messages(user_conversation_history: Dict[int, List[Union[SystemMessage, HumanMessage, AIMessage]]], 
