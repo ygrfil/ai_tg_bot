@@ -155,59 +155,26 @@ def handle_status(bot, message: Message) -> None:
     
     bot.reply_to(message, status_message)
 
-from collections import deque
-from datetime import datetime, timedelta
-
-BTC_REQUEST_COOLDOWN = 5  # 5 seconds cooldown between requests
-MAX_REQUESTS_PER_MINUTE = 10
-request_times = deque(maxlen=MAX_REQUESTS_PER_MINUTE)
+from datetime import datetime
 
 def handle_btc_price(bot: TeleBot, message: Message) -> None:
     if not is_authorized(message):
         bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
         return
 
-    current_time = datetime.now()
-
-    # Check if we've made too many requests in the last minute
-    if len(request_times) == MAX_REQUESTS_PER_MINUTE:
-        if current_time - request_times[0] < timedelta(minutes=1):
-            wait_time = 60 - (current_time - request_times[0]).seconds
-            bot.reply_to(message, f"Rate limit exceeded. Please try again in {wait_time} seconds.")
-            return
-        request_times.popleft()
-
-    # Check if enough time has passed since the last request
-    if request_times and (current_time - request_times[-1]).total_seconds() < BTC_REQUEST_COOLDOWN:
-        wait_time = BTC_REQUEST_COOLDOWN - (current_time - request_times[-1]).total_seconds()
-        bot.reply_to(message, f"Please wait {wait_time:.1f} seconds between BTC price requests.")
-        return
-
-    request_times.append(current_time)
-
     try:
         response = requests.get('https://api.coingecko.com/api/v3/simple/price', params={'ids': 'bitcoin', 'vs_currencies': 'usd'}, timeout=10)
-        response.raise_for_status()  # Raise an exception for bad status codes
+        response.raise_for_status()
         data = response.json()
         if 'bitcoin' in data and 'usd' in data['bitcoin']:
             price = data['bitcoin']['usd']
-            bot.reply_to(message, f"The current BTC/USD price is: ${price:,.2f}")
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            bot.reply_to(message, f"Current time: {current_time}\nThe current BTC/USD price is: ${price:,.2f}")
         else:
-            error_message = f"Unable to fetch the current BTC price. API response: {data}"
-            logger.error(error_message)
             bot.reply_to(message, "Unable to fetch the current BTC price. Please try again later.")
-    except requests.RequestException as e:
-        error_message = f"Network error while fetching BTC price: {str(e)}"
-        logger.error(error_message)
-        bot.reply_to(message, f"A network error occurred while fetching the BTC price. Please try again later.")
-    except ValueError as e:
-        error_message = f"JSON decoding error: {str(e)}"
-        logger.error(error_message)
-        bot.reply_to(message, f"An error occurred while processing the BTC price data. Please try again later.")
     except Exception as e:
-        error_message = f"Unexpected error while fetching BTC price: {str(e)}"
-        logger.error(error_message)
-        bot.reply_to(message, f"An unexpected error occurred while fetching the BTC price. Please try again later.")
+        logger.error(f"Error fetching BTC price: {str(e)}")
+        bot.reply_to(message, "An error occurred while fetching the BTC price. Please try again later.")
 
 def handle_broadcast(bot, message: Message) -> None:
     if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
