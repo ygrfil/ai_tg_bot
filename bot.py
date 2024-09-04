@@ -72,9 +72,12 @@ def main():
         init_db()
         import_allowed_users()
         logger.info("Starting bot polling...")
-        bot.polling(none_stop=True)
+        bot.polling(none_stop=True, timeout=60)
     except ApiException as e:
-        logger.error(f"Telegram API error: {e}")
+        if "Conflict: terminated by other getUpdates request" in str(e):
+            logger.error("Another instance of the bot is already running. Please stop it before starting a new one.")
+        else:
+            logger.error(f"Telegram API error: {e}")
     except Exception as e:
         logger.error(f"Unexpected error in main function: {e}")
     finally:

@@ -24,6 +24,7 @@ user_conversation_history: Dict[int, List[HumanMessage | AIMessage | SystemMessa
 import requests
 from typing import Dict, Callable
 from telebot import TeleBot
+import time
 
 def handle_commands(bot: TeleBot, message: Message) -> None:
     if not is_authorized(message):
@@ -154,10 +155,21 @@ def handle_status(bot, message: Message) -> None:
     
     bot.reply_to(message, status_message)
 
+last_btc_request_time = 0
+BTC_REQUEST_COOLDOWN = 5  # 5 seconds cooldown between requests
+
 def handle_btc_price(bot: TeleBot, message: Message) -> None:
+    global last_btc_request_time
     if not is_authorized(message):
         bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
         return
+
+    current_time = time.time()
+    if current_time - last_btc_request_time < BTC_REQUEST_COOLDOWN:
+        bot.reply_to(message, f"Please wait {BTC_REQUEST_COOLDOWN} seconds between BTC price requests.")
+        return
+
+    last_btc_request_time = current_time
 
     try:
         response = requests.get('https://api.bybit.com/v2/public/tickers', params={'symbol': 'BTCUSDT'})
