@@ -38,9 +38,20 @@ def get_conversation_messages(user_conversation_history: Dict[int, List[Union[Sy
         non_system_messages = [msg for msg in messages if not isinstance(msg, SystemMessage)]
         return system_messages + non_system_messages[-1:]
     
+    if selected_model == "anthropic":
+        anthropic_messages = []
+        for msg in messages:
+            if isinstance(msg, SystemMessage):
+                anthropic_messages.append({"role": "user", "content": f"System: {msg.content}"})
+            elif isinstance(msg, HumanMessage):
+                anthropic_messages.append({"role": "user", "content": msg.content})
+            elif isinstance(msg, AIMessage):
+                anthropic_messages.append({"role": "assistant", "content": msg.content})
+        return anthropic_messages
+    
     return [
         msg if isinstance(msg, (SystemMessage, AIMessage)) or
-        (isinstance(msg, HumanMessage) and (selected_model in ["anthropic", "openai"]) and isinstance(msg.content, list))
+        (isinstance(msg, HumanMessage) and (selected_model in ["openai"]) and isinstance(msg.content, list))
         else HumanMessage(content=str(msg.content) if isinstance(msg, HumanMessage) else str(msg))
         for msg in messages
     ]
