@@ -1,4 +1,7 @@
+import logging
 from typing import Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 from telebot.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
@@ -158,14 +161,27 @@ def handle_btc_price(bot: TeleBot, message: Message) -> None:
 
     try:
         response = requests.get('https://api.bybit.com/v2/public/tickers?symbol=BTCUSDT')
+        response.raise_for_status()  # Raise an exception for bad status codes
         data = response.json()
         if data['ret_code'] == 0 and data['result']:
             price = data['result'][0]['last_price']
             bot.reply_to(message, f"The current BTC/USDT price on Bybit is: ${price}")
         else:
+            error_message = f"Unable to fetch the current BTC price. API response: {data}"
+            logger.error(error_message)
             bot.reply_to(message, "Unable to fetch the current BTC price. Please try again later.")
+    except requests.RequestException as e:
+        error_message = f"Network error while fetching BTC price: {str(e)}"
+        logger.error(error_message)
+        bot.reply_to(message, "A network error occurred while fetching the BTC price. Please try again later.")
+    except ValueError as e:
+        error_message = f"JSON decoding error: {str(e)}"
+        logger.error(error_message)
+        bot.reply_to(message, "An error occurred while processing the BTC price data. Please try again later.")
     except Exception as e:
-        bot.reply_to(message, f"An error occurred while fetching the BTC price: {str(e)}")
+        error_message = f"Unexpected error while fetching BTC price: {str(e)}"
+        logger.error(error_message)
+        bot.reply_to(message, f"An unexpected error occurred while fetching the BTC price: {str(e)}")
 
 def handle_broadcast(bot, message: Message) -> None:
     if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
