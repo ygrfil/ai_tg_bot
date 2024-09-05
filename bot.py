@@ -71,7 +71,10 @@ def setup_bot_handlers(bot):
     @bot.message_handler(content_types=['text', 'photo'])
     def message_handler(message):
         try:
-            logger.info(f"Received message: {message.text[:50]}...")
+            if message.content_type == 'text':
+                logger.info(f"Received text message: {message.text[:50]}...")
+            elif message.content_type == 'photo':
+                logger.info("Received photo message")
             handle_message(bot, message)
         except Exception as e:
             logger.error(f"Error handling message: {e}", exc_info=True)

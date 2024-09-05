@@ -346,7 +346,7 @@ def handle_message(bot, message: Message) -> None:
         if 'overloaded_error' in error_message.lower():
             bot.edit_message_text("The AI model is currently overloaded. Please try again in a few moments.", chat_id=message.chat.id, message_id=placeholder_message.message_id)
         elif '400 bad request' in error_message.lower():
-            logger.error(f"Bad Request Error. User ID: {user_id}, Model: {selected_model}, Message: {message.text[:100]}")
+            logger.error(f"Bad Request Error. User ID: {user_id}, Model: {selected_model}, Message: {message.content_type}")
             bot.edit_message_text("There was an issue with the request. Please try again or contact support if the problem persists.", chat_id=message.chat.id, message_id=placeholder_message.message_id)
         else:
             bot.edit_message_text(f"An error occurred: {error_message}", chat_id=message.chat.id, message_id=placeholder_message.message_id)
