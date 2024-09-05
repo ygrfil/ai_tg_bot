@@ -5,18 +5,26 @@ from src.database.database import init_db, add_allowed_user
 from src.handlers.handlers import (handle_commands, callback_query_handler, start_command,
                       startadmin_command, reset_command, create_prompt_command, handle_message)
 import logging
+import time
+import requests
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-try:
-    bot = TeleBot(ENV["TELEGRAM_BOT_TOKEN"])
-except KeyError:
-    logger.error("TELEGRAM_BOT_TOKEN not found in environment variables")
-    raise
-except Exception as e:
-    logger.error(f"Error initializing bot: {e}")
-    raise
+MAX_RETRIES = 5
+RETRY_DELAY = 5
+
+def create_bot():
+    try:
+        return TeleBot(ENV["TELEGRAM_BOT_TOKEN"])
+    except KeyError:
+        logger.error("TELEGRAM_BOT_TOKEN not found in environment variables")
+        raise
+    except Exception as e:
+        logger.error(f"Error initializing bot: {e}")
+        raise
+
+bot = create_bot()
 
 @bot.message_handler(commands=['model', 'sm', 'broadcast', 'usage', 'list_users', 'add_user', 'remove_user', 'remove_prompt', 'status', 'btc'])
 def command_handler(message):
@@ -68,21 +76,34 @@ def import_allowed_users():
                 logger.error(f"Error adding allowed user: {e}")
 
 def main():
-    try:
-        print("Starting the bot...")
-        init_db()
-        import_allowed_users()
-        logger.info("Starting bot polling...")
-        bot.polling(none_stop=True, timeout=60)
-    except ApiException as e:
-        if "Conflict: terminated by other getUpdates request" in str(e):
-            logger.error("Another instance of the bot is already running. Please stop it before starting a new one.")
-        else:
-            logger.error(f"Telegram API error: {e}")
-    except Exception as e:
-        logger.error(f"Unexpected error in main function: {e}")
-    finally:
-        logger.info("Bot polling stopped")
+    retries = 0
+    while retries < MAX_RETRIES:
+        try:
+            print("Starting the bot...")
+            init_db()
+            import_allowed_users()
+            logger.info("Starting bot polling...")
+            bot.polling(none_stop=True, timeout=60)
+        except requests.exceptions.ReadTimeout:
+            logger.warning("Read timeout occurred. Restarting polling...")
+            continue
+        except ApiException as e:
+            if "Conflict: terminated by other getUpdates request" in str(e):
+                logger.error("Another instance of the bot is already running. Please stop it before starting a new one.")
+                break
+            else:
+                logger.error(f"Telegram API error: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error in main function: {e}")
+        
+        retries += 1
+        logger.info(f"Attempting to restart the bot in {RETRY_DELAY} seconds... (Attempt {retries}/{MAX_RETRIES})")
+        time.sleep(RETRY_DELAY)
+    
+    if retries == MAX_RETRIES:
+        logger.error("Max retries reached. Bot stopped.")
+    
+    logger.info("Bot polling stopped")
 
 if __name__ == "__main__":
     main()
