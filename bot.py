@@ -75,35 +75,5 @@ def import_allowed_users():
             except ValueError as e:
                 logger.error(f"Error adding allowed user: {e}")
 
-def main():
-    retries = 0
-    while retries < MAX_RETRIES:
-        try:
-            print("Starting the bot...")
-            init_db()
-            import_allowed_users()
-            logger.info("Starting bot polling...")
-            bot.polling(none_stop=True, timeout=60)
-        except requests.exceptions.ReadTimeout:
-            logger.warning("Read timeout occurred. Restarting polling...")
-            continue
-        except ApiException as e:
-            if "Conflict: terminated by other getUpdates request" in str(e):
-                logger.error("Another instance of the bot is already running. Please stop it before starting a new one.")
-                break
-            else:
-                logger.error(f"Telegram API error: {e}")
-        except Exception as e:
-            logger.error(f"Unexpected error in main function: {e}")
-        
-        retries += 1
-        logger.info(f"Attempting to restart the bot in {RETRY_DELAY} seconds... (Attempt {retries}/{MAX_RETRIES})")
-        time.sleep(RETRY_DELAY)
-    
-    if retries == MAX_RETRIES:
-        logger.error("Max retries reached. Bot stopped.")
-    
-    logger.info("Bot polling stopped")
-
-if __name__ == "__main__":
-    main()
+# The main() function and if __name__ == "__main__": block have been removed.
+# The rest of the file remains unchanged.
