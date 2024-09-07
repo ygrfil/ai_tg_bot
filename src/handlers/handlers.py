@@ -46,7 +46,8 @@ def handle_commands(bot: TeleBot, message: Message) -> None:
         'remove_user': lambda: handle_remove_user(bot, message),
         'remove_prompt': lambda: handle_remove_prompt(bot, message),
         'status': lambda: handle_status(bot, message),
-        'btc': lambda: handle_btc_price(bot, message)
+        'btc': lambda: handle_btc_price(bot, message),
+        'reload': lambda: handle_reload_config(bot, message)
     }
 
     handler = command_handlers.get(command)
