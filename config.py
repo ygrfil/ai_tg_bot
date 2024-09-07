@@ -4,6 +4,16 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+def load_model_config(file_path: str) -> Dict[str, str]:
+    config = {}
+    with open(file_path, 'r') as file:
+        for line in file:
+            key, value = line.strip().split('=')
+            config[key] = value
+    return config
+
+MODEL_CONFIG = load_model_config('models_names.txt')
+
 ENV = {
     "TELEGRAM_BOT_TOKEN": os.getenv("TELEGRAM_BOT_TOKEN"),
     "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),

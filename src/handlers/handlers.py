@@ -129,7 +129,14 @@ def handle_remove_user(bot, message: Message) -> None:
     else:
         bot.reply_to(message, f"Failed to remove user with ID {user_id}. Make sure the ID is correct.")
 
-def handle_remove_prompt(bot, message: Message) -> None:
+def handle_reload_config(bot, message: Message) -> None:
+    if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
+        bot.reply_to(message, "Sorry, you are not authorized to use this command.")
+        return
+    
+    global MODEL_CONFIG
+    MODEL_CONFIG = load_model_config('models_names.txt')
+    bot.reply_to(message, "Model configuration reloaded successfully.")
     if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
         bot.reply_to(message, "Sorry, you are not authorized to use this command.")
         return
