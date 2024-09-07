@@ -13,10 +13,10 @@ logger = logging.getLogger(__name__)
 
 def get_llm(selected_model: str, stream_handler: Any, user_id: int) -> BaseChatModel:
     llm_config: Dict[str, tuple] = {
-        "openai": (ChatOpenAI, {"api_key": ENV["OPENAI_API_KEY"], "model": ENV["OPENAI_MODEL"], "temperature": float(ENV["OPENAI_TEMPERATURE"]), "max_tokens": int(ENV["OPENAI_MAX_TOKENS"])}),
-        "anthropic": (ChatAnthropic, {"api_key": ENV["ANTHROPIC_API_KEY"], "model": ENV["ANTHROPIC_MODEL"], "temperature": float(ENV["ANTHROPIC_TEMPERATURE"])}),
-        "perplexity": (ChatPerplexity, {"model": ENV["PERPLEXITY_MODEL"]}),
-        "groq": (ChatGroq, {"model_name": ENV["GROQ_MODEL"], "temperature": float(ENV["GROQ_TEMPERATURE"])}),
+        "openai": (ChatOpenAI, {"api_key": ENV.get("OPENAI_API_KEY"), "model": ENV.get("OPENAI_MODEL"), "temperature": float(ENV.get("OPENAI_TEMPERATURE")), "max_tokens": int(ENV.get("OPENAI_MAX_TOKENS"))}),
+        "anthropic": (ChatAnthropic, {"api_key": ENV.get("ANTHROPIC_API_KEY"), "model": ENV.get("ANTHROPIC_MODEL"), "temperature": float(ENV.get("ANTHROPIC_TEMPERATURE"))}),
+        "perplexity": (ChatPerplexity, {"model": ENV.get("PERPLEXITY_MODEL")}),
+        "groq": (ChatGroq, {"model_name": ENV.get("GROQ_MODEL"), "temperature": float(ENV.get("GROQ_TEMPERATURE"))}),
     }
     
     if selected_model not in llm_config:
