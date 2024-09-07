@@ -10,3 +10,11 @@ def authorized_only(func):
             return
         return func(bot, message, *args, **kwargs)
     return wrapper
+def admin_only(func):
+    @wraps(func)
+    def wrapper(bot, message: Message, *args, **kwargs):
+        if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
+            bot.reply_to(message, "Sorry, you are not authorized to use this command.")
+            return
+        return func(bot, message, *args, **kwargs)
+    return wrapper

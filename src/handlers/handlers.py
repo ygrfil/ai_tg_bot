@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 logger = logging.getLogger(__name__)
 from telebot.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
@@ -8,7 +8,6 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_anthropic import ChatAnthropic
 import base64
-import time
 import os
 from config import ENV, load_model_config
 from src.database.database import (get_user_preferences, save_user_preferences, ensure_user_preferences,
@@ -30,9 +29,6 @@ from src.utils.decorators import authorized_only
 
 @authorized_only
 def handle_commands(bot: TeleBot, message: Message) -> None:
-    if not is_authorized(message):
-        bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
-        return
 
     command = message.text.split()[0][1:]
     command_handlers: Dict[str, Callable[[], None]] = {
@@ -225,7 +221,7 @@ def send_broadcast(bot, user_id: int, message: str) -> bool:
         bot.send_message(user_id, message)
         return True
     except Exception as e:
-        print(f"Failed to send broadcast to user {user_id}: {e}")
+        logger.error(f"Failed to send broadcast to user {user_id}: {e}")
         return False
 
 def callback_query_handler(bot, call):
