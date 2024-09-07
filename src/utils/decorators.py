@@ -1,6 +1,7 @@
 from functools import wraps
 from telebot.types import Message
 from src.utils.utils import is_authorized
+from config import ENV
 
 def authorized_only(func):
     @wraps(func)
