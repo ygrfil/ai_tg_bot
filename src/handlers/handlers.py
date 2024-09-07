@@ -26,6 +26,9 @@ from typing import Dict, Callable
 from telebot import TeleBot
 import time
 
+from src.utils.decorators import authorized_only
+
+@authorized_only
 def handle_commands(bot: TeleBot, message: Message) -> None:
     if not is_authorized(message):
         bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
@@ -159,10 +162,8 @@ def handle_status(bot, message: Message) -> None:
 
 from datetime import datetime
 
+@authorized_only
 def handle_btc_price(bot: TeleBot, message: Message) -> None:
-    if not is_authorized(message):
-        bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
-        return
 
     try:
         response = requests.get('https://api.coingecko.com/api/v3/simple/price', params={'ids': 'bitcoin', 'vs_currencies': 'usd'}, timeout=10)
@@ -234,10 +235,8 @@ def callback_query_handler(bot, call):
         bot.answer_callback_query(call.id, f"Switched to {prompt_name} system message. Conversation has been reset.")
         bot.edit_message_text(f"System message set to {prompt_name}. Conversation has been reset.", call.message.chat.id, call.message.message_id, reply_markup=None)
 
+@authorized_only
 def start_command(bot, message: Message) -> None:
-    if not is_authorized(message):
-        bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
-        return
     ensure_user_preferences(message.from_user.id)
     bot.reply_to(message, "Welcome! Here are the available commands:\n"
                           "/start: Introduces the bot and explains the available AI models.\n"
