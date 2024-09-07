@@ -5,3 +5,5 @@ anthropic_temperature=0.4
 perplexity_model=llama-3.1-sonar-large-128k-online
 groq_model=llama-3.1-70b-versatile
 groq_temperature=0.4
+hyperbolic_model=mattshumer/Reflection-Llama-3.1-70B
+hyperbolic_temperature=0.4

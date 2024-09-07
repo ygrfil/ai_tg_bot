@@ -5,6 +5,11 @@ from langchain_anthropic import ChatAnthropic
 from langchain_community.chat_models import ChatPerplexity
 from langchain_groq import ChatGroq
 from config import MODEL_CONFIG, ENV
+from langchain_openai import ChatOpenAI
+from langchain_anthropic import ChatAnthropic
+from langchain_community.chat_models import ChatPerplexity
+from langchain_groq import ChatGroq
+from langchain_hyperbolic import ChatHyperbolic
 from src.database.database import get_user_preferences
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.language_models import BaseChatModel
@@ -17,6 +22,7 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int) -> BaseChatM
         "anthropic": (ChatAnthropic, {"api_key": ENV.get("ANTHROPIC_API_KEY"), "model": MODEL_CONFIG.get("anthropic_model"), "temperature": float(MODEL_CONFIG.get("anthropic_temperature")), "max_tokens": 1024}),
         "perplexity": (ChatPerplexity, {"model": MODEL_CONFIG.get("perplexity_model")}),
         "groq": (ChatGroq, {"model_name": MODEL_CONFIG.get("groq_model"), "temperature": float(MODEL_CONFIG.get("groq_temperature")), "max_tokens": 1024}),
+        "hyperbolic": (ChatHyperbolic, {"api_key": ENV.get("HYPERBOLIC_API_KEY"), "model": MODEL_CONFIG.get("hyperbolic_model"), "base_url": "https://api.hyperbolic.xyz/v1", "temperature": float(MODEL_CONFIG.get("hyperbolic_temperature")), "max_tokens": 1024}),
     }
     
     if selected_model not in llm_config:

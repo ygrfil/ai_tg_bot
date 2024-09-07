@@ -27,6 +27,7 @@ ENV = {
     "PERPLEXITY_MODEL": os.getenv("PERPLEXITY_MODEL"),
     "GROQ_MODEL": os.getenv("GROQ_MODEL"),
     "GROQ_TEMPERATURE": os.getenv("GROQ_TEMPERATURE"),
+    "HYPERBOLIC_API_KEY": os.getenv("HYPERBOLIC_API_KEY"),
     "ADMIN_USER_IDS": os.getenv("ADMIN_USER_IDS").split(","),
     "ALLOWED_USER_IDS": os.getenv("ALLOWED_USER_IDS").split(","),
 }
