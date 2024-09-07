@@ -34,7 +34,7 @@ def save_user_preferences(user_id: int, selected_model: Optional[str] = None, sy
     db_operation(lambda c: c.execute('INSERT OR REPLACE INTO user_preferences (user_id, selected_model, system_prompt, creativity_level) VALUES (?, ?, ?, ?)', (user_id, new_model, new_prompt, new_creativity)))
 
 def ensure_user_preferences(user_id: int) -> None:
-    db_operation(lambda c: c.execute('INSERT OR IGNORE INTO user_preferences (user_id, selected_model, system_prompt, creativity_level) VALUES (?, ?, ?, ?)', (user_id, 'anthropic', 'standard', 'moderate')))
+    db_operation(lambda c: c.execute('INSERT OR IGNORE INTO user_preferences (user_id, selected_model, system_prompt, creativity_level) VALUES (?, ?, ?, ?)', (user_id, 'openai', 'standard', 'moderate')))
 
 def log_usage(user_id: int, model: str, messages_count: int) -> None:
     today = datetime.now().strftime('%Y-%m-%d')
