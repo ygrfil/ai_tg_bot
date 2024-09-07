@@ -138,6 +138,7 @@ def handle_reload_config(bot, message: Message) -> None:
     from config import MODEL_CONFIG
     MODEL_CONFIG.update(load_model_config('models_names.txt'))
     bot.reply_to(message, "Model configuration reloaded successfully.")
+def handle_remove_prompt(bot, message: Message) -> None:
     if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
         bot.reply_to(message, "Sorry, you are not authorized to use this command.")
         return
