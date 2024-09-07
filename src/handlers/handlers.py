@@ -60,7 +60,8 @@ def handle_model_selection(bot, message: Message) -> None:
         ("OpenAI", "model_openai"),
         ("Anthropic", "model_anthropic"),
         ("Perplexity", "model_perplexity"),
-        ("Groq", "model_groq")
+        ("Groq", "model_groq"),
+        ("Hyperbolic", "model_hyperbolic")
     ]))
 
 def handle_system_message_selection(bot, message: Message) -> None:
