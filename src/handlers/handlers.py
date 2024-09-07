@@ -54,7 +54,9 @@ def handle_commands(bot: TeleBot, message: Message) -> None:
 
 def handle_model_selection(bot, message: Message) -> None:
     ensure_user_preferences(message.from_user.id)
-    bot.send_message(message.chat.id, "Select a model:", reply_markup=create_keyboard([
+    user_prefs = get_user_preferences(message.from_user.id)
+    current_model = user_prefs.get('selected_model', 'openai')  # Default to 'openai' if not set
+    bot.send_message(message.chat.id, f"Current model: {current_model}\nSelect a model:", reply_markup=create_keyboard([
         ("OpenAI", "model_openai"),
         ("Anthropic", "model_anthropic"),
         ("Perplexity", "model_perplexity"),

@@ -20,7 +20,8 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int) -> BaseChatM
     }
     
     if selected_model not in llm_config:
-        raise ValueError(f"Unknown model: {selected_model}")
+        logger.warning(f"Unknown model: {selected_model}. Defaulting to OpenAI.")
+        selected_model = "openai"
     
     LLMClass, kwargs = llm_config[selected_model]
     try:
