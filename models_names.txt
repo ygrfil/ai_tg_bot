@@ -1,6 +1,5 @@
 openai_model=chatgpt-4o-latest
 openai_temperature=0.4
-openai_max_tokens=1024
 anthropic_model=claude-3-5-sonnet-20240620
 anthropic_temperature=0.4
 perplexity_model=llama-3.1-sonar-large-128k-online

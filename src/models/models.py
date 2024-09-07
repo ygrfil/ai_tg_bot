@@ -13,10 +13,10 @@ logger = logging.getLogger(__name__)
 
 def get_llm(selected_model: str, stream_handler: Any, user_id: int) -> BaseChatModel:
     llm_config: Dict[str, tuple] = {
-        "openai": (ChatOpenAI, {"api_key": ENV.get("OPENAI_API_KEY"), "model": MODEL_CONFIG.get("openai_model"), "temperature": float(MODEL_CONFIG.get("openai_temperature")), "max_tokens": int(MODEL_CONFIG.get("openai_max_tokens"))}),
-        "anthropic": (ChatAnthropic, {"api_key": ENV.get("ANTHROPIC_API_KEY"), "model": MODEL_CONFIG.get("anthropic_model"), "temperature": float(MODEL_CONFIG.get("anthropic_temperature"))}),
+        "openai": (ChatOpenAI, {"api_key": ENV.get("OPENAI_API_KEY"), "model": MODEL_CONFIG.get("openai_model"), "temperature": float(MODEL_CONFIG.get("openai_temperature")), "max_tokens": 1024}),
+        "anthropic": (ChatAnthropic, {"api_key": ENV.get("ANTHROPIC_API_KEY"), "model": MODEL_CONFIG.get("anthropic_model"), "temperature": float(MODEL_CONFIG.get("anthropic_temperature")), "max_tokens": 1024}),
         "perplexity": (ChatPerplexity, {"model": MODEL_CONFIG.get("perplexity_model")}),
-        "groq": (ChatGroq, {"model_name": MODEL_CONFIG.get("groq_model"), "temperature": float(MODEL_CONFIG.get("groq_temperature"))}),
+        "groq": (ChatGroq, {"model_name": MODEL_CONFIG.get("groq_model"), "temperature": float(MODEL_CONFIG.get("groq_temperature")), "max_tokens": 1024}),
     }
     
     if selected_model not in llm_config:
