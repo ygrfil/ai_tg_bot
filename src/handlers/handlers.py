@@ -10,7 +10,7 @@ from langchain_anthropic import ChatAnthropic
 import base64
 import time
 import os
-from config import ENV
+from config import ENV, load_model_config
 from src.database.database import (get_user_preferences, save_user_preferences, ensure_user_preferences,
                       log_usage, get_monthly_usage, get_user_monthly_usage)
 from src.models.models import get_llm, get_conversation_messages
@@ -135,8 +135,8 @@ def handle_reload_config(bot, message: Message) -> None:
         bot.reply_to(message, "Sorry, you are not authorized to use this command.")
         return
     
-    global MODEL_CONFIG
-    MODEL_CONFIG = load_model_config('models_names.txt')
+    from config import MODEL_CONFIG
+    MODEL_CONFIG.update(load_model_config('models_names.txt'))
     bot.reply_to(message, "Model configuration reloaded successfully.")
     if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
         bot.reply_to(message, "Sorry, you are not authorized to use this command.")
