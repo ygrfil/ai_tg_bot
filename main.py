@@ -1,6 +1,7 @@
 from bot import create_bot, import_allowed_users, setup_bot_handlers
 from src.database.database import init_db
 import logging
+import time
 
 logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
