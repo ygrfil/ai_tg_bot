@@ -9,7 +9,7 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_anthropic import ChatAnthropic
 import base64
 import os
-from config import ENV, load_model_config
+from config import ENV, load_model_config, MODEL_CONFIG
 from src.database.database import (get_user_preferences, save_user_preferences, ensure_user_preferences,
                       log_usage, get_monthly_usage, get_user_monthly_usage)
 from src.models.models import get_llm, get_conversation_messages
@@ -57,11 +57,11 @@ def handle_model_selection(bot, message: Message) -> None:
     user_prefs = get_user_preferences(message.from_user.id)
     current_model = user_prefs.get('selected_model', 'openai')  # Default to 'openai' if not set
     model_display_names = {
-        "openai": "GPT-4o-latest",
-        "anthropic": "Claude-3-5-sonnet-20240620",
-        "perplexity": "LLaMA-3.1-sonar-large-128k-online",
-        "groq": "LLaMA-3.1-70B-versatile",
-        "hyperbolic": "Reflection-LLaMA-3.1-70B"
+        "openai": MODEL_CONFIG.get("openai_model", "openai"),
+        "anthropic": MODEL_CONFIG.get("anthropic_model", "anthropic"),
+        "perplexity": MODEL_CONFIG.get("perplexity_model", "perplexity"),
+        "groq": MODEL_CONFIG.get("groq_model", "groq"),
+        "hyperbolic": MODEL_CONFIG.get("hyperbolic_model", "hyperbolic")
     }
     bot.send_message(message.chat.id, f"Current model: {model_display_names.get(current_model, current_model)}\nSelect a model:", reply_markup=create_keyboard([
         (model_display_names["openai"], "model_openai"),
