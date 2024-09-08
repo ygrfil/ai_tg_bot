@@ -24,7 +24,19 @@ def main():
         logger.info("Bot handlers set up")
         
         logger.info("Starting bot polling...")
-        bot.polling(none_stop=True, timeout=60)
+        max_retries = 5
+        retry_delay = 5  # initial delay in seconds
+
+        for attempt in range(max_retries):
+            try:
+                bot.polling(none_stop=True, timeout=60)
+                break  # Exit loop if polling starts successfully
+            except Exception as e:
+                logger.error(f"Polling error: {e}. Retrying in {retry_delay} seconds...")
+                time.sleep(retry_delay)
+                retry_delay *= 2  # Exponential backoff
+        else:
+            logger.error("Max retries reached. Exiting.")
     except Exception as e:
         logger.error(f"Error in main function: {e}", exc_info=True)
     finally:
