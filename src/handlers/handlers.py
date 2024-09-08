@@ -56,13 +56,7 @@ def handle_model_selection(bot, message: Message) -> None:
     ensure_user_preferences(message.from_user.id)
     user_prefs = get_user_preferences(message.from_user.id)
     current_model = user_prefs.get('selected_model', 'openai')  # Default to 'openai' if not set
-    model_display_names = {
-        "openai": MODEL_CONFIG.get("openai_model", "openai"),
-        "anthropic": MODEL_CONFIG.get("anthropic_model", "anthropic"),
-        "perplexity": MODEL_CONFIG.get("perplexity_model", "perplexity"),
-        "groq": MODEL_CONFIG.get("groq_model", "groq"),
-        "hyperbolic": MODEL_CONFIG.get("hyperbolic_model", "hyperbolic")
-    }
+    model_display_names = {key.split('_')[0]: value for key, value in MODEL_CONFIG.items() if key.endswith('_model')}
     bot.send_message(message.chat.id, f"Current model: {model_display_names.get(current_model, current_model)}\nSelect a model:", reply_markup=create_keyboard([
         (model_display_names["openai"], "model_openai"),
         (model_display_names["anthropic"], "model_anthropic"),
@@ -75,11 +69,10 @@ def handle_system_message_selection(bot, message: Message) -> None:
     ensure_user_preferences(message.from_user.id)
     bot.send_message(message.chat.id, "Select a system message:", reply_markup=create_keyboard([(name, f"sm_{name}") for name in get_system_prompts()]))
 
+from src.utils.decorators import authorized_only, admin_only
+
+@admin_only
 def handle_list_users(bot, message: Message) -> None:
-    if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
-        bot.reply_to(message, "Sorry, you are not authorized to use this command.")
-        return
-    
     users = get_allowed_users()
     user_list = []
     for user in users:
@@ -89,11 +82,8 @@ def handle_list_users(bot, message: Message) -> None:
     user_list_str = "\n".join(user_list)
     bot.reply_to(message, f"List of allowed users:\n{user_list_str}")
 
+@admin_only
 def handle_add_user(bot, message: Message) -> None:
-    if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
-        bot.reply_to(message, "Sorry, you are not authorized to use this command.")
-        return
-    
     parts = message.text.split()
     if len(parts) != 2:
         bot.reply_to(message, "Usage: /add_user <user_id>")
@@ -112,11 +102,8 @@ def handle_add_user(bot, message: Message) -> None:
     else:
         bot.reply_to(message, f"Failed to add user. The user might already be in the allowed list.")
 
+@admin_only
 def handle_remove_user(bot, message: Message) -> None:
-    if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
-        bot.reply_to(message, "Sorry, you are not authorized to use this command.")
-        return
-    
     parts = message.text.split()
     if len(parts) != 2:
         bot.reply_to(message, "Usage: /remove_user <user_id>")
@@ -134,19 +121,13 @@ def handle_remove_user(bot, message: Message) -> None:
     else:
         bot.reply_to(message, f"Failed to remove user with ID {user_id}. Make sure the ID is correct.")
 
+@admin_only
 def handle_reload_config(bot, message: Message) -> None:
-    if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
-        bot.reply_to(message, "Sorry, you are not authorized to use this command.")
-        return
-    
     from config import MODEL_CONFIG
     MODEL_CONFIG.update(load_model_config('models_names.txt'))
     bot.reply_to(message, "Model configuration reloaded successfully.")
+@admin_only
 def handle_remove_prompt(bot, message: Message) -> None:
-    if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
-        bot.reply_to(message, "Sorry, you are not authorized to use this command.")
-        return
-    
     parts = message.text.split()
     if len(parts) != 2:
         bot.reply_to(message, "Usage: /remove_prompt <prompt_name>")
@@ -192,10 +173,8 @@ def handle_btc_price(bot: TeleBot, message: Message) -> None:
         logger.error(f"Error fetching BTC price: {str(e)}")
         bot.reply_to(message, "An error occurred while fetching the BTC price. Please try again later.")
 
+@admin_only
 def handle_broadcast(bot, message: Message) -> None:
-    if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
-        bot.reply_to(message, "Sorry, you are not authorized to use this command.")
-        return
 
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
@@ -206,10 +185,8 @@ def handle_broadcast(bot, message: Message) -> None:
     success_count = sum(send_broadcast(bot, int(user_id), broadcast_message) for user_id in ENV["ALLOWED_USER_IDS"])
     bot.reply_to(message, f"Broadcast sent successfully to {success_count} out of {len(ENV['ALLOWED_USER_IDS'])} allowed users.")
 
+@admin_only
 def handle_usage(bot, message: Message) -> None:
-    if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
-        bot.reply_to(message, "Sorry, you are not authorized to use this command.")
-        return
     usage_stats = get_monthly_usage()
     usage_report = "Monthly Usage Report (from the start of the current month):\n\n"
     current_user = None

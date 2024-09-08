@@ -22,9 +22,12 @@ def db_operation(operation: Callable, *args: Any) -> Any:
         logger.error(f"Database error: {e}")
         raise
 
+DEFAULT_MODEL = 'anthropic'
+DEFAULT_PROMPT = 'standard'
+
 def get_user_preferences(user_id: int) -> Dict[str, str]:
     result = db_operation(lambda c: c.execute('SELECT selected_model, system_prompt, creativity_level FROM user_preferences WHERE user_id = ?', (user_id,)).fetchone())
-    return {'selected_model': result[0] if result else 'anthropic', 'system_prompt': result[1] if result else 'standard', 'creativity_level': result[2] if result else 'moderate'}
+    return {'selected_model': result[0] if result else DEFAULT_MODEL, 'system_prompt': result[1] if result else DEFAULT_PROMPT, 'creativity_level': result[2] if result else 'moderate'}
 
 def save_user_preferences(user_id: int, selected_model: Optional[str] = None, system_prompt: Optional[str] = None, creativity_level: Optional[str] = None) -> None:
     current_prefs = get_user_preferences(user_id)
