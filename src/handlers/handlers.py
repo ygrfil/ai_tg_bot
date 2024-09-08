@@ -56,12 +56,19 @@ def handle_model_selection(bot, message: Message) -> None:
     ensure_user_preferences(message.from_user.id)
     user_prefs = get_user_preferences(message.from_user.id)
     current_model = user_prefs.get('selected_model', 'openai')  # Default to 'openai' if not set
-    bot.send_message(message.chat.id, f"Current model: {current_model}\nSelect a model:", reply_markup=create_keyboard([
-        ("OpenAI", "model_openai"),
-        ("Anthropic", "model_anthropic"),
-        ("Perplexity", "model_perplexity"),
-        ("Groq", "model_groq"),
-        ("Hyperbolic", "model_hyperbolic")
+    model_display_names = {
+        "openai": "GPT-4o-latest",
+        "anthropic": "Claude-3-5-sonnet-20240620",
+        "perplexity": "LLaMA-3.1-sonar-large-128k-online",
+        "groq": "LLaMA-3.1-70B-versatile",
+        "hyperbolic": "Reflection-LLaMA-3.1-70B"
+    }
+    bot.send_message(message.chat.id, f"Current model: {model_display_names.get(current_model, current_model)}\nSelect a model:", reply_markup=create_keyboard([
+        (model_display_names["openai"], "model_openai"),
+        (model_display_names["anthropic"], "model_anthropic"),
+        (model_display_names["perplexity"], "model_perplexity"),
+        (model_display_names["groq"], "model_groq"),
+        (model_display_names["hyperbolic"], "model_hyperbolic")
     ]))
 
 def handle_system_message_selection(bot, message: Message) -> None:
