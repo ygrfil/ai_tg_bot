@@ -2,6 +2,17 @@
 
 This Telegram bot provides an interface to interact with various AI models, offering a range of features for both users and administrators.
 
+## Key Changes
+
+### Refactor Repeated Authorization Checks
+- Introduced an `admin_only` decorator in `src/utils/decorators.py` to centralize authorization logic for admin commands.
+
+### Simplify Model Display Names
+- Simplified the `model_display_names` dictionary in `src/handlers/handlers.py` using a dictionary comprehension with the `MODEL_CONFIG` dictionary.
+
+### Use Constants for Default Values
+- Introduced `DEFAULT_MODEL` and `DEFAULT_PROMPT` constants in `src/database/database.py` to avoid magic strings for default values.
+
 ## Features
 
 ### For All Users
