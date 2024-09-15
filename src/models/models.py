@@ -45,7 +45,7 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
         logger.warning(f"Unknown model: {selected_model}. Defaulting to OpenAI.")
         selected_model = "openai"
     
-    api_key = ENV.get(f"{selected_model.upper()}_API_KEY")
+    api_key = ENV.get("GEMINI_API_KEY" if selected_model == "gemini" else f"{selected_model.upper()}_API_KEY")
     if not api_key:
         logger.warning(f"API key for {selected_model} is not set. Please check your environment variables.")
         return None
