@@ -57,9 +57,13 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int) -> BaseChatM
     LLMClass, config = llm_config[selected_model]
     
     if config["api_key"] is None:
-        error_message = f"API key for {selected_model} is not set. Please check your environment variables."
-        logger.error(error_message)
-        raise ValueError(error_message)
+        if selected_model == "gemini":
+            logger.warning(f"API key for {selected_model} is not set. Skipping this model.")
+            return None
+        else:
+            error_message = f"API key for {selected_model} is not set. Please check your environment variables."
+            logger.error(error_message)
+            raise ValueError(error_message)
     
     try:
         llm = LLMClass(streaming=True, callbacks=[stream_handler], **config)
