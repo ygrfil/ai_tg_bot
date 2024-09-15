@@ -110,8 +110,15 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
                                 chat.send_message(message['content'])
                             elif message['role'] == 'assistant':
                                 chat.send_message(message['content'], role='model')
-                        response = chat.send_message('')
-                        return response.text
+                        
+                        # Get the last user message
+                        last_user_message = next((m['content'] for m in reversed(messages) if m['role'] == 'user'), None)
+                        
+                        if last_user_message:
+                            response = chat.send_message(last_user_message)
+                            return response.text
+                        else:
+                            return "I'm sorry, but I didn't receive any message to respond to. Could you please provide a question or topic for me to address?"
                     except Exception as e:
                         logger.error(f"Error generating content with Gemini model: {str(e)}")
                         raise ValueError(f"Error processing Gemini response: {str(e)}")
