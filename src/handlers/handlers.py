@@ -6,7 +6,7 @@ from telebot.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain_anthropic import ChatAnthropic
+from langchain.chat_models import ChatOpenAI, ChatAnthropic
 import base64
 import os
 from config import ENV, load_model_config, MODEL_CONFIG
