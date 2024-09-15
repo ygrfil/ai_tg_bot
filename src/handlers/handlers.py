@@ -340,7 +340,7 @@ def handle_message(bot, message: Message) -> None:
             response = llm_function(
                 model=MODEL_CONFIG.get("anthropic_model"),
                 messages=messages,
-                max_tokens=int(MODEL_CONFIG.get("anthropic_max_tokens", 1024)),
+                max_tokens_to_sample=int(MODEL_CONFIG.get("anthropic_max_tokens", 1024)),
                 temperature=float(MODEL_CONFIG.get("anthropic_temperature", 0.7)),
                 stream=True
             )

@@ -54,7 +54,7 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
             "model": MODEL_CONFIG.get("groq_model"),
             "temperature": float(MODEL_CONFIG.get("groq_temperature", 0.7)),
             "max_tokens": int(MODEL_CONFIG.get("groq_max_tokens", 1024)),
-            "base_url": MODEL_CONFIG.get("groq_base_url")
+            "base_url": MODEL_CONFIG.get("groq_base_url", "https://api.groq.com/openai/v1")
         },
         "hyperbolic": {
             "api_key": ENV.get("HYPERBOLIC_API_KEY"),

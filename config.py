@@ -18,7 +18,7 @@ MODEL_CONFIG = load_model_config('models_names.txt')
 # Add base URLs for models using OpenAI-compatible API
 MODEL_CONFIG.update({
     "perplexity_base_url": "https://api.perplexity.ai",
-    "groq_base_url": "https://api.groq.com",
+    "groq_base_url": "https://api.groq.com/openai/v1",
     "hyperbolic_base_url": "https://api.hyperbolic.ai"
 })
 
