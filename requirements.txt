@@ -5,4 +5,3 @@ anthropic==0.34.1
 google-generativeai==0.7.2
 requests==2.32.3
 Pillow==10.4.0
-tenacity==8.2.3

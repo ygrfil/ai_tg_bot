@@ -3,7 +3,6 @@ from typing import List, Tuple, Optional, Dict, Any
 from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
 import os
 from config import ENV
-from langchain_core.callbacks import BaseCallbackHandler
 import time
 import logging
 from src.database.database import is_user_allowed, get_user_preferences, get_last_interaction_time, update_last_interaction_time
