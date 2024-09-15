@@ -1,6 +1,7 @@
 import logging
 from typing import List, Dict, Any, Union
-from openai import OpenAI
+from openai import OpenAI, Stream
+from openai.types.chat import ChatCompletionChunk
 import anthropic
 import google.generativeai as genai
 import requests
