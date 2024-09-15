@@ -62,7 +62,8 @@ def handle_model_selection(bot, message: Message) -> None:
         (model_display_names["anthropic"], "model_anthropic"),
         (model_display_names["perplexity"], "model_perplexity"),
         (model_display_names["groq"], "model_groq"),
-        (model_display_names["hyperbolic"], "model_hyperbolic")
+        (model_display_names["hyperbolic"], "model_hyperbolic"),
+        (model_display_names["gemini"], "model_gemini")
     ]))
 
 def handle_system_message_selection(bot, message: Message) -> None:
