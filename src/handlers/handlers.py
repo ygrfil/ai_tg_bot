@@ -335,43 +335,42 @@ def handle_message(bot, message: Message) -> None:
         messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
         
         try:
+            model_name = MODEL_CONFIG.get(f"{selected_model}_model")
+            max_tokens = int(MODEL_CONFIG.get(f"{selected_model}_max_tokens", 1024))
+            temperature = float(MODEL_CONFIG.get(f"{selected_model}_temperature", 0.7))
+
             if selected_model == "gemini":
                 response = llm_function(messages)
                 ai_response = response.text
-            else:  # For all other models including OpenAI, Anthropic, etc.
-                model_name = MODEL_CONFIG.get(f"{selected_model}_model")
-                max_tokens = int(MODEL_CONFIG.get(f"{selected_model}_max_tokens", 1024))
-                temperature = float(MODEL_CONFIG.get(f"{selected_model}_temperature", 0.7))
-                
-                if selected_model == "anthropic":
-                    client = Anthropic(api_key=ENV["ANTHROPIC_API_KEY"])
-                    prompt = HUMAN_PROMPT + "\n".join([msg["content"] for msg in messages]) + AI_PROMPT
-                    response = client.completions.create(
-                        model=model_name,
-                        prompt=prompt,
-                        max_tokens_to_sample=max_tokens,
-                        temperature=temperature,
-                        stream=True
-                    )
-                    ai_response = ""
-                    for chunk in response:
-                        if chunk.completion:
-                            ai_response += chunk.completion
-                            stream_handler.on_llm_new_token(chunk.completion)
-                else:
-                    response = llm_function(
-                        model=model_name,
-                        messages=messages,
-                        max_tokens=max_tokens,
-                        temperature=temperature,
-                        stream=True
-                    )
-                    ai_response = ""
-                    for chunk in response:
-                        if chunk.choices and chunk.choices[0].delta.content:
-                            content = chunk.choices[0].delta.content
-                            ai_response += content
-                            stream_handler.on_llm_new_token(content)
+            elif selected_model == "anthropic":
+                client = Anthropic(api_key=ENV["ANTHROPIC_API_KEY"])
+                prompt = HUMAN_PROMPT + "\n".join([msg["content"] for msg in messages]) + AI_PROMPT
+                response = client.completions.create(
+                    model=model_name,
+                    prompt=prompt,
+                    max_tokens_to_sample=max_tokens,
+                    temperature=temperature,
+                    stream=True
+                )
+                ai_response = ""
+                for chunk in response:
+                    if chunk.completion:
+                        ai_response += chunk.completion
+                        stream_handler.on_llm_new_token(chunk.completion)
+            else:
+                response = llm_function(
+                    model=model_name,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    stream=True
+                )
+                ai_response = ""
+                for chunk in response:
+                    if chunk.choices and chunk.choices[0].delta.content:
+                        content = chunk.choices[0].delta.content
+                        ai_response += content
+                        stream_handler.on_llm_new_token(content)
             
             if not ai_response:
                 raise ValueError("No response generated from the model.")
