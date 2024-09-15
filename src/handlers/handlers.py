@@ -328,10 +328,13 @@ def handle_message(bot, message: Message) -> None:
 
             ai_response = ""
             if selected_model == "gemini":
-                response = llm_function(messages)
-                ai_response = response.text
-                stream_handler.on_llm_new_token(ai_response)
-                stream_handler.on_llm_end(ai_response)
+                try:
+                    ai_response = llm_function(messages)
+                    stream_handler.on_llm_new_token(ai_response)
+                    stream_handler.on_llm_end(ai_response)
+                except Exception as e:
+                    logger.error(f"Error with Gemini model: {str(e)}")
+                    raise ValueError(f"Error processing Gemini response: {str(e)}")
             elif selected_model == "anthropic":
                 client = Anthropic(api_key=ENV["ANTHROPIC_API_KEY"])
                 with client.messages.stream(

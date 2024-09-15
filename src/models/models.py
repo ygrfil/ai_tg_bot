@@ -96,9 +96,12 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
             genai.configure(api_key=config["api_key"])
             model = genai.GenerativeModel(config["model"])
             logger.info(f"Gemini model initialized for user {user_id}")
-            return lambda messages: model.generate_content(
-                [{"role": m["role"], "parts": [{"text": m["content"]}]} for m in messages]
-            )
+            def gemini_generate(messages):
+                response = model.generate_content(
+                    [{"role": m["role"], "parts": [{"text": m["content"]}]} for m in messages]
+                )
+                return response.text if hasattr(response, 'text') else str(response)
+            return gemini_generate
         elif selected_model == "perplexity":
             client = OpenAI(api_key=config["api_key"], base_url=config["base_url"])
             logger.info(f"Perplexity client initialized for user {user_id}")
