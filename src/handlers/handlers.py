@@ -359,7 +359,7 @@ def handle_message(bot, message: Message) -> None:
                             ai_response += chunk.completion
                             stream_handler.on_llm_new_token(chunk.completion)
                 else:
-                    response: Stream[ChatCompletionChunk] = llm_function(
+                    response = llm_function(
                         model=model_name,
                         messages=messages,
                         max_tokens=max_tokens,
@@ -368,9 +368,10 @@ def handle_message(bot, message: Message) -> None:
                     )
                     ai_response = ""
                     for chunk in response:
-                        if chunk.choices and chunk.choices[0].delta.content is not None:
-                            ai_response += chunk.choices[0].delta.content
-                            stream_handler.on_llm_new_token(chunk.choices[0].delta.content)
+                        if chunk.choices and chunk.choices[0].delta.content:
+                            content = chunk.choices[0].delta.content
+                            ai_response += content
+                            stream_handler.on_llm_new_token(content)
             
             if not ai_response:
                 raise ValueError("No response generated from the model.")
