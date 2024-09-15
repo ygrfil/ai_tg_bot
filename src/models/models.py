@@ -111,25 +111,29 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
         logger.error(error_message)
         return None
 
-def get_conversation_messages(user_conversation_history: Dict[int, List[Union[SystemMessage, HumanMessage, AIMessage]]], 
-                              user_id: int, 
-                              selected_model: str) -> List[Dict[str, str]]:
-    messages = user_conversation_history.get(user_id, [])
-    
-    if not messages:
-        return []
-    
-    if selected_model == "anthropic":
-        return [
-            {"role": "user" if msg.role == "user" else "assistant", "content": msg.content}
-            for msg in messages if msg.role != "system"
-        ]
-    
-    if selected_model == "gemini":
-        return [msg.content for msg in messages if isinstance(msg, (HumanMessage, AIMessage))]
-    
-    # For OpenAI and other models
-    return [
-        {"role": msg.role, "content": msg.content}
-        for msg in messages
-    ]
+def get_conversation_messages(user_conversation_history: Dict[int, List[Union[SystemMessage, HumanMessage, AIMessage]]],
+                              user_id: int,
+                              selected_model: str) -> List[Dict[str, Any]]:
+    messages = []
+    last_role = None
+
+    for message in user_conversation_history[user_id]:
+        current_role = message.role
+        content = message.content
+
+        if isinstance(message, SystemMessage):
+            messages.append({"role": "system", "content": content})
+        elif isinstance(message, HumanMessage):
+            if last_role != "user":
+                messages.append({"role": "user", "content": content})
+                last_role = "user"
+        elif isinstance(message, AIMessage):
+            if last_role != "assistant":
+                messages.append({"role": "assistant", "content": content})
+                last_role = "assistant"
+
+    # Ensure the last message is from the user
+    if messages and messages[-1]["role"] == "assistant":
+        messages.pop()
+
+    return messages
