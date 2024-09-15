@@ -49,7 +49,6 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int) -> BaseChatM
             "model": MODEL_CONFIG.get("gemini_model"),
             "temperature": float(MODEL_CONFIG.get("gemini_temperature", 0.7)),
             "max_output_tokens": int(MODEL_CONFIG.get("gemini_max_tokens", 1024)),
-            "convert_system_message_to_human": True
         }),
     }
     
@@ -99,7 +98,7 @@ def get_conversation_messages(user_conversation_history: Dict[int, List[Union[Sy
     if selected_model == "gemini":
         return [
             msg if isinstance(msg, (HumanMessage, AIMessage)) else
-            HumanMessage(content=f"System: {msg.content}") if isinstance(msg, SystemMessage) else
+            HumanMessage(content=f"You are an AI assistant. Here's how you should behave: {msg.content}") if isinstance(msg, SystemMessage) else
             msg
             for msg in messages
         ]
