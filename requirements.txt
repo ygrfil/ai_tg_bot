@@ -7,5 +7,5 @@ langchain-groq==0.1.6
 langchain-anthropic==0.1.21
 langchain-google-genai==1.0.10
 requests==2.32.3
-Pillow==10.2.0
+Pillow==10.4.0
 faiss-cpu==1.7.4
