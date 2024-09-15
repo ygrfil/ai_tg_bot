@@ -25,6 +25,8 @@ def start_polling(bot, max_retries=5, initial_retry_delay=5):
 def main():
     logger.info("Starting the bot...")
     logger.info(f"GOOGLE_API_KEY is {'set' if ENV.get('GOOGLE_API_KEY') else 'not set'}")
+    if not ENV.get('GOOGLE_API_KEY'):
+        logger.warning("GOOGLE_API_KEY is not set. Gemini model will not be available.")
     try:
         bot = create_bot()
         logger.info("Bot created successfully")

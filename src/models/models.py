@@ -93,20 +93,31 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
             logger.info(f"Anthropic client initialized for user {user_id}")
             return lambda **kwargs: client.messages.create(**kwargs)
         elif selected_model == "gemini":
-            genai.configure(api_key=config["api_key"])
-            model = genai.GenerativeModel(config["model"])
-            logger.info(f"Gemini model initialized for user {user_id}")
-            def gemini_generate(messages):
-                response = model.generate_content(
-                    [{"role": m["role"], "parts": [{"text": m["content"]}]} for m in messages]
-                )
-                if hasattr(response, 'text'):
-                    return response.text
-                elif hasattr(response, 'parts'):
-                    return ''.join(part.text for part in response.parts if hasattr(part, 'text'))
-                else:
-                    return str(response)
-            return gemini_generate
+            if not config["api_key"]:
+                logger.error("GOOGLE_API_KEY is not set for Gemini model")
+                return None
+            try:
+                genai.configure(api_key=config["api_key"])
+                model = genai.GenerativeModel(config["model"])
+                logger.info(f"Gemini model initialized for user {user_id}")
+                def gemini_generate(messages):
+                    try:
+                        response = model.generate_content(
+                            [{"role": m["role"], "parts": [{"text": m["content"]}]} for m in messages]
+                        )
+                        if hasattr(response, 'text'):
+                            return response.text
+                        elif hasattr(response, 'parts'):
+                            return ''.join(part.text for part in response.parts if hasattr(part, 'text'))
+                        else:
+                            return str(response)
+                    except Exception as e:
+                        logger.error(f"Error generating content with Gemini model: {str(e)}")
+                        raise
+                return gemini_generate
+            except Exception as e:
+                logger.error(f"Error initializing Gemini model: {str(e)}")
+                return None
         elif selected_model == "perplexity":
             client = OpenAI(api_key=config["api_key"], base_url=config["base_url"])
             logger.info(f"Perplexity client initialized for user {user_id}")
