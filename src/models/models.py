@@ -42,7 +42,7 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
             "api_key": ENV.get("ANTHROPIC_API_KEY"),
             "model": MODEL_CONFIG.get("anthropic_model"),
             "temperature": float(MODEL_CONFIG.get("anthropic_temperature", 0.7)),
-            "max_tokens": int(MODEL_CONFIG.get("anthropic_max_tokens", 1024))
+            "max_tokens_to_sample": int(MODEL_CONFIG.get("anthropic_max_tokens", 1024))
         },
         "perplexity": {
             "api_key": ENV.get("PERPLEXITY_API_KEY"),
@@ -90,7 +90,7 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
         elif selected_model == "anthropic":
             client = anthropic.Anthropic(api_key=config["api_key"])
             logger.info(f"Anthropic client initialized for user {user_id}")
-            return client.completions.create
+            return lambda **kwargs: client.messages.create(**kwargs)
         elif selected_model == "gemini":
             genai.configure(api_key=config["api_key"])
             model = genai.GenerativeModel(config["model"])

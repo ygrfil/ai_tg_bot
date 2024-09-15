@@ -350,6 +350,11 @@ def handle_message(bot, message: Message) -> None:
                         temperature=temperature,
                         stream=True
                     )
+                    ai_response = ""
+                    for chunk in response:
+                        if chunk.content:
+                            ai_response += chunk.content[0].text
+                            stream_handler.on_llm_new_token(chunk.content[0].text)
                 else:
                     response = llm_function(
                         model=model_name,
@@ -358,14 +363,8 @@ def handle_message(bot, message: Message) -> None:
                         temperature=temperature,
                         stream=True
                     )
-                
-                ai_response = ""
-                for chunk in response:
-                    if selected_model == "anthropic":
-                        if chunk.delta:
-                            ai_response += chunk.delta.text
-                            stream_handler.on_llm_new_token(chunk.delta.text)
-                    else:
+                    ai_response = ""
+                    for chunk in response:
                         if chunk.choices[0].delta.content is not None:
                             ai_response += chunk.choices[0].delta.content
                             stream_handler.on_llm_new_token(chunk.choices[0].delta.content)
