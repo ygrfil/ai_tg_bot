@@ -96,7 +96,9 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
             genai.configure(api_key=config["api_key"])
             model = genai.GenerativeModel(config["model"])
             logger.info(f"Gemini model initialized for user {user_id}")
-            return model.generate_content
+            return lambda messages: model.generate_content(
+                [{"role": m["role"], "parts": [{"text": m["content"]}]} for m in messages]
+            )
         elif selected_model == "perplexity":
             client = OpenAI(api_key=config["api_key"], base_url=config["base_url"])
             logger.info(f"Perplexity client initialized for user {user_id}")
@@ -136,4 +138,7 @@ def get_conversation_messages(user_conversation_history: Dict[int, List[Union[Sy
     if messages and messages[-1]["role"] == "assistant":
         messages.pop()
 
-    return messages
+    if selected_model == "gemini":
+        return [{"role": m["role"], "parts": [{"text": m["content"]}]} for m in messages]
+    else:
+        return messages

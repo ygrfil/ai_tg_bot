@@ -331,6 +331,7 @@ def handle_message(bot, message: Message) -> None:
                 response = llm_function(messages)
                 ai_response = response.text
                 stream_handler.on_llm_new_token(ai_response)
+                stream_handler.on_llm_end(ai_response)
             elif selected_model == "anthropic":
                 client = Anthropic(api_key=ENV["ANTHROPIC_API_KEY"])
                 with client.messages.stream(
