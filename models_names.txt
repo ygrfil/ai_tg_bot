@@ -1,6 +1,6 @@
 openai_model=chatgpt-4o-latest
 openai_temperature=0.4
-anthropic_model=claude-3-sonnet-20240229
+anthropic_model=claude-3-5-sonnet-20240620
 anthropic_temperature=0.4
 perplexity_model=llama-3.1-sonar-large-128k-online
 groq_model=llama-3.1-70b-versatile
