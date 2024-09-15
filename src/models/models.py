@@ -22,6 +22,7 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int) -> BaseChatM
         "perplexity": (ChatPerplexity, {"model": MODEL_CONFIG.get("perplexity_model")}),
         "groq": (ChatGroq, {"model_name": MODEL_CONFIG.get("groq_model"), "temperature": float(MODEL_CONFIG.get("groq_temperature")), "max_tokens": 1024}),
         "hyperbolic": (ChatOpenAI, {"api_key": ENV.get("HYPERBOLIC_API_KEY"), "model": MODEL_CONFIG.get("hyperbolic_model"), "base_url": "https://api.hyperbolic.xyz/v1", "temperature": float(MODEL_CONFIG.get("hyperbolic_temperature")), "max_tokens": 1024}),
+        "gemini": (ChatOpenAI, {"api_key": ENV.get("GOOGLE_API_KEY"), "model": MODEL_CONFIG.get("gemini_model"), "temperature": float(MODEL_CONFIG.get("gemini_temperature")), "max_tokens": 1024}),
     }
     
     if selected_model not in llm_config:
