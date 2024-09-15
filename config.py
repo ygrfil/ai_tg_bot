@@ -30,7 +30,17 @@ ENV = {
     "HYPERBOLIC_API_KEY": os.getenv("HYPERBOLIC_API_KEY"),
     "ADMIN_USER_IDS": os.getenv("ADMIN_USER_IDS").split(","),
     "ALLOWED_USER_IDS": os.getenv("ALLOWED_USER_IDS").split(","),
+    "GOOGLE_API_KEY": os.getenv("GOOGLE_API_KEY"),
 }
+
+print("Environment variables loaded:")
+for key, value in ENV.items():
+    if key in ["ADMIN_USER_IDS", "ALLOWED_USER_IDS"]:
+        print(f"{key}: [REDACTED]")
+    elif "API_KEY" in key:
+        print(f"{key}: {'[SET]' if value else '[NOT SET]'}")
+    else:
+        print(f"{key}: {value}")
 
 if not ENV["TELEGRAM_BOT_TOKEN"]:
     raise ValueError("TELEGRAM_BOT_TOKEN is not set in the .env file. Please set it and try again.")

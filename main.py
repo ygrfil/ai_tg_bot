@@ -2,11 +2,14 @@ from bot import create_bot, import_allowed_users, setup_bot_handlers
 from src.database.database import init_db
 import logging
 import time
+from config import ENV
 
-logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 def main(max_retries=5, initial_retry_delay=5):
+    logger.info("Starting the bot...")
+    logger.info(f"GOOGLE_API_KEY is {'set' if ENV.get('GOOGLE_API_KEY') else 'not set'}")
     try:
         logger.info("Starting the bot...")
         bot = create_bot()
