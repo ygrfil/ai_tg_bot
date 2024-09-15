@@ -379,9 +379,6 @@ def handle_message(bot, message: Message) -> None:
             bot.edit_message_text(error_message, chat_id=message.chat.id, message_id=placeholder_message.message_id)
             return
         
-        user_conversation_history[user_id].append(AIMessage(ai_response))
-        user_conversation_history[user_id] = user_conversation_history[user_id][-10:]  # Ensure we still have only 10 messages after adding the response
-        
         messages_count = 1
         log_usage(user_id, selected_model, messages_count)
     except Exception as e:
