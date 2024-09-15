@@ -1,7 +1,7 @@
 import logging
 from typing import Dict, List, Union
 from pydantic import BaseModel
-from anthropic import Anthropic
+from anthropic import Anthropic, HUMAN_PROMPT, AI_PROMPT
 
 logger = logging.getLogger(__name__)
 from telebot.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
@@ -345,18 +345,19 @@ def handle_message(bot, message: Message) -> None:
                 
                 if selected_model == "anthropic":
                     client = Anthropic(api_key=ENV["ANTHROPIC_API_KEY"])
-                    response = client.messages.create(
+                    prompt = HUMAN_PROMPT + "\n".join([msg["content"] for msg in messages]) + AI_PROMPT
+                    response = client.completions.create(
                         model=model_name,
-                        messages=messages,
-                        max_tokens=max_tokens,
+                        prompt=prompt,
+                        max_tokens_to_sample=max_tokens,
                         temperature=temperature,
                         stream=True
                     )
                     ai_response = ""
                     for chunk in response:
-                        if chunk.type == "content_block_delta":
-                            ai_response += chunk.delta.text
-                            stream_handler.on_llm_new_token(chunk.delta.text)
+                        if chunk.completion:
+                            ai_response += chunk.completion
+                            stream_handler.on_llm_new_token(chunk.completion)
                 else:
                     response = llm_function(
                         model=model_name,
