@@ -337,32 +337,38 @@ def handle_message(bot, message: Message) -> None:
             if selected_model == "gemini":
                 response = llm_function(messages)
                 ai_response = response.text
-            elif selected_model == "anthropic":
-                response = llm_function(
-                    model=MODEL_CONFIG.get("anthropic_model"),
-                    messages=messages,
-                    max_tokens_to_sample=int(MODEL_CONFIG.get("anthropic_max_tokens", 1024)),
-                    temperature=float(MODEL_CONFIG.get("anthropic_temperature", 0.7)),
-                    stream=True
-                )
+            else:  # For all other models including OpenAI, Anthropic, etc.
+                model_name = MODEL_CONFIG.get(f"{selected_model}_model")
+                max_tokens = int(MODEL_CONFIG.get(f"{selected_model}_max_tokens", 1024))
+                temperature = float(MODEL_CONFIG.get(f"{selected_model}_temperature", 0.7))
+                
+                if selected_model == "anthropic":
+                    response = llm_function(
+                        model=model_name,
+                        messages=messages,
+                        max_tokens_to_sample=max_tokens,
+                        temperature=temperature,
+                        stream=True
+                    )
+                else:
+                    response = llm_function(
+                        model=model_name,
+                        messages=messages,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                        stream=True
+                    )
+                
                 ai_response = ""
                 for chunk in response:
-                    if chunk.delta:
-                        ai_response += chunk.delta.text
-                        stream_handler.on_llm_new_token(chunk.delta.text)
-            else:  # OpenAI and others
-                response = llm_function(
-                    model=MODEL_CONFIG.get(f"{selected_model}_model"),
-                    messages=messages,
-                    max_tokens=int(MODEL_CONFIG.get(f"{selected_model}_max_tokens", 1024)),
-                    temperature=float(MODEL_CONFIG.get(f"{selected_model}_temperature", 0.7)),
-                    stream=True
-                )
-                ai_response = ""
-                for chunk in response:
-                    if chunk.choices[0].delta.content is not None:
-                        ai_response += chunk.choices[0].delta.content
-                        stream_handler.on_llm_new_token(chunk.choices[0].delta.content)
+                    if selected_model == "anthropic":
+                        if chunk.delta:
+                            ai_response += chunk.delta.text
+                            stream_handler.on_llm_new_token(chunk.delta.text)
+                    else:
+                        if chunk.choices[0].delta.content is not None:
+                            ai_response += chunk.choices[0].delta.content
+                            stream_handler.on_llm_new_token(chunk.choices[0].delta.content)
             
             if not ai_response:
                 raise ValueError("No response generated from the model.")

@@ -15,6 +15,12 @@ def load_model_config(file_path: str) -> Dict[str, str]:
 
 MODEL_CONFIG = load_model_config('models_names.txt')
 
+# Ensure all necessary configurations are present
+for model in ['openai', 'anthropic', 'perplexity', 'groq', 'hyperbolic', 'gemini']:
+    MODEL_CONFIG.setdefault(f'{model}_model', os.getenv(f'{model.upper()}_MODEL', ''))
+    MODEL_CONFIG.setdefault(f'{model}_temperature', os.getenv(f'{model.upper()}_TEMPERATURE', '0.7'))
+    MODEL_CONFIG.setdefault(f'{model}_max_tokens', os.getenv(f'{model.upper()}_MAX_TOKENS', '1024'))
+
 # Add base URLs for models using OpenAI-compatible API
 MODEL_CONFIG.update({
     "perplexity_base_url": "https://api.perplexity.ai",
