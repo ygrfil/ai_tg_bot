@@ -46,7 +46,7 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int) -> BaseChatM
             "api_key": ENV.get("GOOGLE_API_KEY"),
             "model": MODEL_CONFIG.get("gemini_model"),
             "temperature": float(MODEL_CONFIG.get("gemini_temperature", 0.7)),
-            "max_tokens": int(MODEL_CONFIG.get("gemini_max_tokens", 1024))
+            "max_output_tokens": int(MODEL_CONFIG.get("gemini_max_tokens", 1024))
         }),
     }
     
