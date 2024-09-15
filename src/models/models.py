@@ -45,6 +45,7 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int) -> BaseChatM
             "max_tokens": int(MODEL_CONFIG.get("hyperbolic_max_tokens", 1024))
         }),
         "gemini": (ChatGoogleGenerativeAI, {
+            "api_key": ENV.get("GOOGLE_API_KEY"),
             "model": MODEL_CONFIG.get("gemini_model"),
             "temperature": float(MODEL_CONFIG.get("gemini_temperature", 0.7)),
             "max_output_tokens": int(MODEL_CONFIG.get("gemini_max_tokens", 1024)),
@@ -60,14 +61,14 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int) -> BaseChatM
     
     LLMClass, config = llm_config[selected_model]
     
-    if config["api_key"] is None:
-        if selected_model == "gemini":
-            logger.warning(f"API key for {selected_model} is not set. Skipping this model.")
+    if selected_model == "gemini":
+        if ENV.get("GOOGLE_API_KEY") is None:
+            logger.warning("GOOGLE_API_KEY is not set. Skipping the Gemini model.")
             return None
-        else:
-            error_message = f"API key for {selected_model} is not set. Please check your environment variables."
-            logger.error(error_message)
-            raise ValueError(error_message)
+    elif config.get("api_key") is None:
+        error_message = f"API key for {selected_model} is not set. Please check your environment variables."
+        logger.error(error_message)
+        raise ValueError(error_message)
     
     try:
         llm = LLMClass(streaming=True, callbacks=[stream_handler], **config)
