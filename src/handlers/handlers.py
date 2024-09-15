@@ -334,9 +334,12 @@ def handle_message(bot, message: Message) -> None:
                         raise ValueError("Empty response from Gemini model")
                     stream_handler.on_llm_new_token(ai_response)
                     stream_handler.on_llm_end(ai_response)
+                except google.api_core.exceptions.GoogleAPIError as e:
+                    logger.error(f"Google API Error with Gemini model: {str(e)}")
+                    raise ValueError(f"Google API Error with Gemini model: {str(e)}")
                 except Exception as e:
-                    logger.error(f"Error with Gemini model: {str(e)}")
-                    raise ValueError(f"Error processing Gemini response: {str(e)}")
+                    logger.error(f"Unexpected error with Gemini model: {str(e)}")
+                    raise ValueError(f"Unexpected error processing Gemini response: {str(e)}")
             elif selected_model == "anthropic":
                 client = Anthropic(api_key=ENV["ANTHROPIC_API_KEY"])
                 with client.messages.stream(
