@@ -29,30 +29,40 @@ from src.utils.decorators import authorized_only
 class UserMessage(BaseModel):
     content: Union[str, List[Dict[str, str]]]
 
+class CommandRouter:
+    def __init__(self):
+        self.handlers = {}
+
+    def register(self, command, handler):
+        self.handlers[command] = handler
+
+    def handle(self, bot, message):
+        command = message.text.split()[0][1:]
+        handler = self.handlers.get(command)
+        if handler:
+            handler(bot, message)
+        else:
+            bot.reply_to(message, f"Unknown command: {command}")
+
+command_router = CommandRouter()
+
 @authorized_only
 def handle_commands(bot: TeleBot, message: Message) -> None:
+    command_router.handle(bot, message)
 
-    command = message.text.split()[0][1:]
-    command_handlers: Dict[str, Callable[[], None]] = {
-        'model': lambda: handle_model_selection(bot, message),
-        'sm': lambda: handle_system_message_selection(bot, message),
-        'broadcast': lambda: handle_broadcast(bot, message),
-        'usage': lambda: handle_usage(bot, message),
-        'create_prompt': lambda: create_prompt_command(bot, message),
-        'list_users': lambda: handle_list_users(bot, message),
-        'add_user': lambda: handle_add_user(bot, message),
-        'remove_user': lambda: handle_remove_user(bot, message),
-        'remove_prompt': lambda: handle_remove_prompt(bot, message),
-        'status': lambda: handle_status(bot, message),
-        'btc': lambda: handle_btc_price(bot, message),
-        'reload': lambda: handle_reload_config(bot, message)
-    }
-
-    handler = command_handlers.get(command)
-    if handler:
-        handler()
-    else:
-        bot.reply_to(message, f"Unknown command: {command}")
+# Register commands
+command_router.register('model', handle_model_selection)
+command_router.register('sm', handle_system_message_selection)
+command_router.register('broadcast', handle_broadcast)
+command_router.register('usage', handle_usage)
+command_router.register('create_prompt', create_prompt_command)
+command_router.register('list_users', handle_list_users)
+command_router.register('add_user', handle_add_user)
+command_router.register('remove_user', handle_remove_user)
+command_router.register('remove_prompt', handle_remove_prompt)
+command_router.register('status', handle_status)
+command_router.register('btc', handle_btc_price)
+command_router.register('reload', handle_reload_config)
 
 def handle_model_selection(bot, message: Message) -> None:
     ensure_user_preferences(message.from_user.id)
