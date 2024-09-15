@@ -110,6 +110,7 @@ class StreamHandler:
             logger.error(f"Error updating message: {e}")
 
     def on_llm_end(self, response: str, **kwargs) -> None:
+        self.response = response
         self.update_message()
 
 def download_and_encode_image(bot: Any, file_id: str) -> str:

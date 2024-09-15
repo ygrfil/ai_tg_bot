@@ -339,9 +339,11 @@ def handle_message(bot, message: Message) -> None:
             max_tokens = int(MODEL_CONFIG.get(f"{selected_model}_max_tokens", 1024))
             temperature = float(MODEL_CONFIG.get(f"{selected_model}_temperature", 0.7))
 
+            ai_response = ""
             if selected_model == "gemini":
                 response = llm_function(messages)
                 ai_response = response.text
+                stream_handler.on_llm_new_token(ai_response)
             elif selected_model == "anthropic":
                 client = Anthropic(api_key=ENV["ANTHROPIC_API_KEY"])
                 prompt = HUMAN_PROMPT + "\n".join([msg["content"] for msg in messages]) + AI_PROMPT
@@ -352,7 +354,6 @@ def handle_message(bot, message: Message) -> None:
                     temperature=temperature,
                     stream=True
                 )
-                ai_response = ""
                 for chunk in response:
                     if chunk.completion:
                         ai_response += chunk.completion
@@ -365,12 +366,13 @@ def handle_message(bot, message: Message) -> None:
                     temperature=temperature,
                     stream=True
                 )
-                ai_response = ""
                 for chunk in response:
                     if chunk.choices and chunk.choices[0].delta.content:
                         content = chunk.choices[0].delta.content
                         ai_response += content
                         stream_handler.on_llm_new_token(content)
+            
+            stream_handler.on_llm_end(ai_response)
             
             if not ai_response:
                 raise ValueError("No response generated from the model.")
