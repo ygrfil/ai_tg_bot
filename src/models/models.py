@@ -1,80 +1,99 @@
 import logging
 from typing import List, Dict, Any, Union
-from langchain_openai import ChatOpenAI
-from langchain_anthropic import ChatAnthropic
-from langchain_community.chat_models import ChatPerplexity
-from langchain_groq import ChatGroq
-from langchain_google_genai import ChatGoogleGenerativeAI
+import openai
+import anthropic
+import google.generativeai as genai
+import requests
 from config import MODEL_CONFIG, ENV
 from src.database.database import get_user_preferences
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-from langchain_core.language_models import BaseChatModel
-from PIL import Image
-import time
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger(__name__)
 
+class Message:
+    def __init__(self, role: str, content: str):
+        self.role = role
+        self.content = content
+
+class SystemMessage(Message):
+    def __init__(self, content: str):
+        super().__init__("system", content)
+
+class HumanMessage(Message):
+    def __init__(self, content: str):
+        super().__init__("user", content)
+
+class AIMessage(Message):
+    def __init__(self, content: str):
+        super().__init__("assistant", content)
+
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
-def get_llm(selected_model: str, stream_handler: Any, user_id: int) -> BaseChatModel:
+def get_llm(selected_model: str, stream_handler: Any, user_id: int):
     logger.info(f"Initializing LLM for model: {selected_model}")
-    llm_config = {
-        "openai": (ChatOpenAI, {
+    
+    model_configs = {
+        "openai": {
             "api_key": ENV.get("OPENAI_API_KEY"),
             "model": MODEL_CONFIG.get("openai_model"),
             "temperature": float(MODEL_CONFIG.get("openai_temperature", 0.7)),
             "max_tokens": int(MODEL_CONFIG.get("openai_max_tokens", 1024))
-        }),
-        "anthropic": (ChatAnthropic, {
+        },
+        "anthropic": {
             "api_key": ENV.get("ANTHROPIC_API_KEY"),
             "model": MODEL_CONFIG.get("anthropic_model"),
             "temperature": float(MODEL_CONFIG.get("anthropic_temperature", 0.7)),
             "max_tokens": int(MODEL_CONFIG.get("anthropic_max_tokens", 1024))
-        }),
-        "perplexity": (ChatPerplexity, {
+        },
+        "perplexity": {
             "api_key": ENV.get("PERPLEXITY_API_KEY"),
             "model": MODEL_CONFIG.get("perplexity_model")
-        }),
-        "groq": (ChatGroq, {
+        },
+        "groq": {
             "api_key": ENV.get("GROQ_API_KEY"),
             "model": MODEL_CONFIG.get("groq_model"),
             "temperature": float(MODEL_CONFIG.get("groq_temperature", 0.7)),
             "max_tokens": int(MODEL_CONFIG.get("groq_max_tokens", 1024))
-        }),
-        "hyperbolic": (ChatOpenAI, {
+        },
+        "hyperbolic": {
             "api_key": ENV.get("HYPERBOLIC_API_KEY"),
             "model": MODEL_CONFIG.get("hyperbolic_model"),
             "temperature": float(MODEL_CONFIG.get("hyperbolic_temperature", 0.7)),
             "max_tokens": int(MODEL_CONFIG.get("hyperbolic_max_tokens", 1024))
-        }),
-        "gemini": (ChatGoogleGenerativeAI, {
+        },
+        "gemini": {
             "api_key": ENV.get("GOOGLE_API_KEY"),
             "model": MODEL_CONFIG.get("gemini_model"),
             "temperature": float(MODEL_CONFIG.get("gemini_temperature", 0.7)),
             "max_output_tokens": int(MODEL_CONFIG.get("gemini_max_tokens", 1024)),
-        }),
+        },
     }
     
-    logger.info(f"Model config for {selected_model}: {llm_config[selected_model]}")
-    
-    if selected_model not in llm_config:
+    if selected_model not in model_configs:
         logger.warning(f"Unknown model: {selected_model}. Defaulting to OpenAI.")
         selected_model = "openai"
     
-    LLMClass, config = llm_config[selected_model]
+    config = model_configs[selected_model]
     
-    if selected_model == "gemini":
-        if ENV.get("GOOGLE_API_KEY") is None:
-            logger.warning("GOOGLE_API_KEY is not set. Skipping the Gemini model.")
-            return None
-    elif config.get("api_key") is None:
+    if config.get("api_key") is None:
         error_message = f"API key for {selected_model} is not set. Please check your environment variables."
         logger.error(error_message)
         raise ValueError(error_message)
     
     try:
-        llm = LLMClass(streaming=True, callbacks=[stream_handler], **config)
-        return llm
+        if selected_model == "openai":
+            openai.api_key = config["api_key"]
+            return openai.ChatCompletion.create
+        elif selected_model == "anthropic":
+            return anthropic.Anthropic(api_key=config["api_key"]).completions.create
+        elif selected_model == "gemini":
+            genai.configure(api_key=config["api_key"])
+            model = genai.GenerativeModel(config["model"])
+            return model.generate_content
+        else:
+            # For other models, we'll use OpenAI's API with a different base URL
+            openai.api_key = config["api_key"]
+            openai.api_base = f"https://api.{selected_model}.com/v1"
+            return openai.ChatCompletion.create
     except Exception as e:
         error_message = f"Error initializing {selected_model} model for user {user_id}: {str(e)}"
         logger.error(error_message)
@@ -82,33 +101,23 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int) -> BaseChatM
 
 def get_conversation_messages(user_conversation_history: Dict[int, List[Union[SystemMessage, HumanMessage, AIMessage]]], 
                               user_id: int, 
-                              selected_model: str) -> List[Union[SystemMessage, HumanMessage, AIMessage]]:
+                              selected_model: str) -> List[Dict[str, str]]:
     messages = user_conversation_history.get(user_id, [])
     
     if not messages:
         return []
     
-    if selected_model == "perplexity":
-        return [msg for msg in messages if isinstance(msg, SystemMessage)] + messages[-1:]
-    
     if selected_model == "anthropic":
         return [
-            {"role": "user" if isinstance(msg, (SystemMessage, HumanMessage)) else "assistant", 
-             "content": f"System: {msg.content}" if isinstance(msg, SystemMessage) else msg.content}
+            {"role": msg.role, "content": msg.content}
             for msg in messages
         ]
     
     if selected_model == "gemini":
-        return [
-            msg if isinstance(msg, (HumanMessage, AIMessage)) else
-            HumanMessage(content=f"You are an AI assistant. Here's how you should behave: {msg.content}") if isinstance(msg, SystemMessage) else
-            msg
-            for msg in messages
-        ]
+        return [msg.content for msg in messages if isinstance(msg, (HumanMessage, AIMessage))]
     
+    # For OpenAI and other models
     return [
-        msg if isinstance(msg, (SystemMessage, AIMessage)) or
-        (isinstance(msg, HumanMessage) and selected_model == "openai" and isinstance(msg.content, list))
-        else HumanMessage(content=str(msg.content))
+        {"role": msg.role, "content": msg.content}
         for msg in messages
     ]

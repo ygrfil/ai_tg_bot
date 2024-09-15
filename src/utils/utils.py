@@ -78,7 +78,7 @@ def get_user_id(bot: Any, user_input: str) -> Optional[int]:
     else:
         return None
 
-class StreamHandler(BaseCallbackHandler):
+class StreamHandler:
     def __init__(self, bot: Any, chat_id: int, message_id: int):
         self.bot = bot
         self.chat_id = chat_id
@@ -86,6 +86,13 @@ class StreamHandler(BaseCallbackHandler):
         self.response = ""
         self.last_update_time = time.time()
         self.update_interval = 0.3
+
+    def on_llm_new_token(self, token: str) -> None:
+        self.response += token
+        current_time = time.time()
+        if current_time - self.last_update_time >= self.update_interval:
+            self.update_message()
+            self.last_update_time = current_time
         self.max_message_length = 4096
 
     def on_llm_new_token(self, token: str, **kwargs) -> None:

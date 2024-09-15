@@ -15,6 +15,13 @@ def load_model_config(file_path: str) -> Dict[str, str]:
 
 MODEL_CONFIG = load_model_config('models_names.txt')
 
+# Add base URLs for models using OpenAI-compatible API
+MODEL_CONFIG.update({
+    "perplexity_base_url": "https://api.perplexity.ai",
+    "groq_base_url": "https://api.groq.com",
+    "hyperbolic_base_url": "https://api.hyperbolic.ai"
+})
+
 ENV = {
     "TELEGRAM_BOT_TOKEN": os.getenv("TELEGRAM_BOT_TOKEN"),
     "OPENAI_API_KEY": os.getenv("OPENAI_API_KEY"),

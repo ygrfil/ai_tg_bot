@@ -4,11 +4,7 @@ from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 from telebot.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
-from langchain_openai import ChatOpenAI
-from langchain_anthropic import ChatAnthropic
+from src.models.models import HumanMessage, AIMessage, SystemMessage
 import base64
 import os
 from config import ENV, load_model_config, MODEL_CONFIG
@@ -324,9 +320,9 @@ def handle_message(bot, message: Message) -> None:
 
     try:
         stream_handler = StreamHandler(bot, message.chat.id, placeholder_message.message_id)
-        llm = get_llm(selected_model, stream_handler, user_id)
+        llm_function = get_llm(selected_model, stream_handler, user_id)
         
-        if llm is None:
+        if llm_function is None:
             bot.edit_message_text("The selected model is currently unavailable. Please choose a different model using the /model command.", chat_id=message.chat.id, message_id=placeholder_message.message_id)
             return
         
@@ -334,16 +330,45 @@ def handle_message(bot, message: Message) -> None:
 
         if reset_conversation_if_needed(user_id):
             system_prompt = get_system_prompt(user_id)
-            user_conversation_history[user_id] = [SystemMessage(content=system_prompt)]
+            user_conversation_history[user_id] = [SystemMessage(system_prompt)]
             bot.send_message(message.chat.id, "Your conversation has been reset due to inactivity.")
 
         user_message = process_message_content(message, bot, selected_model)
         user_conversation_history[user_id].append(user_message)
         user_conversation_history[user_id] = user_conversation_history[user_id][-10:]  # Keep only the last 10 messages
         messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
-        response = llm.invoke(messages)
         
-        user_conversation_history[user_id].append(AIMessage(content=stream_handler.response))
+        if selected_model == "gemini":
+            response = llm_function(messages)
+            ai_response = response.text
+        elif selected_model == "anthropic":
+            response = llm_function(
+                model=MODEL_CONFIG.get("anthropic_model"),
+                messages=messages,
+                max_tokens=int(MODEL_CONFIG.get("anthropic_max_tokens", 1024)),
+                temperature=float(MODEL_CONFIG.get("anthropic_temperature", 0.7)),
+                stream=True
+            )
+            ai_response = ""
+            for chunk in response:
+                if chunk.completion:
+                    ai_response += chunk.completion
+                    stream_handler.on_llm_new_token(chunk.completion)
+        else:  # OpenAI and others
+            response = llm_function(
+                model=MODEL_CONFIG.get(f"{selected_model}_model"),
+                messages=messages,
+                max_tokens=int(MODEL_CONFIG.get(f"{selected_model}_max_tokens", 1024)),
+                temperature=float(MODEL_CONFIG.get(f"{selected_model}_temperature", 0.7)),
+                stream=True
+            )
+            ai_response = ""
+            for chunk in response:
+                if chunk.choices[0].delta.content:
+                    ai_response += chunk.choices[0].delta.content
+                    stream_handler.on_llm_new_token(chunk.choices[0].delta.content)
+        
+        user_conversation_history[user_id].append(AIMessage(ai_response))
         user_conversation_history[user_id] = user_conversation_history[user_id][-10:]  # Ensure we still have only 10 messages after adding the response
         
         messages_count = 1
