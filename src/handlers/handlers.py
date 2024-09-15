@@ -1,30 +1,25 @@
 import logging
-from typing import Dict, List, Union
+from typing import Dict, List, Union, Callable
 from pydantic import BaseModel
 from anthropic import Anthropic
+from telebot import TeleBot
+from telebot.types import Message
+from src.models.models import HumanMessage, AIMessage, SystemMessage, get_llm, get_conversation_messages
+from src.database.database import (get_user_preferences, save_user_preferences, ensure_user_preferences,
+                                   log_usage, get_monthly_usage, get_user_monthly_usage, is_user_allowed,
+                                   get_allowed_users, add_allowed_user, remove_allowed_user)
+from src.utils.utils import (reset_conversation_if_needed, create_keyboard, get_system_prompts,
+                             get_username, get_user_id, StreamHandler, is_authorized,
+                             remove_system_prompt, get_system_prompt)
+from src.utils.decorators import authorized_only, admin_only
+from config import ENV, load_model_config, MODEL_CONFIG
+import requests
+import time
+import os
 
 logger = logging.getLogger(__name__)
-from telebot.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
-from src.models.models import HumanMessage, AIMessage, SystemMessage
-import base64
-import os
-from config import ENV, load_model_config, MODEL_CONFIG
-from src.database.database import (get_user_preferences, save_user_preferences, ensure_user_preferences,
-                      log_usage, get_monthly_usage, get_user_monthly_usage)
-from src.models.models import get_llm, get_conversation_messages
-from src.utils.utils import (reset_conversation_if_needed,
-                   create_keyboard, get_system_prompts, get_username, get_user_id, StreamHandler, is_authorized,
-                   remove_system_prompt, get_system_prompt)
-from src.database.database import is_user_allowed, get_allowed_users, add_allowed_user, remove_allowed_user
 
 user_conversation_history: Dict[int, List[Union[HumanMessage, AIMessage, SystemMessage]]] = {}
-
-import requests
-from typing import Dict, Callable
-from telebot import TeleBot
-import time
-
-from src.utils.decorators import authorized_only
 
 class UserMessage(BaseModel):
     content: Union[str, List[Dict[str, str]]]
@@ -33,10 +28,10 @@ class CommandRouter:
     def __init__(self):
         self.handlers = {}
 
-    def register(self, command, handler):
+    def register(self, command: str, handler: Callable):
         self.handlers[command] = handler
 
-    def handle(self, bot, message):
+    def handle(self, bot: TeleBot, message: Message):
         command = message.text.split()[0][1:]
         handler = self.handlers.get(command)
         if handler:
@@ -46,30 +41,19 @@ class CommandRouter:
 
 command_router = CommandRouter()
 
+@authorized_only
 def handle_commands(bot: TeleBot, message: Message) -> None:
-    if is_authorized(message):
-        command_router.handle(bot, message)
-    else:
-        bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
+    command_router.handle(bot, message)
 
-def handle_model_selection(bot, message: Message) -> None:
+def handle_model_selection(bot: TeleBot, message: Message) -> None:
     ensure_user_preferences(message.from_user.id)
     user_prefs = get_user_preferences(message.from_user.id)
-    current_model = user_prefs.get('selected_model', 'openai')  # Default to 'openai' if not set
+    current_model = user_prefs.get('selected_model', 'openai')
     model_display_names = {key.split('_')[0]: value for key, value in MODEL_CONFIG.items() if key.endswith('_model')}
-    # Ensure all required keys are present in model_display_names
-    required_models = ["openai", "anthropic", "perplexity", "groq", "hyperbolic", "gemini"]
-    for model in required_models:
-        if model not in model_display_names:
-            model_display_names[model] = model.capitalize()
-    bot.send_message(message.chat.id, f"Current model: {model_display_names.get(current_model, current_model)}\nSelect a model:", reply_markup=create_keyboard([
-        (model_display_names["openai"], "model_openai"),
-        (model_display_names["anthropic"], "model_anthropic"),
-        (model_display_names["perplexity"], "model_perplexity"),
-        (model_display_names["groq"], "model_groq"),
-        (model_display_names["hyperbolic"], "model_hyperbolic"),
-        (model_display_names["gemini"], "model_gemini")
-    ]))
+    model_display_names.update({model: model.capitalize() for model in ["openai", "anthropic", "perplexity", "groq", "hyperbolic", "gemini"] if model not in model_display_names})
+    
+    keyboard = create_keyboard([(model_display_names[model], f"model_{model}") for model in model_display_names])
+    bot.send_message(message.chat.id, f"Current model: {model_display_names.get(current_model, current_model)}\nSelect a model:", reply_markup=keyboard)
 
 def handle_system_message_selection(bot, message: Message) -> None:
     ensure_user_preferences(message.from_user.id)
