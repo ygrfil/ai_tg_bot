@@ -25,9 +25,9 @@ def main(max_retries=5, initial_retry_delay=5):
         logger.info("Bot handlers set up")
         
         logger.info("Starting bot polling...")
-        retry_delay = config.initial_retry_delay
+        retry_delay = initial_retry_delay
 
-        for attempt in range(config.max_retries):
+        for attempt in range(max_retries):
             try:
                 bot.polling(none_stop=True, timeout=60)
                 break  # Exit loop if polling starts successfully
