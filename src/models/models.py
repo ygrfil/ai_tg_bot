@@ -62,6 +62,11 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
         logger.error(f"Error initializing {selected_model} model for user {user_id}: {str(e)}")
         return None
 
-def get_conversation_messages(user_conversation_history: Dict[int, List[Message]], user_id: int) -> List[Dict[str, str]]:
+def get_conversation_messages(user_conversation_history: Dict[int, List[Message]], user_id: int, selected_model: str) -> List[Dict[str, str]]:
     messages = [{"role": msg.role, "content": msg.content} for msg in user_conversation_history[user_id]]
+    
+    if selected_model == "gemini":
+        # For Gemini, we need to format messages differently
+        return [{"role": "user" if msg["role"] == "user" else "model", "parts": [{"text": msg["content"]}]} for msg in messages]
+    
     return messages[:-1] if messages and messages[-1]["role"] == "assistant" else messages
