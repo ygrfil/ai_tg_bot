@@ -50,20 +50,6 @@ command_router = CommandRouter()
 def handle_commands(bot: TeleBot, message: Message) -> None:
     command_router.handle(bot, message)
 
-# Register commands
-command_router.register('model', handle_model_selection)
-command_router.register('sm', handle_system_message_selection)
-command_router.register('broadcast', handle_broadcast)
-command_router.register('usage', handle_usage)
-command_router.register('create_prompt', create_prompt_command)
-command_router.register('list_users', handle_list_users)
-command_router.register('add_user', handle_add_user)
-command_router.register('remove_user', handle_remove_user)
-command_router.register('remove_prompt', handle_remove_prompt)
-command_router.register('status', handle_status)
-command_router.register('btc', handle_btc_price)
-command_router.register('reload', handle_reload_config)
-
 def handle_model_selection(bot, message: Message) -> None:
     ensure_user_preferences(message.from_user.id)
     user_prefs = get_user_preferences(message.from_user.id)
@@ -440,3 +426,17 @@ def process_message_content(message: Message, bot, selected_model: str) -> Human
         text_content = {"type": "text", "text": message.caption or "Describe the image in detail"}
         return HumanMessage(content=[image_content, text_content])
     return HumanMessage(content=message.text or "Please provide a message or an image.")
+
+# Register commands
+command_router.register('model', handle_model_selection)
+command_router.register('sm', handle_system_message_selection)
+command_router.register('broadcast', handle_broadcast)
+command_router.register('usage', handle_usage)
+command_router.register('create_prompt', create_prompt_command)
+command_router.register('list_users', handle_list_users)
+command_router.register('add_user', handle_add_user)
+command_router.register('remove_user', handle_remove_user)
+command_router.register('remove_prompt', handle_remove_prompt)
+command_router.register('status', handle_status)
+command_router.register('btc', handle_btc_price)
+command_router.register('reload', handle_reload_config)
