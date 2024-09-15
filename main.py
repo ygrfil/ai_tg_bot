@@ -2,11 +2,16 @@ from bot import create_bot, import_allowed_users, setup_bot_handlers
 from src.database.database import init_db
 import logging
 import time
+from pydantic import BaseModel
 
 logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def main():
+class BotConfig(BaseModel):
+    max_retries: int = 5
+    initial_retry_delay: int = 5
+
+def main(config: BotConfig):
     try:
         logger.info("Starting the bot...")
         bot = create_bot()
@@ -25,10 +30,9 @@ def main():
         logger.info("Bot handlers set up")
         
         logger.info("Starting bot polling...")
-        max_retries = 5
-        retry_delay = 5  # initial delay in seconds
+        retry_delay = config.initial_retry_delay
 
-        for attempt in range(max_retries):
+        for attempt in range(config.max_retries):
             try:
                 bot.polling(none_stop=True, timeout=60)
                 break  # Exit loop if polling starts successfully
@@ -44,4 +48,5 @@ def main():
         logger.info("Bot polling stopped")
 
 if __name__ == "__main__":
-    main()
+    config = BotConfig()
+    main(config)

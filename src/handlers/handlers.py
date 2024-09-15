@@ -1,12 +1,13 @@
 import logging
-from typing import Dict, List
+from typing import Dict, List, Union
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 from telebot.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain_openai.chat_models import ChatOpenAI
+from langchain_openai import ChatOpenAI
 from langchain_anthropic import ChatAnthropic
 import base64
 import os
@@ -19,7 +20,7 @@ from src.utils.utils import (reset_conversation_if_needed,
                    remove_system_prompt, get_system_prompt)
 from src.database.database import is_user_allowed, get_allowed_users, add_allowed_user, remove_allowed_user
 
-user_conversation_history: Dict[int, List[HumanMessage | AIMessage | SystemMessage]] = {}
+user_conversation_history: Dict[int, List[Union[HumanMessage, AIMessage, SystemMessage]]] = {}
 
 import requests
 from typing import Dict, Callable
@@ -27,6 +28,9 @@ from telebot import TeleBot
 import time
 
 from src.utils.decorators import authorized_only
+
+class UserMessage(BaseModel):
+    content: Union[str, List[Dict[str, str]]]
 
 @authorized_only
 def handle_commands(bot: TeleBot, message: Message) -> None:
