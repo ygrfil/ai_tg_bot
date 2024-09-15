@@ -122,8 +122,8 @@ def get_conversation_messages(user_conversation_history: Dict[int, List[Union[Sy
     
     if selected_model == "anthropic":
         return [
-            {"role": msg.role, "content": msg.content}
-            for msg in messages
+            {"role": "user" if msg.role == "user" else "assistant", "content": msg.content}
+            for msg in messages if msg.role != "system"
         ]
     
     if selected_model == "gemini":
