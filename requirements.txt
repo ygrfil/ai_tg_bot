@@ -1,6 +1,7 @@
 python-dotenv==1.0.1
 pyTelegramBotAPI==4.16.1
-openai
-anthropic
+openai==1.12.0
+anthropic==0.18.1
 google-generativeai==0.3.2
-requests
+requests==2.31.0
+tenacity==8.2.3

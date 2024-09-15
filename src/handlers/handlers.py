@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from anthropic import Anthropic
 from telebot import TeleBot
 from telebot.types import Message
-from src.models.models import HumanMessage, AIMessage, SystemMessage, get_llm, get_conversation_messages
+from src.models.models import Message, get_llm, get_conversation_messages
 import google.api_core.exceptions
 from src.database.database import (get_user_preferences, save_user_preferences, ensure_user_preferences,
                                    log_usage, get_monthly_usage, get_user_monthly_usage, is_user_allowed,
@@ -20,7 +20,7 @@ import os
 
 logger = logging.getLogger(__name__)
 
-user_conversation_history: Dict[int, List[Union[HumanMessage, AIMessage, SystemMessage]]] = {}
+user_conversation_history: Dict[int, List[Message]] = {}
 
 class UserMessage(BaseModel):
     content: Union[str, List[Dict[str, str]]]
