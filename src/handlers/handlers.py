@@ -46,9 +46,11 @@ class CommandRouter:
 
 command_router = CommandRouter()
 
-@authorized_only
 def handle_commands(bot: TeleBot, message: Message) -> None:
-    command_router.handle(bot, message)
+    if is_authorized(message):
+        command_router.handle(bot, message)
+    else:
+        bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
 
 def handle_model_selection(bot, message: Message) -> None:
     ensure_user_preferences(message.from_user.id)
@@ -398,33 +400,17 @@ def handle_message(bot, message: Message) -> None:
         
         messages_count = 1
         log_usage(user_id, selected_model, messages_count)
-    except ValueError as e:
-        error_message = str(e)
-        logger.error(f"Error in handle_message: {error_message}")
-        if "API key" in error_message:
-            bot.edit_message_text(f"Configuration error: {error_message} Please contact the administrator or choose a different model using the /model command.", chat_id=message.chat.id, message_id=placeholder_message.message_id)
-        else:
-            bot.edit_message_text(f"An error occurred: {error_message}", chat_id=message.chat.id, message_id=placeholder_message.message_id)
     except Exception as e:
-        error_message = str(e)
-        logger.error(f"Error in handle_message: {error_message}")
-        if 'rate_limit_exceeded' in error_message.lower():
-            bot.edit_message_text("The API rate limit has been exceeded. Please try again in a few moments or choose a different model using the /model command.", chat_id=message.chat.id, message_id=placeholder_message.message_id)
-        elif 'invalid_request_error' in error_message.lower():
-            logger.error(f"Invalid Request Error. User ID: {user_id}, Model: {selected_model}, Message: {message.content_type}")
-            bot.edit_message_text("There was an issue with the request. Please try again, choose a different model using the /model command, or contact support if the problem persists.", chat_id=message.chat.id, message_id=placeholder_message.message_id)
-        elif 'context_length_exceeded' in error_message.lower():
-            bot.edit_message_text("The conversation is too long for the current model. Please use the /reset command to start a new conversation.", chat_id=message.chat.id, message_id=placeholder_message.message_id)
-        else:
-            bot.edit_message_text(f"An error occurred: {error_message}. Please try again or choose a different model using the /model command.", chat_id=message.chat.id, message_id=placeholder_message.message_id)
+        handle_message_error(bot, message, placeholder_message, e, user_id, selected_model)
 
 from src.utils.image_utils import process_image_message
 
 def process_message_content(message: Message, bot, selected_model: str) -> HumanMessage:
     if message.content_type == 'photo':
-        image_content = process_image_message(message, bot, selected_model)
-        text_content = {"type": "text", "text": message.caption or "Describe the image in detail"}
-        return HumanMessage(content=[image_content, text_content])
+        return HumanMessage(content=[
+            process_image_message(message, bot, selected_model),
+            {"type": "text", "text": message.caption or "Describe the image in detail"}
+        ])
     return HumanMessage(content=message.text or "Please provide a message or an image.")
 
 # Register commands
@@ -440,3 +426,21 @@ command_router.register('remove_prompt', handle_remove_prompt)
 command_router.register('status', handle_status)
 command_router.register('btc', handle_btc_price)
 command_router.register('reload', handle_reload_config)
+
+def handle_message_error(bot: TeleBot, message: Message, placeholder_message: Message, error: Exception, user_id: int, selected_model: str):
+    error_message = str(error)
+    logger.error(f"Error in handle_message: {error_message}")
+
+    if isinstance(error, ValueError) and "API key" in error_message:
+        response = f"Configuration error: {error_message} Please contact the administrator or choose a different model using the /model command."
+    elif 'rate_limit_exceeded' in error_message.lower():
+        response = "The API rate limit has been exceeded. Please try again in a few moments or choose a different model using the /model command."
+    elif 'invalid_request_error' in error_message.lower():
+        logger.error(f"Invalid Request Error. User ID: {user_id}, Model: {selected_model}, Message: {message.content_type}")
+        response = "There was an issue with the request. Please try again, choose a different model using the /model command, or contact support if the problem persists."
+    elif 'context_length_exceeded' in error_message.lower():
+        response = "The conversation is too long for the current model. Please use the /reset command to start a new conversation."
+    else:
+        response = f"An error occurred: {error_message}. Please try again or choose a different model using the /model command."
+
+    bot.edit_message_text(response, chat_id=message.chat.id, message_id=placeholder_message.message_id)
