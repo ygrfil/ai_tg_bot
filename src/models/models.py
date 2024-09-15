@@ -85,16 +85,20 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
     try:
         if selected_model == "openai":
             client = OpenAI(api_key=config["api_key"])
+            logger.info(f"OpenAI client initialized for user {user_id}")
             return lambda **kwargs: client.chat.completions.create(**kwargs)
         elif selected_model == "anthropic":
+            logger.info(f"Anthropic client initialized for user {user_id}")
             return anthropic.Anthropic(api_key=config["api_key"]).completions.create
         elif selected_model == "gemini":
             genai.configure(api_key=config["api_key"])
             model = genai.GenerativeModel(config["model"])
+            logger.info(f"Gemini model initialized for user {user_id}")
             return model.generate_content
         else:
             # For other models, we'll use OpenAI's API with a different base URL
             client = OpenAI(api_key=config["api_key"], base_url=config.get("base_url", "https://api.openai.com/v1"))
+            logger.info(f"{selected_model.capitalize()} client initialized for user {user_id}")
             return lambda **kwargs: client.chat.completions.create(**kwargs)
     except Exception as e:
         error_message = f"Error initializing {selected_model} model for user {user_id}: {str(e)}"
