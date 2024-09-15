@@ -322,6 +322,11 @@ def handle_message(bot, message: Message) -> None:
     try:
         stream_handler = StreamHandler(bot, message.chat.id, placeholder_message.message_id)
         llm_function = get_llm(selected_model, stream_handler, user_id)
+        
+        if llm_function is None:
+            bot.edit_message_text(f"The {selected_model} model is currently unavailable. Please choose a different model using the /model command.", chat_id=message.chat.id, message_id=placeholder_message.message_id)
+            return
+
         logger.info(f"Using model: {selected_model}")
 
         if reset_conversation_if_needed(user_id):

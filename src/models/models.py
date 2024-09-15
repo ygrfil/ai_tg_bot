@@ -81,7 +81,7 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
     if config.get("api_key") is None:
         error_message = f"API key for {selected_model} is not set. Please check your environment variables."
         logger.warning(error_message)
-        raise ValueError(error_message)
+        return None
     
     try:
         if selected_model == "openai":
@@ -105,12 +105,7 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
     except Exception as e:
         error_message = f"Error initializing {selected_model} model for user {user_id}: {str(e)}"
         logger.error(error_message)
-        if "API key" in str(e):
-            raise ValueError(f"Invalid API key for {selected_model}. Please check your configuration.")
-        elif "Connection error" in str(e):
-            raise ValueError(f"Connection error for {selected_model}. Please check your internet connection.")
-        else:
-            raise ValueError(error_message)
+        return None
 
 def get_conversation_messages(user_conversation_history: Dict[int, List[Union[SystemMessage, HumanMessage, AIMessage]]], 
                               user_id: int, 
