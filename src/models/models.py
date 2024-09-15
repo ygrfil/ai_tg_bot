@@ -66,7 +66,7 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
         },
         "gemini": {
             "api_key": ENV.get("GOOGLE_API_KEY"),
-            "model": "gemini-1.5-flash",
+            "model": MODEL_CONFIG.get("gemini_model"),
             "temperature": float(MODEL_CONFIG.get("gemini_temperature", 0.7)),
             "max_output_tokens": int(MODEL_CONFIG.get("gemini_max_tokens", 1024)),
         },
@@ -98,7 +98,7 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
                 return None
             try:
                 genai.configure(api_key=config["api_key"])
-                model = genai.GenerativeModel("gemini-1.5-flash")
+                model = genai.GenerativeModel(config["model"])
                 logger.info(f"Gemini model initialized for user {user_id}")
                 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
                 import google.api_core.exceptions
