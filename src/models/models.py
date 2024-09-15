@@ -105,15 +105,13 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
                         response = model.generate_content(
                             [{"role": m["role"], "parts": [{"text": m["content"]}]} for m in messages]
                         )
-                        if hasattr(response, 'text'):
-                            return response.text
-                        elif hasattr(response, 'parts'):
-                            return ''.join(part.text for part in response.parts if hasattr(part, 'text'))
+                        if response.parts:
+                            return ''.join(part.text for part in response.parts)
                         else:
-                            return str(response)
+                            return "No content generated."
                     except Exception as e:
                         logger.error(f"Error generating content with Gemini model: {str(e)}")
-                        raise
+                        raise ValueError(f"Error processing Gemini response: {str(e)}")
                 return gemini_generate
             except Exception as e:
                 logger.error(f"Error initializing Gemini model: {str(e)}")
