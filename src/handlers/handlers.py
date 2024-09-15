@@ -1,29 +1,23 @@
 import logging
 from typing import Dict, List, Union, Callable, Any
-from pydantic import BaseModel
-from anthropic import Anthropic
 from telebot import TeleBot
 from telebot.types import Message
-from src.models.models import Message, SystemMessage, HumanMessage, AIMessage, get_llm, get_conversation_messages
-import google.api_core.exceptions
+from anthropic import Anthropic
+from src.models.models import get_llm, get_conversation_messages
 from src.database.database import (get_user_preferences, save_user_preferences, ensure_user_preferences,
                                    log_usage, get_monthly_usage, get_user_monthly_usage, is_user_allowed,
                                    get_allowed_users, add_allowed_user, remove_allowed_user)
 from src.utils.utils import (reset_conversation_if_needed, create_keyboard, get_system_prompts,
                              get_username, get_user_id, StreamHandler, is_authorized,
-                             remove_system_prompt, get_system_prompt)
+                             remove_system_prompt, get_system_prompt, process_image_message)
 from src.utils.decorators import authorized_only, admin_only
 from config import ENV, load_model_config, MODEL_CONFIG
 import requests
-import time
 import os
 
 logger = logging.getLogger(__name__)
 
-user_conversation_history: Dict[int, List[Union[SystemMessage, HumanMessage, AIMessage]]] = {}
-
-class UserMessage(BaseModel):
-    content: Union[str, List[Dict[str, str]]]
+user_conversation_history: Dict[int, List[Dict[str, str]]] = {}
 
 class CommandRouter:
     def __init__(self):
@@ -56,108 +50,84 @@ def handle_model_selection(bot: TeleBot, message: Message) -> None:
     keyboard = create_keyboard([(model_display_names[model], f"model_{model}") for model in model_display_names])
     bot.send_message(message.chat.id, f"Current model: {model_display_names.get(current_model, current_model)}\nSelect a model:", reply_markup=keyboard)
 
-def handle_system_message_selection(bot, message: Message) -> None:
+def handle_system_message_selection(bot: TeleBot, message: Message) -> None:
     ensure_user_preferences(message.from_user.id)
     bot.send_message(message.chat.id, "Select a system message:", reply_markup=create_keyboard([(name, f"sm_{name}") for name in get_system_prompts()]))
 
-from src.utils.decorators import authorized_only, admin_only
-
 @admin_only
-def handle_list_users(bot, message: Message) -> None:
+def handle_list_users(bot: TeleBot, message: Message) -> None:
     users = get_allowed_users()
-    user_list = []
-    for user in users:
-        username = get_username(bot, user[0])
-        user_list.append(f"ID: {user[0]}, Username: {username}")
-    
-    user_list_str = "\n".join(user_list)
-    bot.reply_to(message, f"List of allowed users:\n{user_list_str}")
+    user_list = [f"ID: {user[0]}, Username: {get_username(bot, user[0])}" for user in users]
+    bot.reply_to(message, "List of allowed users:\n" + "\n".join(user_list))
 
 @admin_only
-def handle_add_user(bot, message: Message) -> None:
+def handle_add_user(bot: TeleBot, message: Message) -> None:
     parts = message.text.split()
-    if len(parts) != 2:
+    if len(parts) != 2 or not parts[1].isdigit():
         bot.reply_to(message, "Usage: /add_user <user_id>")
         return
     
-    user_id = parts[1]
-    if not user_id.isdigit():
-        bot.reply_to(message, "Invalid user ID. Please provide a numeric ID.")
-        return
-    
-    user_id = int(user_id)
-    result = add_allowed_user(user_id)
-    if result:
+    user_id = int(parts[1])
+    if add_allowed_user(user_id):
         username = get_username(bot, user_id)
         bot.reply_to(message, f"User {username} (ID: {user_id}) has been added to the allowed users list.")
     else:
         bot.reply_to(message, f"Failed to add user. The user might already be in the allowed list.")
 
 @admin_only
-def handle_remove_user(bot, message: Message) -> None:
+def handle_remove_user(bot: TeleBot, message: Message) -> None:
     parts = message.text.split()
-    if len(parts) != 2:
+    if len(parts) != 2 or not parts[1].isdigit():
         bot.reply_to(message, "Usage: /remove_user <user_id>")
         return
     
-    user_id = parts[1]
-    if not user_id.isdigit():
-        bot.reply_to(message, "Invalid user ID. Please provide a numeric ID.")
-        return
-    
-    user_id = int(user_id)
-    result = remove_allowed_user(user_id)
-    if result:
+    user_id = int(parts[1])
+    if remove_allowed_user(user_id):
         bot.reply_to(message, f"User with ID {user_id} has been removed from the allowed users list.")
     else:
         bot.reply_to(message, f"Failed to remove user with ID {user_id}. Make sure the ID is correct.")
 
 @admin_only
-def handle_reload_config(bot, message: Message) -> None:
-    from config import MODEL_CONFIG
+def handle_reload_config(bot: TeleBot, message: Message) -> None:
     MODEL_CONFIG.update(load_model_config('models_names.txt'))
     bot.reply_to(message, "Model configuration reloaded successfully.")
+
 @admin_only
-def handle_remove_prompt(bot, message: Message) -> None:
+def handle_remove_prompt(bot: TeleBot, message: Message) -> None:
     parts = message.text.split()
     if len(parts) != 2:
         bot.reply_to(message, "Usage: /remove_prompt <prompt_name>")
         return
     
     prompt_name = parts[1]
-    result = remove_system_prompt(prompt_name)
-    if result:
+    if remove_system_prompt(prompt_name):
         bot.reply_to(message, f"System prompt '{prompt_name}' has been removed successfully.")
     else:
         bot.reply_to(message, f"Failed to remove system prompt '{prompt_name}'. Make sure the prompt name is correct.")
 
-def handle_status(bot, message: Message) -> None:
+def handle_status(bot: TeleBot, message: Message) -> None:
     user_id = message.from_user.id
     ensure_user_preferences(user_id)
     user_prefs = get_user_preferences(user_id)
     usage = get_user_monthly_usage(user_id)
     
-    status_message = f"Your current status:\n\n"
-    status_message += f"Current model: {user_prefs['selected_model']}\n"
-    status_message += f"Current system prompt: {user_prefs['system_prompt']}\n\n"
-    status_message += f"Monthly usage:\n"
-    status_message += f"Total messages: {usage[0] if usage else 0}\n"
+    status_message = f"Your current status:\n\n" \
+                     f"Current model: {user_prefs['selected_model']}\n" \
+                     f"Current system prompt: {user_prefs['system_prompt']}\n\n" \
+                     f"Monthly usage:\n" \
+                     f"Total messages: {usage[0] if usage else 0}\n"
     
     bot.reply_to(message, status_message)
 
-from datetime import datetime
-
 @authorized_only
 def handle_btc_price(bot: TeleBot, message: Message) -> None:
-
     try:
         response = requests.get('https://api.coingecko.com/api/v3/simple/price', params={'ids': 'bitcoin', 'vs_currencies': 'usd'}, timeout=10)
         response.raise_for_status()
         data = response.json()
         if 'bitcoin' in data and 'usd' in data['bitcoin']:
             price = data['bitcoin']['usd']
-            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            bot.reply_to(message, f"Current time: {current_time}\nThe current BTC/USD price is: ${price:,.2f}")
+            bot.reply_to(message, f"The current BTC/USD price is: ${price:,.2f}")
         else:
             bot.reply_to(message, "Unable to fetch the current BTC price. Please try again later.")
     except Exception as e:
@@ -165,8 +135,7 @@ def handle_btc_price(bot: TeleBot, message: Message) -> None:
         bot.reply_to(message, "An error occurred while fetching the BTC price. Please try again later.")
 
 @admin_only
-def handle_broadcast(bot, message: Message) -> None:
-
+def handle_broadcast(bot: TeleBot, message: Message) -> None:
     parts = message.text.split(maxsplit=1)
     if len(parts) < 2:
         bot.reply_to(message, "Please provide a message to broadcast after the /broadcast command.")
@@ -177,7 +146,7 @@ def handle_broadcast(bot, message: Message) -> None:
     bot.reply_to(message, f"Broadcast sent successfully to {success_count} out of {len(ENV['ALLOWED_USER_IDS'])} allowed users.")
 
 @admin_only
-def handle_usage(bot, message: Message) -> None:
+def handle_usage(bot: TeleBot, message: Message) -> None:
     usage_stats = get_monthly_usage()
     usage_report = "Monthly Usage Report (from the start of the current month):\n\n"
     current_user = None
@@ -192,7 +161,7 @@ def handle_usage(bot, message: Message) -> None:
         usage_report += f"    Messages: {messages}\n"
     bot.reply_to(message, usage_report)
 
-def send_broadcast(bot, user_id: int, message: str) -> bool:
+def send_broadcast(bot: TeleBot, user_id: int, message: str) -> bool:
     try:
         bot.send_message(user_id, message)
         return True
@@ -200,7 +169,7 @@ def send_broadcast(bot, user_id: int, message: str) -> bool:
         logger.error(f"Failed to send broadcast to user {user_id}: {e}")
         return False
 
-def callback_query_handler(bot, call):
+def callback_query_handler(bot: TeleBot, call):
     user_id = call.from_user.id
     ensure_user_preferences(user_id)
     if call.data.startswith('model_'):
@@ -212,12 +181,12 @@ def callback_query_handler(bot, call):
         prompt_name = call.data.split('_')[1]
         system_message = get_system_prompts().get(prompt_name, "You are a helpful assistant.")
         save_user_preferences(user_id, system_prompt=prompt_name)
-        user_conversation_history[user_id] = [SystemMessage(content=system_message)]
+        user_conversation_history[user_id] = [{"role": "system", "content": system_message}]
         bot.answer_callback_query(call.id, f"Switched to {prompt_name} system message. Conversation has been reset.")
         bot.edit_message_text(f"System message set to {prompt_name}. Conversation has been reset.", call.message.chat.id, call.message.message_id, reply_markup=None)
 
 @authorized_only
-def start_command(bot, message: Message) -> None:
+def start_command(bot: TeleBot, message: Message) -> None:
     ensure_user_preferences(message.from_user.id)
     bot.reply_to(message, "Welcome! Here are the available commands:\n"
                           "/start: Introduces the bot and explains the available AI models.\n"
@@ -228,7 +197,7 @@ def start_command(bot, message: Message) -> None:
                           "/status: View your current status and usage.\n"
                           "Created by Yegor")
 
-def startadmin_command(bot, message: Message) -> None:
+def startadmin_command(bot: TeleBot, message: Message) -> None:
     if str(message.from_user.id) not in ENV["ADMIN_USER_IDS"]:
         bot.reply_to(message, "Sorry, you are not authorized to use this command.")
         return
@@ -241,7 +210,7 @@ def startadmin_command(bot, message: Message) -> None:
                           "/remove_user: Remove an allowed user.\n"
                           "/remove_prompt: Remove a system prompt.")
 
-def reset_command(bot, message: Message) -> None:
+def reset_command(bot: TeleBot, message: Message) -> None:
     if not is_authorized(message):
         bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
         return
@@ -264,7 +233,7 @@ def process_prompt_name(bot: TeleBot, message: Message) -> None:
     bot.reply_to(message, f"Great! Now send the content for the '{prompt_name}' system prompt.")
     bot.register_next_step_handler(message, lambda m: process_prompt_content(bot, m, prompt_name))
 
-def process_prompt_content(bot, message: Message, prompt_name: str) -> None:
+def process_prompt_content(bot: TeleBot, message: Message, prompt_name: str) -> None:
     prompt_content = message.text.strip()
     if not prompt_content:
         bot.reply_to(message, "Invalid prompt content. Please try again with valid content.")
@@ -277,7 +246,7 @@ def process_prompt_content(bot, message: Message, prompt_name: str) -> None:
         file.write(prompt_content)
     bot.reply_to(message, f"System prompt '{prompt_name}' has been created and saved successfully!")
 
-def handle_message(bot, message: Message) -> None:
+def handle_message(bot: TeleBot, message: Message) -> None:
     if not is_authorized(message):
         bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
         return
@@ -285,17 +254,15 @@ def handle_message(bot, message: Message) -> None:
     user_id = message.from_user.id
     ensure_user_preferences(user_id)
     user_prefs = get_user_preferences(user_id)
-    selected_model = user_prefs.get('selected_model', 'anthropic')  # Default to 'anthropic' if not set
+    selected_model = user_prefs.get('selected_model', 'anthropic')
 
     if user_id not in user_conversation_history:
         user_conversation_history[user_id] = []
 
-    # Check if the conversation needs to be reset due to inactivity
     if reset_conversation_if_needed(user_id):
         user_conversation_history[user_id] = []
         bot.send_message(message.chat.id, "Your conversation has been reset due to inactivity.")
 
-    # Check if the message contains an image and the selected model is not OpenAI or Anthropic
     if message.content_type == 'photo' and selected_model not in ['openai', 'anthropic']:
         bot.reply_to(message, "Image processing is only available with OpenAI or Anthropic models. Please change your model using the /model command.")
         return
@@ -314,93 +281,74 @@ def handle_message(bot, message: Message) -> None:
 
         if reset_conversation_if_needed(user_id):
             system_prompt = get_system_prompt(user_id)
-            user_conversation_history[user_id] = [SystemMessage(system_prompt)]
+            user_conversation_history[user_id] = [{"role": "system", "content": system_prompt}]
             bot.send_message(message.chat.id, "Your conversation has been reset due to inactivity.")
 
         user_message = process_message_content(message, bot, selected_model)
         user_conversation_history[user_id].append(user_message)
-        user_conversation_history[user_id] = user_conversation_history[user_id][-10:]  # Keep only the last 10 messages
+        user_conversation_history[user_id] = user_conversation_history[user_id][-10:]
         messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
         
-        try:
-            model_name = MODEL_CONFIG.get(f"{selected_model}_model")
-            max_tokens = int(MODEL_CONFIG.get(f"{selected_model}_max_tokens", 1024))
-            temperature = float(MODEL_CONFIG.get(f"{selected_model}_temperature", 0.7))
+        model_name = MODEL_CONFIG.get(f"{selected_model}_model")
+        max_tokens = int(MODEL_CONFIG.get(f"{selected_model}_max_tokens", 1024))
+        temperature = float(MODEL_CONFIG.get(f"{selected_model}_temperature", 0.7))
 
-            ai_response = ""
-            if selected_model == "gemini":
-                try:
-                    response = llm_function(messages)
-                    if not response:
-                        raise ValueError("Empty response from Gemini model")
-                    ai_response = response
-                    stream_handler.on_llm_new_token(ai_response)
-                    stream_handler.on_llm_end(ai_response)
-                except Exception as e:
-                    logger.error(f"Error with Gemini model: {str(e)}")
-                    raise ValueError(f"Error processing Gemini response: {str(e)}")
-            elif selected_model == "anthropic":
-                client = Anthropic(api_key=ENV["ANTHROPIC_API_KEY"])
-                with client.messages.stream(
-                    model=model_name,
-                    messages=messages,
-                    max_tokens=max_tokens,
-                    temperature=temperature
-                ) as stream:
-                    for chunk in stream:
-                        if chunk.type == "content_block_delta":
-                            ai_response += chunk.delta.text
-                            stream_handler.on_llm_new_token(chunk.delta.text)
-            else:  # OpenAI, Perplexity, and other OpenAI-compatible APIs
-                response = llm_function(
-                    model=model_name,
-                    messages=messages,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    stream=True
-                )
-                for chunk in response:
-                    if chunk.choices and chunk.choices[0].delta.content:
-                        content = chunk.choices[0].delta.content
-                        ai_response += content
-                        stream_handler.on_llm_new_token(content)
-            
+        ai_response = ""
+        if selected_model == "gemini":
+            response = llm_function(messages)
+            if not response:
+                raise ValueError("Empty response from Gemini model")
+            ai_response = response
+            stream_handler.on_llm_new_token(ai_response)
             stream_handler.on_llm_end(ai_response)
-            
-            if not ai_response:
-                raise ValueError("No response generated from the model.")
-            
-            user_conversation_history[user_id].append(AIMessage(ai_response))
-            user_conversation_history[user_id] = user_conversation_history[user_id][-10:]  # Ensure we still have only 10 messages after adding the response
-            
-            messages_count = 1
-            log_usage(user_id, selected_model, messages_count)
-        except Exception as e:
-            logger.error(f"Error with {selected_model} model: {str(e)}")
-            error_message = f"Error with {selected_model} model: {str(e)}"
-            if "API key" in str(e):
-                error_message += " Please check your API key configuration."
-            elif "Connection error" in str(e):
-                error_message += " Please check your internet connection and try again."
-            elif "Missing required arguments" in str(e):
-                error_message += " There's an issue with the model configuration. Please contact the administrator."
-            bot.edit_message_text(error_message, chat_id=message.chat.id, message_id=placeholder_message.message_id)
-            return
+        elif selected_model == "anthropic":
+            client = Anthropic(api_key=ENV["ANTHROPIC_API_KEY"])
+            with client.messages.stream(
+                model=model_name,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature
+            ) as stream:
+                for chunk in stream:
+                    if chunk.type == "content_block_delta":
+                        ai_response += chunk.delta.text
+                        stream_handler.on_llm_new_token(chunk.delta.text)
+        else:  # OpenAI, Perplexity, and other OpenAI-compatible APIs
+            response = llm_function(
+                model=model_name,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                stream=True
+            )
+            for chunk in response:
+                if chunk.choices and chunk.choices[0].delta.content:
+                    content = chunk.choices[0].delta.content
+                    ai_response += content
+                    stream_handler.on_llm_new_token(content)
         
-        messages_count = 1
-        log_usage(user_id, selected_model, messages_count)
+        stream_handler.on_llm_end(ai_response)
+        
+        if not ai_response:
+            raise ValueError("No response generated from the model.")
+        
+        user_conversation_history[user_id].append({"role": "assistant", "content": ai_response})
+        user_conversation_history[user_id] = user_conversation_history[user_id][-10:]
+        
+        log_usage(user_id, selected_model, 1)
     except Exception as e:
         handle_message_error(bot, message, placeholder_message, e, user_id, selected_model)
 
-from src.utils.image_utils import process_image_message
-
-def process_message_content(message: Message, bot, selected_model: str) -> HumanMessage:
+def process_message_content(message: Message, bot: TeleBot, selected_model: str) -> Dict[str, Any]:
     if message.content_type == 'photo':
-        return HumanMessage(content=[
-            process_image_message(message, bot, selected_model),
-            {"type": "text", "text": message.caption or "Describe the image in detail"}
-        ])
-    return HumanMessage(content=message.text or "Please provide a message or an image.")
+        return {
+            "role": "user",
+            "content": [
+                process_image_message(message, bot, selected_model),
+                {"type": "text", "text": message.caption or "Describe the image in detail"}
+            ]
+        }
+    return {"role": "user", "content": message.text or "Please provide a message or an image."}
 
 # Register commands
 command_router.register('model', handle_model_selection)

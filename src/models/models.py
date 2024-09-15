@@ -4,29 +4,11 @@ from openai import OpenAI
 from anthropic import Anthropic
 import google.generativeai as genai
 from config import MODEL_CONFIG, ENV
-from src.database.database import get_user_preferences
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger(__name__)
 
-from dataclasses import dataclass
-
-@dataclass
-class Message:
-    role: str
-    content: str
-
-class SystemMessage(Message):
-    def __init__(self, content: str):
-        super().__init__("system", content)
-
-class HumanMessage(Message):
-    def __init__(self, content: str):
-        super().__init__("user", content)
-
-class AIMessage(Message):
-    def __init__(self, content: str):
-        super().__init__("assistant", content)
+Message = Dict[str, str]
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
 def get_llm(selected_model: str, stream_handler: Any, user_id: int):
@@ -62,11 +44,10 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
         logger.error(f"Error initializing {selected_model} model for user {user_id}: {str(e)}")
         return None
 
-def get_conversation_messages(user_conversation_history: Dict[int, List[Message]], user_id: int, selected_model: str) -> List[Dict[str, Union[str, List[Dict[str, str]]]]]:
-    messages = [{"role": msg.role, "content": msg.content} for msg in user_conversation_history[user_id]]
+def get_conversation_messages(user_conversation_history: Dict[int, List[Message]], user_id: int, selected_model: str) -> Union[str, List[Message]]:
+    messages = user_conversation_history[user_id]
     
     if selected_model == "gemini":
-        # For Gemini, we only need the last user message
         user_messages = [msg["content"] for msg in messages if msg["role"] == "user"]
         return user_messages[-1] if user_messages else ""
     
