@@ -48,7 +48,7 @@ ENV = {
     "HYPERBOLIC_API_KEY": os.getenv("HYPERBOLIC_API_KEY"),
     "ADMIN_USER_IDS": os.getenv("ADMIN_USER_IDS", "").split(","),
     "ALLOWED_USER_IDS": os.getenv("ALLOWED_USER_IDS", "").split(","),
-    "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY"),
+    "GEMINI_API_KEY": os.getenv("GOOGLE_API_KEY"),
 }
 
 print("Environment variables loaded:")
