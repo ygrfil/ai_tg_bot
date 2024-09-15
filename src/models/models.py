@@ -1,6 +1,6 @@
 import logging
 from typing import List, Dict, Any, Union
-import openai
+from openai import OpenAI
 import anthropic
 import google.generativeai as genai
 import requests
@@ -46,19 +46,22 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
         },
         "perplexity": {
             "api_key": ENV.get("PERPLEXITY_API_KEY"),
-            "model": MODEL_CONFIG.get("perplexity_model")
+            "model": MODEL_CONFIG.get("perplexity_model"),
+            "base_url": MODEL_CONFIG.get("perplexity_base_url")
         },
         "groq": {
             "api_key": ENV.get("GROQ_API_KEY"),
             "model": MODEL_CONFIG.get("groq_model"),
             "temperature": float(MODEL_CONFIG.get("groq_temperature", 0.7)),
-            "max_tokens": int(MODEL_CONFIG.get("groq_max_tokens", 1024))
+            "max_tokens": int(MODEL_CONFIG.get("groq_max_tokens", 1024)),
+            "base_url": MODEL_CONFIG.get("groq_base_url")
         },
         "hyperbolic": {
             "api_key": ENV.get("HYPERBOLIC_API_KEY"),
             "model": MODEL_CONFIG.get("hyperbolic_model"),
             "temperature": float(MODEL_CONFIG.get("hyperbolic_temperature", 0.7)),
-            "max_tokens": int(MODEL_CONFIG.get("hyperbolic_max_tokens", 1024))
+            "max_tokens": int(MODEL_CONFIG.get("hyperbolic_max_tokens", 1024)),
+            "base_url": MODEL_CONFIG.get("hyperbolic_base_url")
         },
         "gemini": {
             "api_key": ENV.get("GOOGLE_API_KEY"),
@@ -81,8 +84,8 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
     
     try:
         if selected_model == "openai":
-            openai.api_key = config["api_key"]
-            return openai.ChatCompletion.create
+            client = OpenAI(api_key=config["api_key"])
+            return lambda **kwargs: client.chat.completions.create(**kwargs)
         elif selected_model == "anthropic":
             return anthropic.Anthropic(api_key=config["api_key"]).completions.create
         elif selected_model == "gemini":
@@ -91,9 +94,8 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
             return model.generate_content
         else:
             # For other models, we'll use OpenAI's API with a different base URL
-            openai.api_key = config["api_key"]
-            openai.api_base = f"https://api.{selected_model}.com/v1"
-            return openai.ChatCompletion.create
+            client = OpenAI(api_key=config["api_key"], base_url=config.get("base_url", "https://api.openai.com/v1"))
+            return lambda **kwargs: client.chat.completions.create(**kwargs)
     except Exception as e:
         error_message = f"Error initializing {selected_model} model for user {user_id}: {str(e)}"
         logger.error(error_message)
