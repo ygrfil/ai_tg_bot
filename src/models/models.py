@@ -9,6 +9,7 @@ from config import MODEL_CONFIG, ENV
 from src.database.database import get_user_preferences
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.language_models import BaseChatModel
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 
@@ -44,10 +45,10 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int) -> BaseChatM
             "max_tokens": int(MODEL_CONFIG.get("hyperbolic_max_tokens", 1024))
         }),
         "gemini": (ChatGoogleGenerativeAI, {
-            "api_key": ENV.get("GOOGLE_API_KEY"),
             "model": MODEL_CONFIG.get("gemini_model"),
             "temperature": float(MODEL_CONFIG.get("gemini_temperature", 0.7)),
-            "max_output_tokens": int(MODEL_CONFIG.get("gemini_max_tokens", 1024))
+            "max_output_tokens": int(MODEL_CONFIG.get("gemini_max_tokens", 1024)),
+            "convert_system_message_to_human": True
         }),
     }
     
@@ -91,6 +92,14 @@ def get_conversation_messages(user_conversation_history: Dict[int, List[Union[Sy
         return [
             {"role": "user" if isinstance(msg, (SystemMessage, HumanMessage)) else "assistant", 
              "content": f"System: {msg.content}" if isinstance(msg, SystemMessage) else msg.content}
+            for msg in messages
+        ]
+    
+    if selected_model == "gemini":
+        return [
+            msg if isinstance(msg, (HumanMessage, AIMessage)) else
+            HumanMessage(content=f"System: {msg.content}") if isinstance(msg, SystemMessage) else
+            msg
             for msg in messages
         ]
     
