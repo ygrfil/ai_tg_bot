@@ -66,7 +66,7 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
         },
         "gemini": {
             "api_key": ENV.get("GOOGLE_API_KEY"),
-            "model": MODEL_CONFIG.get("gemini_model"),
+            "model": "gemini-1.5-flash",
             "temperature": float(MODEL_CONFIG.get("gemini_temperature", 0.7)),
             "max_output_tokens": int(MODEL_CONFIG.get("gemini_max_tokens", 1024)),
         },
@@ -98,7 +98,7 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
                 return None
             try:
                 genai.configure(api_key=config["api_key"])
-                model = genai.GenerativeModel(config["model"])
+                model = genai.GenerativeModel("gemini-1.5-flash")
                 logger.info(f"Gemini model initialized for user {user_id}")
                 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
                 import google.api_core.exceptions
@@ -110,23 +110,14 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
                 )
                 def gemini_generate(messages):
                     try:
-                        chat = model.start_chat(history=[])
+                        prompt = ""
                         for message in messages:
-                            if message['role'] == 'system':
-                                chat.send_message(message['content'])
-                            elif message['role'] == 'user':
-                                chat.send_message(message['content'])
-                            elif message['role'] == 'assistant':
-                                chat.send_message(message['content'], role='model')
-        
-                        # Get the last user message
-                        last_user_message = next((m['content'] for m in reversed(messages) if m['role'] == 'user'), None)
-        
-                        if last_user_message:
-                            response = chat.send_message(last_user_message)
-                            return response.text
-                        else:
-                            return "I'm sorry, but I didn't receive any message to respond to. Could you please provide a question or topic for me to address?"
+                            role = message['role']
+                            content = message['content']
+                            prompt += f"{role.capitalize()}: {content}\n\n"
+                        
+                        response = model.generate_content(prompt)
+                        return response.text
                     except google.api_core.exceptions.GoogleAPIError as e:
                         logger.error(f"Google API Error with Gemini model: {str(e)}")
                         raise
