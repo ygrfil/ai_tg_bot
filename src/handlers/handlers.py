@@ -368,7 +368,7 @@ def handle_message(bot, message: Message) -> None:
                     )
                     ai_response = ""
                     for chunk in response:
-                        if chunk.choices[0].delta.content is not None:
+                        if chunk.choices and chunk.choices[0].delta and chunk.choices[0].delta.content:
                             ai_response += chunk.choices[0].delta.content
                             stream_handler.on_llm_new_token(chunk.choices[0].delta.content)
             
@@ -407,11 +407,13 @@ def handle_message(bot, message: Message) -> None:
     except Exception as e:
         error_message = str(e)
         logger.error(f"Error in handle_message: {error_message}")
-        if 'overloaded_error' in error_message.lower():
-            bot.edit_message_text("The AI model is currently overloaded. Please try again in a few moments or choose a different model using the /model command.", chat_id=message.chat.id, message_id=placeholder_message.message_id)
-        elif '400 bad request' in error_message.lower():
-            logger.error(f"Bad Request Error. User ID: {user_id}, Model: {selected_model}, Message: {message.content_type}")
+        if 'rate_limit_exceeded' in error_message.lower():
+            bot.edit_message_text("The API rate limit has been exceeded. Please try again in a few moments or choose a different model using the /model command.", chat_id=message.chat.id, message_id=placeholder_message.message_id)
+        elif 'invalid_request_error' in error_message.lower():
+            logger.error(f"Invalid Request Error. User ID: {user_id}, Model: {selected_model}, Message: {message.content_type}")
             bot.edit_message_text("There was an issue with the request. Please try again, choose a different model using the /model command, or contact support if the problem persists.", chat_id=message.chat.id, message_id=placeholder_message.message_id)
+        elif 'context_length_exceeded' in error_message.lower():
+            bot.edit_message_text("The conversation is too long for the current model. Please use the /reset command to start a new conversation.", chat_id=message.chat.id, message_id=placeholder_message.message_id)
         else:
             bot.edit_message_text(f"An error occurred: {error_message}. Please try again or choose a different model using the /model command.", chat_id=message.chat.id, message_id=placeholder_message.message_id)
 

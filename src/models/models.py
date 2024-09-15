@@ -86,7 +86,7 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
         if selected_model == "openai":
             client = OpenAI(api_key=config["api_key"])
             logger.info(f"OpenAI client initialized for user {user_id}")
-            return lambda **kwargs: client.chat.completions.create(**kwargs)
+            return client.chat.completions.create
         elif selected_model == "anthropic":
             client = anthropic.Anthropic(api_key=config["api_key"])
             logger.info(f"Anthropic client initialized for user {user_id}")
