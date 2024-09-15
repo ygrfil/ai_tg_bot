@@ -6,6 +6,8 @@ from config import ENV
 import time
 import logging
 from src.database.database import is_user_allowed, get_user_preferences, get_last_interaction_time, update_last_interaction_time
+import requests
+import base64
 
 logger = logging.getLogger(__name__)
 
@@ -109,3 +111,21 @@ class StreamHandler:
 
     def on_llm_end(self, response: str, **kwargs) -> None:
         self.update_message()
+
+def download_and_encode_image(bot: Any, file_id: str) -> str:
+    file_info = bot.get_file(file_id)
+    file_url = f"https://api.telegram.org/file/bot{bot.token}/{file_info.file_path}"
+    response = requests.get(file_url)
+    response.raise_for_status()
+    return base64.b64encode(response.content).decode()
+
+def process_image_message(message: Message, bot: Any, selected_model: str) -> Dict[str, Any]:
+    file_id = message.photo[-1].file_id
+    img_str = download_and_encode_image(bot, file_id)
+    
+    if selected_model == "openai":
+        return {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_str}"}}
+    elif selected_model == "anthropic":
+        return {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": img_str}}
+    else:
+        raise ValueError(f"Image processing not supported for model: {selected_model}")
