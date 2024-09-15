@@ -3,7 +3,6 @@ from typing import List, Dict, Any, Union
 from openai import OpenAI
 from anthropic import Anthropic
 import google.generativeai as genai
-import textwrap
 from config import MODEL_CONFIG, ENV
 from src.database.database import get_user_preferences
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -103,12 +102,16 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
                 logger.info(f"Gemini model initialized for user {user_id}")
                 def gemini_generate(messages):
                     try:
-                        prompt = "\n".join([f"{m['role']}: {m['content']}" for m in messages])
-                        response = model.generate_content(prompt)
-                        if response.text:
-                            return textwrap.dedent(response.text)
-                        else:
-                            return "No content generated."
+                        chat = model.start_chat(history=[])
+                        for message in messages:
+                            if message['role'] == 'system':
+                                chat.send_message(message['content'])
+                            elif message['role'] == 'user':
+                                chat.send_message(message['content'])
+                            elif message['role'] == 'assistant':
+                                chat.send_message(message['content'], role='model')
+                        response = chat.send_message('')
+                        return response.text
                     except Exception as e:
                         logger.error(f"Error generating content with Gemini model: {str(e)}")
                         raise ValueError(f"Error processing Gemini response: {str(e)}")
