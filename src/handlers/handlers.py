@@ -354,9 +354,10 @@ def handle_message(bot, message: Message) -> None:
                     stream=True
                 )
                 for chunk in response:
-                    if chunk.delta.text:
-                        ai_response += chunk.delta.text
-                        stream_handler.on_llm_new_token(chunk.delta.text)
+                    if isinstance(chunk, anthropic.types.MessageStreamEvent):
+                        if chunk.type == "content_block_delta":
+                            ai_response += chunk.delta.text
+                            stream_handler.on_llm_new_token(chunk.delta.text)
             else:
                 response = llm_function(
                     model=model_name,
