@@ -54,7 +54,7 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
         if selected_model == "gemini":
             genai.configure(api_key=api_key)
             model = model_configs[selected_model](MODEL_CONFIG.get(f"{selected_model}_model"))
-            return lambda messages: model.generate_content("\n\n".join(f"{m['role'].capitalize()}: {m['content']}" for m in messages)).text
+            return lambda messages: model.generate_content("\n\n".join(f"{m['role'].capitalize()}: {m['content']}" for m in messages)).text if isinstance(messages[0]['content'], str) else model.generate_content(messages[0]['content']).text
         else:
             client = model_configs[selected_model](api_key=api_key)
             return client.chat.completions.create if selected_model != "anthropic" else client.messages.create
