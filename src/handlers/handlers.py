@@ -2,6 +2,7 @@ import logging
 from typing import Dict, List, Union
 from pydantic import BaseModel
 from anthropic import Anthropic, HUMAN_PROMPT, AI_PROMPT
+import anthropic
 
 logger = logging.getLogger(__name__)
 from telebot.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
@@ -354,7 +355,7 @@ def handle_message(bot, message: Message) -> None:
                     stream=True
                 )
                 for chunk in response:
-                    if isinstance(chunk, anthropic.types.MessageStreamEvent):
+                    if isinstance(chunk, anthropic.types.message_stream.MessageStreamEvent):
                         if chunk.type == "content_block_delta":
                             ai_response += chunk.delta.text
                             stream_handler.on_llm_new_token(chunk.delta.text)
