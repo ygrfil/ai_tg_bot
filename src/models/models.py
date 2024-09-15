@@ -54,7 +54,7 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
         if selected_model == "gemini":
             genai.configure(api_key=api_key)
             model = model_configs[selected_model](MODEL_CONFIG.get(f"{selected_model}_model"))
-            return lambda messages: model.generate_content("\n\n".join(f"{m['role'].capitalize()}: {m['content']}" for m in messages)).text if isinstance(messages[0]['content'], str) else model.generate_content(messages[0]['content']).text
+            return lambda messages: model.generate_content(messages[-1]['content']).text
         else:
             client = model_configs[selected_model](api_key=api_key)
             return client.chat.completions.create if selected_model != "anthropic" else client.messages.create
@@ -62,11 +62,15 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
         logger.error(f"Error initializing {selected_model} model for user {user_id}: {str(e)}")
         return None
 
-def get_conversation_messages(user_conversation_history: Dict[int, List[Message]], user_id: int, selected_model: str) -> List[Dict[str, str]]:
+def get_conversation_messages(user_conversation_history: Dict[int, List[Message]], user_id: int, selected_model: str) -> List[Dict[str, Union[str, List[Dict[str, str]]]]]:
     messages = [{"role": msg.role, "content": msg.content} for msg in user_conversation_history[user_id]]
     
     if selected_model == "gemini":
-        # For Gemini, we need to format messages differently
-        return [{"role": "user" if msg["role"] == "user" else "model", "parts": [{"text": msg["content"]}]} for msg in messages]
+        # For Gemini, we only need the last user message
+        user_messages = [msg for msg in messages if msg["role"] == "user"]
+        if user_messages:
+            return [{"role": "user", "parts": [{"text": user_messages[-1]["content"]}]}]
+        else:
+            return []
     
     return messages[:-1] if messages and messages[-1]["role"] == "assistant" else messages
