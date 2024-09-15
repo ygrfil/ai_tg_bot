@@ -23,10 +23,13 @@ for model in ['openai', 'anthropic', 'perplexity', 'groq', 'hyperbolic', 'gemini
 
 # Add base URLs for models using OpenAI-compatible API
 MODEL_CONFIG.update({
-    "perplexity_base_url": "https://api.perplexity.ai",
     "groq_base_url": "https://api.groq.com/openai/v1",
     "hyperbolic_base_url": "https://api.hyperbolic.ai"
 })
+
+# Ensure Perplexity model is set correctly
+if not MODEL_CONFIG.get('perplexity_model'):
+    MODEL_CONFIG['perplexity_model'] = 'llama-3-sonar-large-32k-online'
 
 ENV = {
     "TELEGRAM_BOT_TOKEN": os.getenv("TELEGRAM_BOT_TOKEN"),

@@ -361,7 +361,7 @@ def handle_message(bot, message: Message) -> None:
                         if chunk.type == "content_block_delta":
                             ai_response += chunk.delta.text
                             stream_handler.on_llm_new_token(chunk.delta.text)
-            else:
+            else:  # OpenAI, Perplexity, and other OpenAI-compatible APIs
                 response = llm_function(
                     model=model_name,
                     messages=messages,

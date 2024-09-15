@@ -1,10 +1,8 @@
 import logging
 from typing import List, Dict, Any, Union
-from openai import OpenAI, Stream
-from openai.types.chat import ChatCompletionChunk
+from openai import OpenAI
 from anthropic import Anthropic
 import google.generativeai as genai
-import requests
 from config import MODEL_CONFIG, ENV
 from src.database.database import get_user_preferences
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -48,7 +46,7 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
         "perplexity": {
             "api_key": ENV.get("PERPLEXITY_API_KEY"),
             "model": MODEL_CONFIG.get("perplexity_model"),
-            "base_url": MODEL_CONFIG.get("perplexity_base_url")
+            "base_url": "https://api.perplexity.ai"
         },
         "groq": {
             "api_key": ENV.get("GROQ_API_KEY"),
@@ -97,6 +95,10 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
             model = genai.GenerativeModel(config["model"])
             logger.info(f"Gemini model initialized for user {user_id}")
             return model.generate_content
+        elif selected_model == "perplexity":
+            client = OpenAI(api_key=config["api_key"], base_url=config["base_url"])
+            logger.info(f"Perplexity client initialized for user {user_id}")
+            return lambda **kwargs: client.chat.completions.create(**kwargs)
         else:
             # For other models, we'll use OpenAI's API with a different base URL
             client = OpenAI(api_key=config["api_key"], base_url=config.get("base_url", "https://api.openai.com/v1"))
