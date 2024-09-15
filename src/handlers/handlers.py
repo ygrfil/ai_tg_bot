@@ -345,15 +345,15 @@ def handle_message(bot, message: Message) -> None:
             response = llm_function(
                 model=MODEL_CONFIG.get("anthropic_model"),
                 messages=messages,
-                max_tokens_to_sample=int(MODEL_CONFIG.get("anthropic_max_tokens", 1024)),
+                max_tokens=int(MODEL_CONFIG.get("anthropic_max_tokens", 1024)),
                 temperature=float(MODEL_CONFIG.get("anthropic_temperature", 0.7)),
                 stream=True
             )
             ai_response = ""
             for chunk in response:
-                if chunk.completion:
-                    ai_response += chunk.completion
-                    stream_handler.on_llm_new_token(chunk.completion)
+                if chunk.delta:
+                    ai_response += chunk.delta.text
+                    stream_handler.on_llm_new_token(chunk.delta.text)
         else:  # OpenAI and others
             response = llm_function(
                 model=MODEL_CONFIG.get(f"{selected_model}_model"),
