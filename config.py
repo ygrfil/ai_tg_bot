@@ -31,12 +31,14 @@ ENV = {
     "OPENAI_MAX_TOKENS": os.getenv("OPENAI_MAX_TOKENS"),
     "ANTHROPIC_MODEL": os.getenv("ANTHROPIC_MODEL"),
     "ANTHROPIC_TEMPERATURE": os.getenv("ANTHROPIC_TEMPERATURE"),
+    "PERPLEXITY_API_KEY": os.getenv("PERPLEXITY_API_KEY"),
     "PERPLEXITY_MODEL": os.getenv("PERPLEXITY_MODEL"),
+    "GROQ_API_KEY": os.getenv("GROQ_API_KEY"),
     "GROQ_MODEL": os.getenv("GROQ_MODEL"),
     "GROQ_TEMPERATURE": os.getenv("GROQ_TEMPERATURE"),
     "HYPERBOLIC_API_KEY": os.getenv("HYPERBOLIC_API_KEY"),
-    "ADMIN_USER_IDS": os.getenv("ADMIN_USER_IDS").split(","),
-    "ALLOWED_USER_IDS": os.getenv("ALLOWED_USER_IDS").split(","),
+    "ADMIN_USER_IDS": os.getenv("ADMIN_USER_IDS", "").split(","),
+    "ALLOWED_USER_IDS": os.getenv("ALLOWED_USER_IDS", "").split(","),
     "GOOGLE_API_KEY": os.getenv("GOOGLE_API_KEY"),
 }
 

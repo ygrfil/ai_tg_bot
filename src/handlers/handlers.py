@@ -321,11 +321,6 @@ def handle_message(bot, message: Message) -> None:
     try:
         stream_handler = StreamHandler(bot, message.chat.id, placeholder_message.message_id)
         llm_function = get_llm(selected_model, stream_handler, user_id)
-        
-        if llm_function is None:
-            bot.edit_message_text(f"The {selected_model} model is currently unavailable. Please choose a different model using the /model command.", chat_id=message.chat.id, message_id=placeholder_message.message_id)
-            return
-        
         logger.info(f"Using model: {selected_model}")
 
         if reset_conversation_if_needed(user_id):
@@ -377,19 +372,19 @@ def handle_message(bot, message: Message) -> None:
         error_message = str(e)
         logger.error(f"Error in handle_message: {error_message}")
         if "API key" in error_message:
-            bot.edit_message_text(f"Configuration error: {error_message} Please contact the administrator.", chat_id=message.chat.id, message_id=placeholder_message.message_id)
+            bot.edit_message_text(f"Configuration error: {error_message} Please contact the administrator or choose a different model using the /model command.", chat_id=message.chat.id, message_id=placeholder_message.message_id)
         else:
             bot.edit_message_text(f"An error occurred: {error_message}", chat_id=message.chat.id, message_id=placeholder_message.message_id)
     except Exception as e:
         error_message = str(e)
         logger.error(f"Error in handle_message: {error_message}")
         if 'overloaded_error' in error_message.lower():
-            bot.edit_message_text("The AI model is currently overloaded. Please try again in a few moments.", chat_id=message.chat.id, message_id=placeholder_message.message_id)
+            bot.edit_message_text("The AI model is currently overloaded. Please try again in a few moments or choose a different model using the /model command.", chat_id=message.chat.id, message_id=placeholder_message.message_id)
         elif '400 bad request' in error_message.lower():
             logger.error(f"Bad Request Error. User ID: {user_id}, Model: {selected_model}, Message: {message.content_type}")
-            bot.edit_message_text("There was an issue with the request. Please try again or contact support if the problem persists.", chat_id=message.chat.id, message_id=placeholder_message.message_id)
+            bot.edit_message_text("There was an issue with the request. Please try again, choose a different model using the /model command, or contact support if the problem persists.", chat_id=message.chat.id, message_id=placeholder_message.message_id)
         else:
-            bot.edit_message_text(f"An error occurred: {error_message}", chat_id=message.chat.id, message_id=placeholder_message.message_id)
+            bot.edit_message_text(f"An error occurred: {error_message}. Please try again or choose a different model using the /model command.", chat_id=message.chat.id, message_id=placeholder_message.message_id)
 
 from src.utils.image_utils import process_image_message
 

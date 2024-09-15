@@ -80,7 +80,7 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
     if config.get("api_key") is None:
         error_message = f"API key for {selected_model} is not set. Please check your environment variables."
         logger.warning(error_message)
-        return None
+        raise ValueError(error_message)
     
     try:
         if selected_model == "openai":
