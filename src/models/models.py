@@ -9,24 +9,45 @@ from config import MODEL_CONFIG, ENV
 from src.database.database import get_user_preferences
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.language_models import BaseChatModel
-from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
-class LLMConfig(BaseModel):
-    api_key: str = Field(..., description="API key for the model")
-    model: str = Field(..., description="Model name")
-    temperature: float = Field(0.7, description="Temperature for text generation")
-    max_tokens: int = Field(1024, description="Maximum number of tokens to generate")
-
 def get_llm(selected_model: str, stream_handler: Any, user_id: int) -> BaseChatModel:
-    llm_config: Dict[str, tuple] = {
-        "openai": (ChatOpenAI, LLMConfig(api_key=ENV.get("OPENAI_API_KEY"), model=MODEL_CONFIG.get("openai_model"), temperature=float(MODEL_CONFIG.get("openai_temperature")))),
-        "anthropic": (ChatAnthropic, LLMConfig(api_key=ENV.get("ANTHROPIC_API_KEY"), model=MODEL_CONFIG.get("anthropic_model"), temperature=float(MODEL_CONFIG.get("anthropic_temperature")))),
-        "perplexity": (ChatPerplexity, LLMConfig(api_key=ENV.get("PERPLEXITY_API_KEY"), model=MODEL_CONFIG.get("perplexity_model"))),
-        "groq": (ChatGroq, LLMConfig(api_key=ENV.get("GROQ_API_KEY"), model=MODEL_CONFIG.get("groq_model"), temperature=float(MODEL_CONFIG.get("groq_temperature")))),
-        "hyperbolic": (ChatOpenAI, LLMConfig(api_key=ENV.get("HYPERBOLIC_API_KEY"), model=MODEL_CONFIG.get("hyperbolic_model"), temperature=float(MODEL_CONFIG.get("hyperbolic_temperature")))),
-        "gemini": (ChatGoogleGenerativeAI, LLMConfig(api_key=ENV.get("GOOGLE_API_KEY"), model=MODEL_CONFIG.get("gemini_model"), temperature=float(MODEL_CONFIG.get("gemini_temperature")))),
+    llm_config = {
+        "openai": (ChatOpenAI, {
+            "api_key": ENV.get("OPENAI_API_KEY"),
+            "model": MODEL_CONFIG.get("openai_model"),
+            "temperature": float(MODEL_CONFIG.get("openai_temperature", 0.7)),
+            "max_tokens": int(MODEL_CONFIG.get("openai_max_tokens", 1024))
+        }),
+        "anthropic": (ChatAnthropic, {
+            "api_key": ENV.get("ANTHROPIC_API_KEY"),
+            "model": MODEL_CONFIG.get("anthropic_model"),
+            "temperature": float(MODEL_CONFIG.get("anthropic_temperature", 0.7)),
+            "max_tokens": int(MODEL_CONFIG.get("anthropic_max_tokens", 1024))
+        }),
+        "perplexity": (ChatPerplexity, {
+            "api_key": ENV.get("PERPLEXITY_API_KEY"),
+            "model": MODEL_CONFIG.get("perplexity_model")
+        }),
+        "groq": (ChatGroq, {
+            "api_key": ENV.get("GROQ_API_KEY"),
+            "model": MODEL_CONFIG.get("groq_model"),
+            "temperature": float(MODEL_CONFIG.get("groq_temperature", 0.7)),
+            "max_tokens": int(MODEL_CONFIG.get("groq_max_tokens", 1024))
+        }),
+        "hyperbolic": (ChatOpenAI, {
+            "api_key": ENV.get("HYPERBOLIC_API_KEY"),
+            "model": MODEL_CONFIG.get("hyperbolic_model"),
+            "temperature": float(MODEL_CONFIG.get("hyperbolic_temperature", 0.7)),
+            "max_tokens": int(MODEL_CONFIG.get("hyperbolic_max_tokens", 1024))
+        }),
+        "gemini": (ChatGoogleGenerativeAI, {
+            "api_key": ENV.get("GOOGLE_API_KEY"),
+            "model": MODEL_CONFIG.get("gemini_model"),
+            "temperature": float(MODEL_CONFIG.get("gemini_temperature", 0.7)),
+            "max_tokens": int(MODEL_CONFIG.get("gemini_max_tokens", 1024))
+        }),
     }
     
     if selected_model not in llm_config:
@@ -35,13 +56,13 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int) -> BaseChatM
     
     LLMClass, config = llm_config[selected_model]
     
-    if config.api_key is None:
+    if config["api_key"] is None:
         error_message = f"API key for {selected_model} is not set. Please check your environment variables."
         logger.error(error_message)
         raise ValueError(error_message)
     
     try:
-        llm = LLMClass(streaming=True, callbacks=[stream_handler], **config.dict())
+        llm = LLMClass(streaming=True, callbacks=[stream_handler], **config)
         return llm
     except Exception as e:
         error_message = f"Error initializing {selected_model} model for user {user_id}: {str(e)}"
