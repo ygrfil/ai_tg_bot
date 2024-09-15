@@ -54,7 +54,7 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
         if selected_model == "gemini":
             genai.configure(api_key=api_key)
             model = model_configs[selected_model](MODEL_CONFIG.get(f"{selected_model}_model"))
-            return lambda messages: model.generate_content([messages[-1]['content']]).text
+            return lambda messages: model.generate_content(messages[-1]['content']).text
         else:
             client = model_configs[selected_model](api_key=api_key)
             return client.chat.completions.create if selected_model != "anthropic" else client.messages.create
@@ -69,8 +69,8 @@ def get_conversation_messages(user_conversation_history: Dict[int, List[Message]
         # For Gemini, we only need the last user message
         user_messages = [msg for msg in messages if msg["role"] == "user"]
         if user_messages:
-            return [{"role": "user", "parts": [{"text": user_messages[-1]["content"]}]}]
+            return user_messages[-1]["content"]
         else:
-            return []
+            return ""
     
     return messages[:-1] if messages and messages[-1]["role"] == "assistant" else messages
