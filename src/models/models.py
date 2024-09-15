@@ -88,8 +88,9 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
             logger.info(f"OpenAI client initialized for user {user_id}")
             return lambda **kwargs: client.chat.completions.create(**kwargs)
         elif selected_model == "anthropic":
+            client = anthropic.Anthropic(api_key=config["api_key"])
             logger.info(f"Anthropic client initialized for user {user_id}")
-            return anthropic.Anthropic(api_key=config["api_key"]).completions.create
+            return client.completions.create
         elif selected_model == "gemini":
             genai.configure(api_key=config["api_key"])
             model = genai.GenerativeModel(config["model"])
@@ -103,7 +104,12 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
     except Exception as e:
         error_message = f"Error initializing {selected_model} model for user {user_id}: {str(e)}"
         logger.error(error_message)
-        raise ValueError(error_message)
+        if "API key" in str(e):
+            raise ValueError(f"Invalid API key for {selected_model}. Please check your configuration.")
+        elif "Connection error" in str(e):
+            raise ValueError(f"Connection error for {selected_model}. Please check your internet connection.")
+        else:
+            raise ValueError(error_message)
 
 def get_conversation_messages(user_conversation_history: Dict[int, List[Union[SystemMessage, HumanMessage, AIMessage]]], 
                               user_id: int, 

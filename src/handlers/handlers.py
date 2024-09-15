@@ -333,24 +333,24 @@ def handle_message(bot, message: Message) -> None:
         user_conversation_history[user_id] = user_conversation_history[user_id][-10:]  # Keep only the last 10 messages
         messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
         
-        if selected_model == "gemini":
-            response = llm_function(messages)
-            ai_response = response.text
-        elif selected_model == "anthropic":
-            response = llm_function(
-                model=MODEL_CONFIG.get("anthropic_model"),
-                messages=messages,
-                max_tokens_to_sample=int(MODEL_CONFIG.get("anthropic_max_tokens", 1024)),
-                temperature=float(MODEL_CONFIG.get("anthropic_temperature", 0.7)),
-                stream=True
-            )
-            ai_response = ""
-            for chunk in response:
-                if chunk.delta:
-                    ai_response += chunk.delta.text
-                    stream_handler.on_llm_new_token(chunk.delta.text)
-        else:  # OpenAI and others
-            try:
+        try:
+            if selected_model == "gemini":
+                response = llm_function(messages)
+                ai_response = response.text
+            elif selected_model == "anthropic":
+                response = llm_function(
+                    model=MODEL_CONFIG.get("anthropic_model"),
+                    messages=messages,
+                    max_tokens_to_sample=int(MODEL_CONFIG.get("anthropic_max_tokens", 1024)),
+                    temperature=float(MODEL_CONFIG.get("anthropic_temperature", 0.7)),
+                    stream=True
+                )
+                ai_response = ""
+                for chunk in response:
+                    if chunk.delta:
+                        ai_response += chunk.delta.text
+                        stream_handler.on_llm_new_token(chunk.delta.text)
+            else:  # OpenAI and others
                 response = llm_function(
                     model=MODEL_CONFIG.get(f"{selected_model}_model"),
                     messages=messages,
@@ -363,12 +363,26 @@ def handle_message(bot, message: Message) -> None:
                     if chunk.choices[0].delta.content is not None:
                         ai_response += chunk.choices[0].delta.content
                         stream_handler.on_llm_new_token(chunk.choices[0].delta.content)
-                
-                if not ai_response:
-                    raise ValueError("No response generated from the model.")
-            except Exception as e:
-                logger.error(f"Error with {selected_model} model: {str(e)}")
-                raise ValueError(f"Error with {selected_model} model: {str(e)}")
+            
+            if not ai_response:
+                raise ValueError("No response generated from the model.")
+            
+            user_conversation_history[user_id].append(AIMessage(ai_response))
+            user_conversation_history[user_id] = user_conversation_history[user_id][-10:]  # Ensure we still have only 10 messages after adding the response
+            
+            messages_count = 1
+            log_usage(user_id, selected_model, messages_count)
+        except Exception as e:
+            logger.error(f"Error with {selected_model} model: {str(e)}")
+            error_message = f"Error with {selected_model} model: {str(e)}"
+            if "API key" in str(e):
+                error_message += " Please check your API key configuration."
+            elif "Connection error" in str(e):
+                error_message += " Please check your internet connection and try again."
+            elif "Missing required arguments" in str(e):
+                error_message += " There's an issue with the model configuration. Please contact the administrator."
+            bot.edit_message_text(error_message, chat_id=message.chat.id, message_id=placeholder_message.message_id)
+            return
         
         user_conversation_history[user_id].append(AIMessage(ai_response))
         user_conversation_history[user_id] = user_conversation_history[user_id][-10:]  # Ensure we still have only 10 messages after adding the response
