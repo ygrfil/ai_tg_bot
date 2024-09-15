@@ -346,15 +346,15 @@ def handle_message(bot, message: Message) -> None:
                     response = llm_function(
                         model=model_name,
                         messages=messages,
-                        max_tokens_to_sample=max_tokens,
+                        max_tokens=max_tokens,
                         temperature=temperature,
                         stream=True
                     )
                     ai_response = ""
                     for chunk in response:
-                        if chunk.content:
-                            ai_response += chunk.content[0].text
-                            stream_handler.on_llm_new_token(chunk.content[0].text)
+                        if chunk.delta:
+                            ai_response += chunk.delta.text
+                            stream_handler.on_llm_new_token(chunk.delta.text)
                 else:
                     response = llm_function(
                         model=model_name,
