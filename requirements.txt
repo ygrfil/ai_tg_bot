@@ -9,3 +9,4 @@ langchain-google-genai==1.0.10
 requests==2.32.3
 Pillow==10.4.0
 faiss-cpu==1.7.4
+tenacity==8.2.3

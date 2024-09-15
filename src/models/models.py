@@ -10,9 +10,12 @@ from src.database.database import get_user_preferences
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain_core.language_models import BaseChatModel
 from PIL import Image
+import time
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 logger = logging.getLogger(__name__)
 
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
 def get_llm(selected_model: str, stream_handler: Any, user_id: int) -> BaseChatModel:
     logger.info(f"Initializing LLM for model: {selected_model}")
     llm_config = {
