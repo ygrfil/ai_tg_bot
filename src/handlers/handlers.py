@@ -57,6 +57,11 @@ def handle_model_selection(bot, message: Message) -> None:
     user_prefs = get_user_preferences(message.from_user.id)
     current_model = user_prefs.get('selected_model', 'openai')  # Default to 'openai' if not set
     model_display_names = {key.split('_')[0]: value for key, value in MODEL_CONFIG.items() if key.endswith('_model')}
+    # Ensure all required keys are present in model_display_names
+    required_models = ["openai", "anthropic", "perplexity", "groq", "hyperbolic", "gemini"]
+    for model in required_models:
+        if model not in model_display_names:
+            model_display_names[model] = model.capitalize()
     bot.send_message(message.chat.id, f"Current model: {model_display_names.get(current_model, current_model)}\nSelect a model:", reply_markup=create_keyboard([
         (model_display_names["openai"], "model_openai"),
         (model_display_names["anthropic"], "model_anthropic"),
