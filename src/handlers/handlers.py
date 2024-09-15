@@ -1,6 +1,7 @@
 import logging
 from typing import Dict, List, Union
 from pydantic import BaseModel
+import anthropic
 
 logger = logging.getLogger(__name__)
 from telebot.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
