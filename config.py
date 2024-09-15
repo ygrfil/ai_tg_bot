@@ -29,7 +29,7 @@ MODEL_CONFIG.update({
 
 # Ensure Perplexity model is set correctly
 if not MODEL_CONFIG.get('perplexity_model'):
-    MODEL_CONFIG['perplexity_model'] = 'llama-3-sonar-large-32k-online'
+    MODEL_CONFIG['perplexity_model'] = 'llama-3.1-sonar-large-128k-online'
 
 ENV = {
     "TELEGRAM_BOT_TOKEN": os.getenv("TELEGRAM_BOT_TOKEN"),
