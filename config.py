@@ -37,7 +37,7 @@ print("Environment variables loaded:")
 for key, value in ENV.items():
     if key in ["ADMIN_USER_IDS", "ALLOWED_USER_IDS"]:
         print(f"{key}: [REDACTED]")
-    elif "API_KEY" in key:
+    elif "API_KEY" in key or key == "TELEGRAM_BOT_TOKEN":
         print(f"{key}: {'[SET]' if value else '[NOT SET]'}")
     else:
         print(f"{key}: {value}")

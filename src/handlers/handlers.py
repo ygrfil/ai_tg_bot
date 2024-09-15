@@ -329,6 +329,8 @@ def handle_message(bot, message: Message) -> None:
         if llm is None:
             bot.edit_message_text("The selected model is currently unavailable. Please choose a different model using the /model command.", chat_id=message.chat.id, message_id=placeholder_message.message_id)
             return
+        
+        logger.info(f"Using model: {selected_model}")
 
         if reset_conversation_if_needed(user_id):
             system_prompt = get_system_prompt(user_id)

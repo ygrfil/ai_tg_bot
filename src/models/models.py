@@ -13,6 +13,7 @@ from langchain_core.language_models import BaseChatModel
 logger = logging.getLogger(__name__)
 
 def get_llm(selected_model: str, stream_handler: Any, user_id: int) -> BaseChatModel:
+    logger.info(f"Initializing LLM for model: {selected_model}")
     llm_config = {
         "openai": (ChatOpenAI, {
             "api_key": ENV.get("OPENAI_API_KEY"),
@@ -48,6 +49,9 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int) -> BaseChatM
             "temperature": float(MODEL_CONFIG.get("gemini_temperature", 0.7)),
             "max_output_tokens": int(MODEL_CONFIG.get("gemini_max_tokens", 1024))
         }),
+    }
+    
+    logger.info(f"Model config for {selected_model}: {llm_config[selected_model]}")
     }
     
     if selected_model not in llm_config:
