@@ -100,7 +100,12 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
                 response = model.generate_content(
                     [{"role": m["role"], "parts": [{"text": m["content"]}]} for m in messages]
                 )
-                return response.text if hasattr(response, 'text') else str(response)
+                if hasattr(response, 'text'):
+                    return response.text
+                elif hasattr(response, 'parts'):
+                    return ''.join(part.text for part in response.parts if hasattr(part, 'text'))
+                else:
+                    return str(response)
             return gemini_generate
         elif selected_model == "perplexity":
             client = OpenAI(api_key=config["api_key"], base_url=config["base_url"])

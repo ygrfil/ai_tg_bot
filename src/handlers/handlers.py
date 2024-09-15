@@ -330,6 +330,8 @@ def handle_message(bot, message: Message) -> None:
             if selected_model == "gemini":
                 try:
                     ai_response = llm_function(messages)
+                    if not ai_response:
+                        raise ValueError("Empty response from Gemini model")
                     stream_handler.on_llm_new_token(ai_response)
                     stream_handler.on_llm_end(ai_response)
                 except Exception as e:
