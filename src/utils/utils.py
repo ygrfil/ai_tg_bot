@@ -86,6 +86,7 @@ class StreamHandler:
         self.response = ""
         self.last_update_time = time.time()
         self.update_interval = 0.3
+        self.max_message_length = 4096
 
     def on_llm_new_token(self, token: str) -> None:
         self.response += token
@@ -93,12 +94,6 @@ class StreamHandler:
         if current_time - self.last_update_time >= self.update_interval:
             self.update_message()
             self.last_update_time = current_time
-        self.max_message_length = 4096
-
-    def on_llm_new_token(self, token: str, **kwargs) -> None:
-        self.response += token
-        if time.time() - self.last_update_time >= self.update_interval:
-            self.update_message()
 
     def update_message(self) -> None:
         try:
