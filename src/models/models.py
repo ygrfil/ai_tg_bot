@@ -45,8 +45,10 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
         },
         "perplexity": {
             "api_key": ENV.get("PERPLEXITY_API_KEY"),
-            "model": MODEL_CONFIG.get("perplexity_model"),
-            "base_url": "https://api.perplexity.ai"
+            "model": MODEL_CONFIG.get("perplexity_model", "llama-3.1-sonar-large-128k-online"),
+            "base_url": "https://api.perplexity.ai",
+            "temperature": float(MODEL_CONFIG.get("perplexity_temperature", 0.7)),
+            "max_tokens": int(MODEL_CONFIG.get("perplexity_max_tokens", 1024))
         },
         "groq": {
             "api_key": ENV.get("GROQ_API_KEY"),
