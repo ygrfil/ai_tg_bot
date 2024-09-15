@@ -34,12 +34,19 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int) -> BaseChatM
         selected_model = "openai"
     
     LLMClass, config = llm_config[selected_model]
+    
+    if config.api_key is None:
+        error_message = f"API key for {selected_model} is not set. Please check your environment variables."
+        logger.error(error_message)
+        raise ValueError(error_message)
+    
     try:
         llm = LLMClass(streaming=True, callbacks=[stream_handler], **config.dict())
         return llm
     except Exception as e:
-        logger.error(f"Error initializing {selected_model} model for user {user_id}: {str(e)}")
-        raise ValueError(f"Error initializing {selected_model} model: {str(e)}")
+        error_message = f"Error initializing {selected_model} model for user {user_id}: {str(e)}"
+        logger.error(error_message)
+        raise ValueError(error_message)
 
 def get_conversation_messages(user_conversation_history: Dict[int, List[Union[SystemMessage, HumanMessage, AIMessage]]], 
                               user_id: int, 

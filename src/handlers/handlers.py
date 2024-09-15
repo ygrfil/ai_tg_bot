@@ -342,6 +342,13 @@ def handle_message(bot, message: Message) -> None:
         
         messages_count = 1
         log_usage(user_id, selected_model, messages_count)
+    except ValueError as e:
+        error_message = str(e)
+        logger.error(f"Error in handle_message: {error_message}")
+        if "API key" in error_message:
+            bot.edit_message_text(f"Configuration error: {error_message} Please contact the administrator.", chat_id=message.chat.id, message_id=placeholder_message.message_id)
+        else:
+            bot.edit_message_text(f"An error occurred: {error_message}", chat_id=message.chat.id, message_id=placeholder_message.message_id)
     except Exception as e:
         error_message = str(e)
         logger.error(f"Error in handle_message: {error_message}")
