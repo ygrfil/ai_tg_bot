@@ -16,10 +16,14 @@ def load_model_config(file_path: str) -> Dict[str, str]:
 MODEL_CONFIG = load_model_config('models_names.txt')
 
 # Ensure all necessary configurations are present
-for model in ['openai', 'anthropic', 'perplexity', 'groq', 'hyperbolic', 'gemini', 'o1-preview-2024-09-12']:
+for model in ['openai', 'anthropic', 'perplexity', 'groq', 'hyperbolic', 'gemini', 'o1']:
     MODEL_CONFIG.setdefault(f'{model}_model', os.getenv(f'{model.upper()}_MODEL', ''))
     MODEL_CONFIG.setdefault(f'{model}_temperature', os.getenv(f'{model.upper()}_TEMPERATURE', '0.7'))
     MODEL_CONFIG.setdefault(f'{model}_max_tokens', os.getenv(f'{model.upper()}_MAX_TOKENS', '1024'))
+
+# Ensure o1 model is set correctly
+if not MODEL_CONFIG.get('o1_model'):
+    MODEL_CONFIG['o1_model'] = 'o1-preview-2024-09-12'
 
 # Add base URLs for models using OpenAI-compatible API
 MODEL_CONFIG.update({
