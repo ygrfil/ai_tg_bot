@@ -24,7 +24,7 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
         "o1-preview-2024-09-12": OpenAI,
     }
     
-    if selected_model not in model_configs and selected_model != "o1-preview-2024-09-12":
+    if selected_model not in model_configs:
         logger.warning(f"Unknown model: {selected_model}. Defaulting to OpenAI.")
         selected_model = "openai"
     
@@ -38,7 +38,9 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
             genai.configure(api_key=api_key)
             model = model_configs[selected_model](MODEL_CONFIG.get(f"{selected_model}_model"))
             return lambda messages: model.generate_content(messages).text
-        else:
+        elif selected_model == "o1-preview-2024-09-12":
+            client = model_configs["openai"](api_key=api_key)
+            return client.chat.completions.create
             client = model_configs[selected_model](api_key=api_key)
             return client.chat.completions.create if selected_model != "anthropic" else client.messages.create
     except Exception as e:
