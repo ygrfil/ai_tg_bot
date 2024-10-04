@@ -53,7 +53,7 @@ ENV = {
     "ADMIN_USER_IDS": os.getenv("ADMIN_USER_IDS", "").split(","),
     "ALLOWED_USER_IDS": os.getenv("ALLOWED_USER_IDS", "").split(","),
     "GEMINI_API_KEY": os.getenv("GOOGLE_API_KEY"),
-    # O1 model uses the same API key as OpenAI
+    # Note: O1 model uses the same API key as OpenAI (OPENAI_API_KEY)
 }
 
 print("Environment variables loaded:")
