@@ -21,7 +21,7 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
         "groq": lambda **kwargs: OpenAI(base_url=MODEL_CONFIG.get("groq_base_url", "https://api.groq.com/openai/v1"), **kwargs),
         "hyperbolic": lambda **kwargs: OpenAI(base_url=MODEL_CONFIG.get("hyperbolic_base_url"), **kwargs),
         "gemini": genai.GenerativeModel,
-        "o1": OpenAI,
+        "o1": lambda **kwargs: OpenAI(**kwargs),
     }
     
     if selected_model not in model_configs:
@@ -29,8 +29,6 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
         selected_model = "openai"
     
     api_key = ENV.get("GEMINI_API_KEY" if selected_model == "gemini" else f"{selected_model.upper()}_API_KEY")
-    if selected_model == "o1":
-        api_key = ENV.get("O1_API_KEY")
     if not api_key:
         logger.warning(f"API key for {selected_model} is not set. Please check your environment variables.")
         return None
@@ -40,9 +38,6 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
             genai.configure(api_key=api_key)
             model = model_configs[selected_model](MODEL_CONFIG.get(f"{selected_model}_model"))
             return lambda messages: model.generate_content(messages).text
-        elif selected_model == "o1":
-            client = model_configs[selected_model](api_key=api_key)
-            return client.chat.completions.create
         else:
             client = model_configs[selected_model](api_key=api_key)
             return client.chat.completions.create if selected_model != "anthropic" else client.messages.create
