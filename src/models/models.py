@@ -40,9 +40,10 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
             genai.configure(api_key=api_key)
             model = model_configs[selected_model](MODEL_CONFIG.get(f"{selected_model}_model"))
             return lambda messages: model.generate_content(messages).text
-        elif selected_model == "o1-preview-2024-09-12":
-            client = model_configs["openai"](api_key=api_key)
+        elif selected_model == "o1":
+            client = model_configs[selected_model](api_key=api_key)
             return client.chat.completions.create
+        else:
             client = model_configs[selected_model](api_key=api_key)
             return client.chat.completions.create if selected_model != "anthropic" else client.messages.create
     except Exception as e:
