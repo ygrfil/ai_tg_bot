@@ -38,7 +38,7 @@ def get_llm(selected_model: str):
     client = model_configs[selected_model](api_key=api_key)
     
     if selected_model == "anthropic":
-        return lambda **kwargs: handle_anthropic_response(client.messages.stream(**prepare_anthropic_messages(kwargs)))
+        return lambda **kwargs: handle_anthropic_response(client.messages.create(**prepare_anthropic_messages(kwargs)))
     elif selected_model == "perplexity":
         return lambda **kwargs: client.chat.completions.create(**prepare_perplexity_messages(kwargs))
     else:
@@ -49,8 +49,7 @@ def handle_anthropic_response(response):
         def __init__(self, content):
             self.choices = [type('obj', (object,), {'delta': type('obj', (object,), {'content': content})()})]
 
-    for content in response:
-        yield AnthropicResponse(content.text)
+    return AnthropicResponse(response.content)
 
 def handle_gemini_response(response):
     class GeminiResponse:
