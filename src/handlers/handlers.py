@@ -1,19 +1,16 @@
 import logging
-from typing import Dict, List, Union, Callable, Any
+from typing import Dict, List, Callable
 from telebot import TeleBot
 from telebot.types import Message
-from anthropic import Anthropic
 from src.models.models import get_llm, get_conversation_messages
 from src.database.database import (get_user_preferences, save_user_preferences, ensure_user_preferences,
-                                   log_usage, get_monthly_usage, get_user_monthly_usage, is_user_allowed,
+                                   log_usage, get_monthly_usage, is_user_allowed,
                                    get_allowed_users, add_allowed_user, remove_allowed_user)
 from src.utils.utils import (reset_conversation_if_needed, create_keyboard, get_system_prompts,
-                             get_username, get_user_id, StreamHandler, is_authorized,
-                             remove_system_prompt, get_system_prompt, process_image_message)
+                             get_username, StreamHandler, is_authorized,
+                             remove_system_prompt, get_system_prompt)
 from src.utils.decorators import authorized_only, admin_only
 from config import ENV, load_model_config, MODEL_CONFIG
-import requests
-import os
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +42,6 @@ def handle_model_selection(bot: TeleBot, message: Message) -> None:
     user_prefs = get_user_preferences(message.from_user.id)
     current_model = user_prefs.get('selected_model', 'openai')
     model_display_names = {key.split('_')[0]: value for key, value in MODEL_CONFIG.items() if key.endswith('_model')}
-    model_display_names.update({model: model.capitalize() for model in ["openai", "anthropic", "perplexity", "groq", "hyperbolic", "gemini", "o1"] if model not in model_display_names})
     
     keyboard = create_keyboard([(model_display_names[model], f"model_{model}") for model in model_display_names])
     bot.send_message(message.chat.id, f"Current model: {model_display_names.get(current_model, current_model)}\nSelect a model:", reply_markup=keyboard)
@@ -109,30 +105,16 @@ def handle_status(bot: TeleBot, message: Message) -> None:
     user_id = message.from_user.id
     ensure_user_preferences(user_id)
     user_prefs = get_user_preferences(user_id)
-    usage = get_user_monthly_usage(user_id)
+    usage = get_monthly_usage()
+    user_usage = next((u for u in usage if u[0] == user_id), None)
     
     status_message = f"Your current status:\n\n" \
                      f"Current model: {user_prefs['selected_model']}\n" \
                      f"Current system prompt: {user_prefs['system_prompt']}\n\n" \
                      f"Monthly usage:\n" \
-                     f"Total messages: {usage[0] if usage else 0}\n"
+                     f"Total messages: {user_usage[2] if user_usage else 0}\n"
     
     bot.reply_to(message, status_message)
-
-@authorized_only
-def handle_btc_price(bot: TeleBot, message: Message) -> None:
-    try:
-        response = requests.get('https://api.coingecko.com/api/v3/simple/price', params={'ids': 'bitcoin', 'vs_currencies': 'usd'}, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        if 'bitcoin' in data and 'usd' in data['bitcoin']:
-            price = data['bitcoin']['usd']
-            bot.reply_to(message, f"The current BTC/USD price is: ${price:,.2f}")
-        else:
-            bot.reply_to(message, "Unable to fetch the current BTC price. Please try again later.")
-    except Exception as e:
-        logger.error(f"Error fetching BTC price: {str(e)}")
-        bot.reply_to(message, "An error occurred while fetching the BTC price. Please try again later.")
 
 @admin_only
 def handle_broadcast(bot: TeleBot, message: Message) -> None:
@@ -149,16 +131,11 @@ def handle_broadcast(bot: TeleBot, message: Message) -> None:
 def handle_usage(bot: TeleBot, message: Message) -> None:
     usage_stats = get_monthly_usage()
     usage_report = "Monthly Usage Report (from the start of the current month):\n\n"
-    current_user = None
     for user_id, model, messages in usage_stats:
-        if current_user != user_id:
-            if current_user is not None:
-                usage_report += "\n"
-            username = get_username(bot, user_id)
-            usage_report += f"User: {username}\n"
-            current_user = user_id
+        username = get_username(bot, user_id)
+        usage_report += f"User: {username}\n"
         usage_report += f"  Model: {model}\n"
-        usage_report += f"    Messages: {messages}\n"
+        usage_report += f"    Messages: {messages}\n\n"
     bot.reply_to(message, usage_report)
 
 def send_broadcast(bot: TeleBot, user_id: int, message: str) -> bool:
@@ -193,7 +170,6 @@ def start_command(bot: TeleBot, message: Message) -> None:
                           "/model: Select the AI model (OpenAI, Anthropic, Perplexity, or Groq).\n"
                           "/sm: Select a system message to set the AI behavior and context.\n"
                           "/reset: Reset the conversation history.\n"
-                          "/create_prompt: Create a new system prompt.\n"
                           "/status: View your current status and usage.\n"
                           "Created by Yegor")
 
@@ -218,34 +194,6 @@ def reset_command(bot: TeleBot, message: Message) -> None:
     user_conversation_history[message.from_user.id] = []
     bot.reply_to(message, "Conversation has been reset.")
 
-def create_prompt_command(bot: TeleBot, message: Message) -> None:
-    if not is_authorized(message):
-        bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
-        return
-    bot.reply_to(message, "Please send the name for your new system prompt.")
-    bot.register_next_step_handler(message, lambda m: process_prompt_name(bot, m))
-
-def process_prompt_name(bot: TeleBot, message: Message) -> None:
-    prompt_name = message.text.strip()
-    if not prompt_name or '/' in prompt_name:
-        bot.reply_to(message, "Invalid prompt name. Please try again with a valid name without '/'.")
-        return
-    bot.reply_to(message, f"Great! Now send the content for the '{prompt_name}' system prompt.")
-    bot.register_next_step_handler(message, lambda m: process_prompt_content(bot, m, prompt_name))
-
-def process_prompt_content(bot: TeleBot, message: Message, prompt_name: str) -> None:
-    prompt_content = message.text.strip()
-    if not prompt_content:
-        bot.reply_to(message, "Invalid prompt content. Please try again with valid content.")
-        return
-    
-    prompt_dir = "system_prompts"
-    os.makedirs(prompt_dir, exist_ok=True)
-    
-    with open(os.path.join(prompt_dir, f"{prompt_name}.txt"), 'w') as file:
-        file.write(prompt_content)
-    bot.reply_to(message, f"System prompt '{prompt_name}' has been created and saved successfully!")
-
 def handle_message(bot: TeleBot, message: Message) -> None:
     if not is_authorized(message):
         bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
@@ -254,7 +202,7 @@ def handle_message(bot: TeleBot, message: Message) -> None:
     user_id = message.from_user.id
     ensure_user_preferences(user_id)
     user_prefs = get_user_preferences(user_id)
-    selected_model = user_prefs.get('selected_model', 'anthropic')
+    selected_model = user_prefs.get('selected_model', 'openai')
 
     if user_id not in user_conversation_history:
         user_conversation_history[user_id] = []
@@ -263,15 +211,11 @@ def handle_message(bot: TeleBot, message: Message) -> None:
         user_conversation_history[user_id] = []
         bot.send_message(message.chat.id, "Your conversation has been reset due to inactivity.")
 
-    if message.content_type == 'photo' and selected_model not in ['openai', 'anthropic']:
-        bot.reply_to(message, "Image processing is only available with OpenAI or Anthropic models. Please change your model using the /model command.")
-        return
-
     placeholder_message = bot.send_message(message.chat.id, "Generating...")
 
     try:
         stream_handler = StreamHandler(bot, message.chat.id, placeholder_message.message_id)
-        llm_function = get_llm(selected_model, stream_handler, user_id)
+        llm_function = get_llm(selected_model)
         
         if llm_function is None:
             bot.edit_message_text(f"The {selected_model} model is currently unavailable. Please choose a different model using the /model command.", chat_id=message.chat.id, message_id=placeholder_message.message_id)
@@ -284,48 +228,29 @@ def handle_message(bot: TeleBot, message: Message) -> None:
             user_conversation_history[user_id] = [{"role": "system", "content": system_prompt}]
             bot.send_message(message.chat.id, "Your conversation has been reset due to inactivity.")
 
-        user_message = process_message_content(message, bot, selected_model)
+        user_message = {"role": "user", "content": message.text}
         user_conversation_history[user_id].append(user_message)
         user_conversation_history[user_id] = user_conversation_history[user_id][-10:]
-        messages = get_conversation_messages(user_conversation_history, user_id, selected_model)
+        messages = get_conversation_messages(user_conversation_history, user_id)
         
         model_name = MODEL_CONFIG.get(f"{selected_model}_model")
         max_tokens = int(MODEL_CONFIG.get(f"{selected_model}_max_tokens", 1024))
         temperature = float(MODEL_CONFIG.get(f"{selected_model}_temperature", 0.7))
 
+        response = llm_function(
+            model=model_name,
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            stream=True
+        )
+
         ai_response = ""
-        if selected_model == "gemini":
-            response = llm_function(messages)
-            if not response:
-                raise ValueError("Empty response from Gemini model")
-            ai_response = response
-            stream_handler.on_llm_new_token(ai_response)
-            stream_handler.on_llm_end(ai_response)
-        elif selected_model == "anthropic":
-            client = Anthropic(api_key=ENV["ANTHROPIC_API_KEY"])
-            with client.messages.stream(
-                model=model_name,
-                messages=messages,
-                max_tokens=max_tokens,
-                temperature=temperature
-            ) as stream:
-                for chunk in stream:
-                    if chunk.type == "content_block_delta":
-                        ai_response += chunk.delta.text
-                        stream_handler.on_llm_new_token(chunk.delta.text)
-        else:  # OpenAI, Perplexity, and other OpenAI-compatible APIs
-            response = llm_function(
-                model=model_name,
-                messages=messages,
-                max_tokens=max_tokens,
-                temperature=temperature,
-                stream=True
-            )
-            for chunk in response:
-                if chunk.choices and chunk.choices[0].delta.content:
-                    content = chunk.choices[0].delta.content
-                    ai_response += content
-                    stream_handler.on_llm_new_token(content)
+        for chunk in response:
+            if chunk.choices and chunk.choices[0].delta.content:
+                content = chunk.choices[0].delta.content
+                ai_response += content
+                stream_handler.on_llm_new_token(content)
         
         stream_handler.on_llm_end(ai_response)
         
@@ -339,29 +264,16 @@ def handle_message(bot: TeleBot, message: Message) -> None:
     except Exception as e:
         handle_message_error(bot, message, placeholder_message, e, user_id, selected_model)
 
-def process_message_content(message: Message, bot: TeleBot, selected_model: str) -> Dict[str, Any]:
-    if message.content_type == 'photo':
-        return {
-            "role": "user",
-            "content": [
-                process_image_message(message, bot, selected_model),
-                {"type": "text", "text": message.caption or "Describe the image in detail"}
-            ]
-        }
-    return {"role": "user", "content": message.text or "Please provide a message or an image."}
-
 # Register commands
 command_router.register('model', handle_model_selection)
 command_router.register('sm', handle_system_message_selection)
 command_router.register('broadcast', handle_broadcast)
 command_router.register('usage', handle_usage)
-command_router.register('create_prompt', create_prompt_command)
 command_router.register('list_users', handle_list_users)
 command_router.register('add_user', handle_add_user)
 command_router.register('remove_user', handle_remove_user)
 command_router.register('remove_prompt', handle_remove_prompt)
 command_router.register('status', handle_status)
-command_router.register('btc', handle_btc_price)
 command_router.register('reload', handle_reload_config)
 
 def handle_message_error(bot: TeleBot, message: Message, placeholder_message: Message, error: Exception, user_id: int, selected_model: str):
