@@ -16,6 +16,8 @@ def get_llm(selected_model: str):
         "anthropic": Anthropic,
         "perplexity": lambda **kwargs: OpenAI(base_url="https://api.perplexity.ai", **kwargs),
         "groq": lambda **kwargs: OpenAI(base_url="https://api.groq.com/openai/v1", **kwargs),
+        "hyperbolic": lambda **kwargs: OpenAI(base_url="https://api.hyperbolic.ai/v1", **kwargs),
+        "gemini": lambda **kwargs: OpenAI(base_url="https://generativelanguage.googleapis.com/v1beta", **kwargs),
     }
     
     if selected_model not in model_configs:

@@ -25,6 +25,8 @@ ENV = {
     "ANTHROPIC_API_KEY": os.getenv("ANTHROPIC_API_KEY"),
     "PERPLEXITY_API_KEY": os.getenv("PERPLEXITY_API_KEY"),
     "GROQ_API_KEY": os.getenv("GROQ_API_KEY"),
+    "HYPERBOLIC_API_KEY": os.getenv("HYPERBOLIC_API_KEY"),
+    "GEMINI_API_KEY": os.getenv("GEMINI_API_KEY"),
     "ADMIN_USER_IDS": os.getenv("ADMIN_USER_IDS", "").split(","),
     "ALLOWED_USER_IDS": os.getenv("ALLOWED_USER_IDS", "").split(","),
 }
