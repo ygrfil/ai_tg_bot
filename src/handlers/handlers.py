@@ -174,8 +174,6 @@ def callback_query_handler(bot: TeleBot, call):
     ensure_user_preferences(user_id)
     if call.data.startswith('model_'):
         model_name = call.data.split('_')[1]
-        if model_name == 'o1':
-            model_name = 'o1-preview-2024-09-12'
         save_user_preferences(user_id, selected_model=model_name)
         bot.answer_callback_query(call.id, f"Switched to {model_name} model.")
         bot.edit_message_text(f"Model set to {model_name}.", call.message.chat.id, call.message.message_id, reply_markup=None)

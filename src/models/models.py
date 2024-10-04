@@ -36,20 +36,13 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
         genai.configure(api_key=api_key)
         model = model_configs[selected_model](MODEL_CONFIG.get(f"{selected_model}_model"))
         return lambda messages: model.generate_content(messages).text
-    elif selected_model == "o1":
-        api_key = ENV.get("OPENAI_API_KEY")
-        if not api_key:
-            logger.warning("API key for o1 (OpenAI) is not set. Please check your environment variables.")
-            return None
-        client = model_configs[selected_model](api_key=api_key)
-        return client.chat.completions.create
     else:
         api_key = ENV.get(f"{selected_model.upper()}_API_KEY")
         if not api_key:
             logger.warning(f"API key for {selected_model} is not set. Please check your environment variables.")
             return None
         client = model_configs[selected_model](api_key=api_key)
-        return client.chat.completions.create if selected_model != "anthropic" else client.messages.create
+        return client.chat.completions.create if selected_model not in ["anthropic", "o1"] else client.messages.create
 
 def get_conversation_messages(user_conversation_history: Dict[int, List[Message]], user_id: int, selected_model: str) -> Union[str, List[Message]]:
     messages = user_conversation_history[user_id]

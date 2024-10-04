@@ -23,7 +23,7 @@ for model in ['openai', 'anthropic', 'perplexity', 'groq', 'hyperbolic', 'gemini
 
 # Ensure o1 model is set correctly
 if not MODEL_CONFIG.get('o1_model'):
-    MODEL_CONFIG['o1_model'] = 'o1-preview-2024-09-12'
+    MODEL_CONFIG['o1_model'] = 'gpt-4-0125-preview'
 
 # Add base URLs for models using OpenAI-compatible API
 MODEL_CONFIG.update({
