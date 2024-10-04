@@ -30,7 +30,28 @@ def get_llm(selected_model: str):
         return None
     
     client = model_configs[selected_model](api_key=api_key)
-    return client.chat.completions.create if selected_model != "anthropic" else client.messages.create
+    
+    if selected_model == "anthropic":
+        return lambda **kwargs: handle_anthropic_response(client.messages.create(**kwargs))
+    elif selected_model == "perplexity":
+        return lambda **kwargs: client.chat.completions.create(**prepare_perplexity_messages(kwargs))
+    else:
+        return client.chat.completions.create
+
+def handle_anthropic_response(response):
+    class AnthropicResponse:
+        def __init__(self, content):
+            self.choices = [type('obj', (object,), {'delta': type('obj', (object,), {'content': content})()})]
+
+    return AnthropicResponse(response.content)
+
+def prepare_perplexity_messages(kwargs):
+    messages = kwargs.get('messages', [])
+    if messages and messages[0]['role'] == 'system':
+        system_message = messages.pop(0)
+        messages.insert(0, {'role': 'user', 'content': f"System: {system_message['content']}"})
+    kwargs['messages'] = messages
+    return kwargs
 
 def get_conversation_messages(user_conversation_history: Dict[int, List[Message]], user_id: int) -> List[Message]:
     messages = user_conversation_history[user_id]

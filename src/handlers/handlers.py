@@ -247,7 +247,7 @@ def handle_message(bot: TeleBot, message: Message) -> None:
 
         ai_response = ""
         for chunk in response:
-            if chunk.choices and chunk.choices[0].delta.content:
+            if hasattr(chunk, 'choices') and chunk.choices and chunk.choices[0].delta.content:
                 content = chunk.choices[0].delta.content
                 ai_response += content
                 stream_handler.on_llm_new_token(content)
