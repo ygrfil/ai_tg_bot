@@ -66,6 +66,16 @@ def prepare_anthropic_messages(kwargs):
         kwargs['system'] = system_message
         kwargs['messages'] = [m for m in messages if m['role'] != 'system']
     
+    # Ensure messages alternate between 'user' and 'assistant'
+    cleaned_messages = []
+    last_role = None
+    for message in kwargs['messages']:
+        if message['role'] != last_role:
+            cleaned_messages.append(message)
+            last_role = message['role']
+    
+    kwargs['messages'] = cleaned_messages
+    
     return kwargs
 
 def prepare_gemini_messages(kwargs):
