@@ -50,9 +50,6 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
             return None
         client = model_configs[selected_model](api_key=api_key)
         return client.chat.completions.create if selected_model != "anthropic" else client.messages.create
-    except Exception as e:
-        logger.error(f"Error initializing {selected_model} model for user {user_id}: {str(e)}")
-        return None
 
 def get_conversation_messages(user_conversation_history: Dict[int, List[Message]], user_id: int, selected_model: str) -> Union[str, List[Message]]:
     messages = user_conversation_history[user_id]
