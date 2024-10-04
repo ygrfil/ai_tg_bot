@@ -1,32 +1,25 @@
-from bot import create_bot, import_allowed_users, setup_bot_handlers
+from telebot import TeleBot
+from src.handlers.handlers import handle_commands, handle_message, callback_query_handler, start_command, startadmin_command, reset_command
 from src.database.database import init_db
 import logging
-import time
 from config import ENV
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def start_polling(bot, max_retries=5, initial_retry_delay=5):
-    logger.info("Starting bot polling...")
-    retry_delay = initial_retry_delay
+def create_bot():
+    return TeleBot(ENV["TELEGRAM_BOT_TOKEN"])
 
-    for attempt in range(max_retries):
-        try:
-            bot.polling(none_stop=True, timeout=60)
-            break  # Exit loop if polling starts successfully
-        except Exception as e:
-            logger.error(f"Polling error: {e}. Retrying in {retry_delay} seconds...")
-            time.sleep(retry_delay)
-            retry_delay *= 2  # Exponential backoff
-    else:
-        logger.error("Max retries reached. Exiting.")
+def setup_bot_handlers(bot):
+    bot.message_handler(commands=['start'])(lambda msg: start_command(bot, msg))
+    bot.message_handler(commands=['startadmin'])(lambda msg: startadmin_command(bot, msg))
+    bot.message_handler(commands=['reset'])(lambda msg: reset_command(bot, msg))
+    bot.message_handler(commands=['model', 'sm', 'broadcast', 'usage', 'list_users', 'add_user', 'remove_user', 'remove_prompt', 'status', 'reload'])(lambda msg: handle_commands(bot, msg))
+    bot.message_handler(func=lambda message: True)(lambda msg: handle_message(bot, msg))
+    bot.callback_query_handler(func=lambda call: True)(lambda call: callback_query_handler(bot, call))
 
 def main():
     logger.info("Starting the bot...")
-    logger.info(f"GOOGLE_API_KEY is {'set' if ENV.get('GEMINI_API_KEY') else 'not set'}")
-    if not ENV.get('GEMINI_API_KEY'):
-        logger.warning("GOOGLE_API_KEY is not set. Gemini model will not be available.")
     try:
         bot = create_bot()
         logger.info("Bot created successfully")
@@ -34,13 +27,10 @@ def main():
         init_db()
         logger.info("Database initialized")
         
-        import_allowed_users()
-        logger.info("Allowed users imported")
-        
         setup_bot_handlers(bot)
         logger.info("Bot handlers set up")
         
-        start_polling(bot)
+        bot.polling(none_stop=True)
     except Exception as e:
         logger.error(f"Error in main function: {e}", exc_info=True)
     finally:
