@@ -21,7 +21,7 @@ def get_llm(selected_model: str, stream_handler: Any, user_id: int):
         "groq": lambda **kwargs: OpenAI(base_url=MODEL_CONFIG.get("groq_base_url", "https://api.groq.com/openai/v1"), **kwargs),
         "hyperbolic": lambda **kwargs: OpenAI(base_url=MODEL_CONFIG.get("hyperbolic_base_url"), **kwargs),
         "gemini": genai.GenerativeModel,
-        "o1": lambda **kwargs: OpenAI(api_key=ENV["OPENAI_API_KEY"], **kwargs),
+        "o1": lambda **kwargs: OpenAI(api_key=ENV["OPENAI_API_KEY"], base_url="https://api.openai.com/v1", **kwargs),
     }
     
     if selected_model not in model_configs:
