@@ -49,7 +49,7 @@ def handle_anthropic_response(response):
         def __init__(self, content):
             self.choices = [type('obj', (object,), {'delta': type('obj', (object,), {'content': content})()})]
 
-    return AnthropicResponse(response.content)
+    return AnthropicResponse(response.content[0].text)
 
 def handle_gemini_response(response):
     class GeminiResponse:
@@ -62,21 +62,25 @@ def prepare_anthropic_messages(kwargs):
     messages = kwargs.get('messages', [])
     system_message = next((m['content'] for m in messages if m['role'] == 'system'), None)
     
-    if system_message:
-        kwargs['system'] = system_message
-        kwargs['messages'] = [m for m in messages if m['role'] != 'system']
+    # Convert messages to Anthropic format
+    anthropic_messages = []
+    for message in messages:
+        if message['role'] != 'system':
+            anthropic_messages.append({
+                'role': 'user' if message['role'] == 'user' else 'assistant',
+                'content': message['content']
+            })
     
-    # Ensure messages alternate between 'user' and 'assistant'
-    cleaned_messages = []
-    last_role = None
-    for message in kwargs['messages']:
-        if message['role'] != last_role:
-            cleaned_messages.append(message)
-            last_role = message['role']
+    # Prepare kwargs for Anthropic API
+    model = MODEL_CONFIG.get('anthropic_model', 'claude-3-opus-20240229')
+    max_tokens = int(MODEL_CONFIG.get('anthropic_max_tokens', 1024))
     
-    kwargs['messages'] = cleaned_messages
-    
-    return kwargs
+    return {
+        'model': model,
+        'max_tokens': max_tokens,
+        'system': system_message,
+        'messages': anthropic_messages
+    }
 
 def prepare_gemini_messages(kwargs):
     messages = kwargs.get('messages', [])

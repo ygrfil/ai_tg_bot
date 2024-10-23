@@ -14,7 +14,7 @@ def load_model_config(file_path: str) -> Dict[str, str]:
 
 MODEL_CONFIG = load_model_config('models_names.txt')
 
-for model in ['openai', 'anthropic', 'perplexity', 'groq']:
+for model in ['openai', 'anthropic', 'perplexity', 'groq', 'gemini']:
     MODEL_CONFIG.setdefault(f'{model}_model', os.getenv(f'{model.upper()}_MODEL', ''))
     MODEL_CONFIG.setdefault(f'{model}_temperature', os.getenv(f'{model.upper()}_TEMPERATURE', '0.7'))
     MODEL_CONFIG.setdefault(f'{model}_max_tokens', os.getenv(f'{model.upper()}_MAX_TOKENS', '1024'))
