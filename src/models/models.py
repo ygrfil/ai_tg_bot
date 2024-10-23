@@ -33,7 +33,7 @@ def get_llm(selected_model: str) -> Optional[Callable]:
     if selected_model == "gemini":
         genai.configure(api_key=api_key)
         model = genai.GenerativeModel(MODEL_CONFIG['gemini_model'])
-        return lambda **kwargs: handle_gemini_response(model.generate_content(**prepare_gemini_messages(kwargs)))
+        return lambda **kwargs: handle_gemini_response(model.generate_content(prepare_gemini_messages(kwargs)))
     
     client = model_configs[selected_model](api_key=api_key)
     
@@ -100,8 +100,7 @@ def prepare_gemini_messages(kwargs):
         elif message['role'] == 'assistant':
             prompt_parts.append(f"Assistant: {message['content']}")
     
-    kwargs['contents'] = "\n".join(prompt_parts)
-    return kwargs
+    return "\n".join(prompt_parts)
 
 def prepare_perplexity_messages(kwargs):
     messages = kwargs.get('messages', [])
