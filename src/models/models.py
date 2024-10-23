@@ -2,7 +2,6 @@ import logging
 from typing import List, Dict, Any, Optional, Callable
 from openai import OpenAI
 from anthropic import Anthropic
-import google.generativeai as genai
 from config import MODEL_CONFIG, ENV
 
 logger = logging.getLogger(__name__)
@@ -18,32 +17,16 @@ def get_llm(selected_model: str) -> Optional[Callable]:
         "perplexity": lambda **kwargs: OpenAI(base_url="https://api.perplexity.ai", **kwargs),
         "groq": lambda **kwargs: OpenAI(base_url="https://api.groq.com/openai/v1", **kwargs),
         "hyperbolic": lambda **kwargs: OpenAI(base_url="https://api.hyperbolic.ai/v1", **kwargs),
-        "gemini": genai,
     }
     
     if selected_model not in model_configs:
         logger.warning(f"Unknown model: {selected_model}. Defaulting to OpenAI.")
         selected_model = "openai"
     
-    api_key = None
-    if selected_model == "gemini":
-        api_key = ENV.get("GEMINI_API_KEY")
-    else:
-        api_key = ENV.get(f"{selected_model.upper()}_API_KEY")
+    api_key = ENV.get(f"{selected_model.upper()}_API_KEY")
     if not api_key:
         logger.warning(f"API key for {selected_model} is not set. Please check your environment variables.")
         return None
-    
-    if selected_model == "gemini":
-        try:
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel(MODEL_CONFIG.get('gemini_model', 'gemini-pro'))
-            # Test the API key with a simple request
-            model.generate_content("test")
-            return lambda **kwargs: handle_gemini_response(model.generate_content(prepare_gemini_messages(kwargs)))
-        except Exception as e:
-            logger.error(f"Failed to initialize Gemini model: {e}")
-            return None
     
     client = model_configs[selected_model](api_key=api_key)
     
@@ -61,12 +44,6 @@ def handle_anthropic_response(response):
 
     return AnthropicResponse(response.content[0].text)
 
-def handle_gemini_response(response):
-    class GeminiResponse:
-        def __init__(self, content):
-            self.choices = [type('obj', (object,), {'delta': type('obj', (object,), {'content': content})()})]
-
-    return GeminiResponse(response.text)
 
 def prepare_anthropic_messages(kwargs):
     messages = kwargs.get('messages', [])
@@ -98,19 +75,6 @@ def prepare_anthropic_messages(kwargs):
         
     return kwargs
 
-def prepare_gemini_messages(kwargs):
-    messages = kwargs.get('messages', [])
-    prompt_parts = []
-    
-    for message in messages:
-        if message['role'] == 'system':
-            prompt_parts.append(f"System: {message['content']}")
-        elif message['role'] == 'user':
-            prompt_parts.append(f"Human: {message['content']}")
-        elif message['role'] == 'assistant':
-            prompt_parts.append(f"Assistant: {message['content']}")
-    
-    return "\n".join(prompt_parts)
 
 def prepare_perplexity_messages(kwargs):
     messages = kwargs.get('messages', [])
