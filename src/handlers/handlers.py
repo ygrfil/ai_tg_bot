@@ -41,7 +41,8 @@ def handle_model_selection(bot: TeleBot, message: Message) -> None:
     ensure_user_preferences(message.from_user.id)
     user_prefs = get_user_preferences(message.from_user.id)
     current_model = user_prefs.get('selected_model', 'openai')
-    model_display_names = {key.split('_')[0]: value for key, value in MODEL_CONFIG.items() if key.endswith('_model')}
+    model_display_names = {key.split('_')[0]: value for key, value in MODEL_CONFIG.items() 
+                          if key.endswith('_model') and key.split('_')[0] not in ['gemini']}
     
     keyboard = create_keyboard([(model_display_names[model], f"model_{model}") for model in model_display_names])
     bot.send_message(message.chat.id, f"Current model: {model_display_names.get(current_model, current_model)}\nSelect a model:", reply_markup=keyboard)
