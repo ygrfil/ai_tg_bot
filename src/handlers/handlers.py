@@ -16,6 +16,13 @@ logger = logging.getLogger(__name__)
 
 user_conversation_history: Dict[int, List[Dict[str, str]]] = {}
 
+model_display_names = {
+    'openai': 'ChatGPT (OpenAI)',
+    'anthropic': 'Claude (Anthropic)', 
+    'groq': 'Groq',
+    'perplexity': 'Perplexity'
+}
+
 class CommandRouter:
     def __init__(self):
         self.handlers = {}
@@ -41,12 +48,6 @@ def handle_model_selection(bot: TeleBot, message: Message) -> None:
     ensure_user_preferences(message.from_user.id)
     user_prefs = get_user_preferences(message.from_user.id)
     current_model = user_prefs.get('selected_model', 'openai')
-    model_display_names = {
-        'openai': 'ChatGPT (OpenAI)',
-        'anthropic': 'Claude (Anthropic)',
-        'groq': 'Groq',
-        'perplexity': 'Perplexity'
-    }
     
     keyboard = create_keyboard([(display_name, f"model_{model}") for model, display_name in model_display_names.items()])
     bot.send_message(message.chat.id, f"Current model: {model_display_names.get(current_model, current_model)}\nSelect a model:", reply_markup=keyboard)
