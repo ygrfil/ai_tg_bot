@@ -11,7 +11,7 @@ class Message(TypedDict):
     content: str
 
 MODEL_CONFIGS = {
-    "openai": OpenAI,
+    "openai": lambda api_key: OpenAI(api_key=api_key),
     "anthropic": lambda api_key: Anthropic(api_key=api_key),
     "perplexity": lambda api_key: OpenAI(api_key=api_key, base_url="https://api.perplexity.ai"),  # Perplexity API
     "groq": lambda api_key: OpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1")    # Groq API
