@@ -13,7 +13,6 @@ class Message(TypedDict):
 MODEL_CONFIGS = {
     "openai": OpenAI,
     "anthropic": Anthropic,
-    "gemini": None,  # Placeholder until we implement Google's Gemini
     "groq": None,    # Placeholder until we implement Groq
 }
 
