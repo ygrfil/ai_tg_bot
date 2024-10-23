@@ -6,7 +6,7 @@ from src.models.models import get_llm, get_conversation_messages
 from src.database.database import (get_user_preferences, save_user_preferences, ensure_user_preferences,
                                    log_usage, get_monthly_usage, is_user_allowed,
                                    get_allowed_users, add_allowed_user, remove_allowed_user)
-from src.utils.utils import (reset_conversation_if_needed, create_keyboard, get_system_prompts,
+from src.utils.utils import (should_reset_conversation, create_keyboard, get_system_prompts,
                              get_username, StreamHandler, is_authorized,
                              remove_system_prompt, get_system_prompt)
 from src.utils.decorators import authorized_only, admin_only
@@ -207,7 +207,7 @@ def handle_message(bot: TeleBot, message: Message) -> None:
     if user_id not in user_conversation_history:
         user_conversation_history[user_id] = []
 
-    if reset_conversation_if_needed(user_id):
+    if should_reset_conversation(user_id):
         user_conversation_history[user_id] = []
         bot.send_message(message.chat.id, "Your conversation has been reset due to inactivity.")
 
@@ -223,7 +223,7 @@ def handle_message(bot: TeleBot, message: Message) -> None:
 
         logger.info(f"Using model: {selected_model}")
 
-        if reset_conversation_if_needed(user_id):
+        if should_reset_conversation(user_id):
             system_prompt = get_system_prompt(user_id)
             user_conversation_history[user_id] = [{"role": "system", "content": system_prompt}]
             bot.send_message(message.chat.id, "Your conversation has been reset due to inactivity.")
