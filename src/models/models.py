@@ -35,9 +35,15 @@ def get_llm(selected_model: str) -> Optional[Callable]:
         return None
     
     if selected_model == "gemini":
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel(MODEL_CONFIG['gemini_model'])
-        return lambda **kwargs: handle_gemini_response(model.generate_content(prepare_gemini_messages(kwargs)))
+        try:
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel(MODEL_CONFIG.get('gemini_model', 'gemini-pro'))
+            # Test the API key with a simple request
+            model.generate_content("test")
+            return lambda **kwargs: handle_gemini_response(model.generate_content(prepare_gemini_messages(kwargs)))
+        except Exception as e:
+            logger.error(f"Failed to initialize Gemini model: {e}")
+            return None
     
     client = model_configs[selected_model](api_key=api_key)
     
