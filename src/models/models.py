@@ -13,6 +13,8 @@ class Message(TypedDict):
 MODEL_CONFIGS = {
     "openai": OpenAI,
     "anthropic": Anthropic,
+    "gemini": None,  # Placeholder until we implement Google's Gemini
+    "groq": None,    # Placeholder until we implement Groq
 }
 
 def get_llm(selected_model: str) -> Optional[Callable]:
@@ -20,8 +22,12 @@ def get_llm(selected_model: str) -> Optional[Callable]:
     logger.info(f"Initializing LLM for model: {selected_model}")
     
     if selected_model not in MODEL_CONFIGS:
-        logger.warning(f"Unknown model: {selected_model}. Defaulting to OpenAI.")
-        selected_model = "openai"
+        logger.error(f"Unknown model: {selected_model}")
+        return None
+    
+    if MODEL_CONFIGS[selected_model] is None:
+        logger.error(f"Model {selected_model} is not yet implemented")
+        return None
     
     api_key = ENV.get(f"{selected_model.upper()}_API_KEY")
     if not api_key:
