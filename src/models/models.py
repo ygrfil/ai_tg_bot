@@ -13,7 +13,7 @@ class Message(TypedDict):
 MODEL_CONFIGS = {
     "openai": OpenAI,
     "anthropic": Anthropic,
-    "perplexity": OpenAI,  # Perplexity uses OpenAI-compatible API
+    "perplexity": lambda api_key: OpenAI(api_key=api_key, base_url="https://api.perplexity.ai/v1"),  # Perplexity API
     "groq": None    # Placeholder until we implement Groq
 }
 
@@ -34,7 +34,7 @@ def get_llm(selected_model: str) -> Optional[Callable]:
         logger.warning(f"API key for {selected_model} is not set. Please check your environment variables.")
         return None
     
-    client = MODEL_CONFIGS[selected_model](api_key=api_key)
+    client = MODEL_CONFIGS[selected_model](api_key) if callable(MODEL_CONFIGS[selected_model]) else MODEL_CONFIGS[selected_model](api_key=api_key)
     
     if selected_model == "anthropic":
         return lambda **kwargs: handle_anthropic_response(client.messages.create(**prepare_anthropic_messages(kwargs)))
