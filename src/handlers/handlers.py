@@ -237,22 +237,31 @@ def handle_message(bot: TeleBot, message: Message) -> None:
         max_tokens = int(MODEL_CONFIG.get(f"{selected_model}_max_tokens", 1024))
         temperature = float(MODEL_CONFIG.get(f"{selected_model}_temperature", 0.7))
 
-        response = llm_function(
-            model=model_name,
-            messages=messages,
-            max_tokens=max_tokens,
-            temperature=temperature,
-            stream=True
-        )
-
-        ai_response = ""
-        for chunk in response:
-            if hasattr(chunk, 'choices') and chunk.choices and chunk.choices[0].delta.content:
-                content = chunk.choices[0].delta.content
-                ai_response += content
-                stream_handler.on_llm_new_token(content)
-        
-        stream_handler.on_llm_end(ai_response)
+        if selected_model == "anthropic":
+            response = llm_function(
+                model=model_name,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                stream=False
+            )
+            ai_response = response.choices[0].delta.content
+            stream_handler.on_llm_end(ai_response)
+        else:
+            response = llm_function(
+                model=model_name,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature,
+                stream=True
+            )
+            ai_response = ""
+            for chunk in response:
+                if hasattr(chunk, 'choices') and chunk.choices and chunk.choices[0].delta.content:
+                    content = chunk.choices[0].delta.content
+                    ai_response += content
+                    stream_handler.on_llm_new_token(content)
+            stream_handler.on_llm_end(ai_response)
         
         if not ai_response:
             raise ValueError("No response generated from the model.")
