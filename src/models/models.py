@@ -22,7 +22,7 @@ def get_llm(selected_model: str) -> Optional[Callable]:
     """Initialize and return an LLM client."""
     logger.info(f"Initializing LLM for model: {selected_model}")
     
-    if selected_model not in model_configs:
+    if selected_model not in MODEL_CONFIGS:
         logger.warning(f"Unknown model: {selected_model}. Defaulting to OpenAI.")
         selected_model = "openai"
     
@@ -31,7 +31,7 @@ def get_llm(selected_model: str) -> Optional[Callable]:
         logger.warning(f"API key for {selected_model} is not set. Please check your environment variables.")
         return None
     
-    client = model_configs[selected_model](api_key=api_key)
+    client = MODEL_CONFIGS[selected_model](api_key=api_key)
     
     if selected_model == "anthropic":
         return lambda **kwargs: handle_anthropic_response(client.messages.create(**prepare_anthropic_messages(kwargs)))
