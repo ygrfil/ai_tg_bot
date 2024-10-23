@@ -26,6 +26,8 @@ def get_llm(selected_model: str) -> Optional[Callable]:
         selected_model = "openai"
     
     api_key = ENV.get("GOOGLE_API_KEY" if selected_model == "gemini" else f"{selected_model.upper()}_API_KEY")
+    if not api_key and selected_model == "gemini":
+        api_key = ENV.get("GEMINI_API_KEY")  # Fallback to GEMINI_API_KEY if GOOGLE_API_KEY not found
     if not api_key:
         logger.warning(f"API key for {selected_model} is not set. Please check your environment variables.")
         return None
