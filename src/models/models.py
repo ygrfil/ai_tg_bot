@@ -65,22 +65,28 @@ def prepare_anthropic_messages(kwargs):
     # Convert messages to Anthropic format
     anthropic_messages = []
     for message in messages:
-        if message['role'] != 'system':
-            anthropic_messages.append({
-                'role': 'user' if message['role'] == 'user' else 'assistant',
-                'content': message['content']
-            })
+        if message['role'] == 'system':
+            continue  # Skip system message as it's handled separately
+        anthropic_messages.append({
+            'role': 'user' if message['role'] == 'user' else 'assistant',
+            'content': message['content']
+        })
     
     # Prepare kwargs for Anthropic API
     model = MODEL_CONFIG.get('anthropic_model', 'claude-3-opus-20240229')
     max_tokens = int(MODEL_CONFIG.get('anthropic_max_tokens', 1024))
     
-    return {
+    kwargs = {
         'model': model,
         'max_tokens': max_tokens,
-        'system': system_message,
         'messages': anthropic_messages
     }
+    
+    # Add system message if present
+    if system_message:
+        kwargs['system'] = system_message
+        
+    return kwargs
 
 def prepare_gemini_messages(kwargs):
     messages = kwargs.get('messages', [])
