@@ -13,7 +13,7 @@ class Message(TypedDict):
 MODEL_CONFIGS = {
     "openai": OpenAI,
     "anthropic": Anthropic,
-    "groq": None,    # Placeholder until we implement Groq
+    "groq": None    # Placeholder until we implement Groq
 }
 
 def get_llm(selected_model: str) -> Optional[Callable]:
