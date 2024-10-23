@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 Message = Dict[str, str]
 
-def get_llm(selected_model: str):
+def get_llm(selected_model: str) -> Optional[Callable]:
     logger.info(f"Initializing LLM for model: {selected_model}")
     
     model_configs = {

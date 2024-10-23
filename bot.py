@@ -91,6 +91,16 @@ def import_allowed_users():
     logger.info("Finished importing allowed users")
 
 def main():
+    import signal
+    def signal_handler(signum, frame):
+        logger.info("Received shutdown signal, stopping bot gracefully...")
+        if 'bot' in locals():
+            bot.stop_polling()
+        exit(0)
+    
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
     retries = 0
     while retries < MAX_RETRIES:
         try:

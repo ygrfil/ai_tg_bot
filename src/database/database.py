@@ -18,9 +18,15 @@ def db_operation(operation: Callable, *args: Any) -> Any:
                 result = operation(cursor, *args)
                 conn.commit()
         return result
+    except sqlite3.OperationalError as e:
+        logger.error(f"Database operational error: {e}")
+        raise RuntimeError(f"Database operation failed: {str(e)}")
+    except sqlite3.IntegrityError as e:
+        logger.error(f"Database integrity error: {e}")
+        raise ValueError(f"Invalid data: {str(e)}")
     except sqlite3.Error as e:
         logger.error(f"Database error: {e}")
-        raise
+        raise RuntimeError(f"Unexpected database error: {str(e)}")
 
 DEFAULT_MODEL = 'anthropic'
 DEFAULT_PROMPT = 'standard'

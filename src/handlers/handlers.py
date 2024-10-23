@@ -278,7 +278,7 @@ command_router.register('reload', handle_reload_config)
 
 def handle_message_error(bot: TeleBot, message: Message, placeholder_message: Message, error: Exception, user_id: int, selected_model: str):
     error_message = str(error)
-    logger.error(f"Error in handle_message: {error_message}")
+    logger.error(f"Error in handle_message: {error_message}", exc_info=True)
 
     if isinstance(error, ValueError) and "API key" in error_message:
         response = f"Configuration error: {error_message} Please contact the administrator or choose a different model using the /model command."
