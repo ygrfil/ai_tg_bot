@@ -1,23 +1,26 @@
 import logging
-from typing import List, Dict, Any, Optional, Callable
+from typing import List, Dict, Optional, Callable, TypedDict
 from openai import OpenAI
 from anthropic import Anthropic
 from config import MODEL_CONFIG, ENV
 
 logger = logging.getLogger(__name__)
 
-Message = Dict[str, str]
+class Message(TypedDict):
+    role: str
+    content: str
+
+MODEL_CONFIGS = {
+    "openai": OpenAI,
+    "anthropic": Anthropic,
+    "perplexity": lambda **kwargs: OpenAI(base_url="https://api.perplexity.ai", **kwargs),
+    "groq": lambda **kwargs: OpenAI(base_url="https://api.groq.com/openai/v1", **kwargs),
+    "hyperbolic": lambda **kwargs: OpenAI(base_url="https://api.hyperbolic.ai/v1", **kwargs),
+}
 
 def get_llm(selected_model: str) -> Optional[Callable]:
+    """Initialize and return an LLM client."""
     logger.info(f"Initializing LLM for model: {selected_model}")
-    
-    model_configs = {
-        "openai": OpenAI,
-        "anthropic": Anthropic,
-        "perplexity": lambda **kwargs: OpenAI(base_url="https://api.perplexity.ai", **kwargs),
-        "groq": lambda **kwargs: OpenAI(base_url="https://api.groq.com/openai/v1", **kwargs),
-        "hyperbolic": lambda **kwargs: OpenAI(base_url="https://api.hyperbolic.ai/v1", **kwargs),
-    }
     
     if selected_model not in model_configs:
         logger.warning(f"Unknown model: {selected_model}. Defaulting to OpenAI.")

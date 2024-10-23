@@ -14,18 +14,11 @@ logger = logging.getLogger(__name__)
 MAX_RETRIES = 5
 RETRY_DELAY = 5
 
-def create_bot():
-    try:
-        logger.info("Creating bot instance...")
-        bot = TeleBot(ENV["TELEGRAM_BOT_TOKEN"])
-        logger.info("Bot instance created successfully")
-        return bot
-    except KeyError:
-        logger.error("TELEGRAM_BOT_TOKEN not found in environment variables")
-        raise
-    except Exception as e:
-        logger.error(f"Error initializing bot: {e}", exc_info=True)
-        raise
+def create_bot() -> TeleBot:
+    """Create and return a TeleBot instance."""
+    if not (token := ENV.get("TELEGRAM_BOT_TOKEN")):
+        raise ValueError("TELEGRAM_BOT_TOKEN not found in environment variables")
+    return TeleBot(token)
 
 def setup_bot_handlers(bot):
     logger.info("Setting up bot handlers...")

@@ -12,16 +12,20 @@ import base64
 logger = logging.getLogger(__name__)
 
 def is_authorized(message: Message) -> bool:
-    return is_user_allowed(message.from_user.id) or str(message.from_user.id) in ENV.get("ADMIN_USER_IDS", [])
+    """Check if user is authorized."""
+    user_id = str(message.from_user.id)
+    return is_user_allowed(int(user_id)) or user_id in ENV.get("ADMIN_USER_IDS", [])
 
-def reset_conversation_if_needed(user_id: int) -> bool:
+def should_reset_conversation(user_id: int) -> bool:
+    """Check if conversation should be reset based on time."""
     current_time = datetime.now()
-    last_interaction_str = get_last_interaction_time(user_id)
-    if last_interaction_str and (current_time - datetime.fromisoformat(last_interaction_str) > timedelta(hours=2)):
-        update_last_interaction_time(user_id, current_time.isoformat())
-        return True
+    last_interaction = get_last_interaction_time(user_id)
+    if not last_interaction:
+        return False
+    
+    time_diff = current_time - datetime.fromisoformat(last_interaction)
     update_last_interaction_time(user_id, current_time.isoformat())
-    return False
+    return time_diff > timedelta(hours=2)
 
 def get_system_prompt(user_id: int) -> str:
     user_prefs = get_user_preferences(user_id)
