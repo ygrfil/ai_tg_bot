@@ -167,7 +167,7 @@ def start_command(bot: TeleBot, message: Message) -> None:
     ensure_user_preferences(message.from_user.id)
     bot.reply_to(message, "Welcome! Here are the available commands:\n"
                           "/start: Introduces the bot and explains the available AI models.\n"
-                          "/model: Select the AI model (OpenAI, Anthropic, Perplexity, or Groq).\n"
+                          "/model: Select the AI model (OpenAI or Anthropic).\n"
                           "/sm: Select a system message to set the AI behavior and context.\n"
                           "/reset: Reset the conversation history.\n"
                           "/status: View your current status and usage.\n"

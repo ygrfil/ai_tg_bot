@@ -13,9 +13,6 @@ class Message(TypedDict):
 MODEL_CONFIGS = {
     "openai": OpenAI,
     "anthropic": Anthropic,
-    "perplexity": lambda **kwargs: OpenAI(base_url="https://api.perplexity.ai", **kwargs),
-    "groq": lambda **kwargs: OpenAI(base_url="https://api.groq.com/openai/v1", **kwargs),
-    "hyperbolic": lambda **kwargs: OpenAI(base_url="https://api.hyperbolic.ai/v1", **kwargs),
 }
 
 def get_llm(selected_model: str) -> Optional[Callable]:
