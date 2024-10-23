@@ -1,5 +1,5 @@
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Callable
 from openai import OpenAI
 from anthropic import Anthropic
 import google.generativeai as genai
