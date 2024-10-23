@@ -27,7 +27,7 @@ def get_llm(selected_model: str) -> Optional[Callable]:
     
     api_key = None
     if selected_model == "gemini":
-        api_key = ENV.get("GOOGLE_API_KEY") or ENV.get("GEMINI_API_KEY")
+        api_key = ENV.get("GEMINI_API_KEY")
     else:
         api_key = ENV.get(f"{selected_model.upper()}_API_KEY")
     if not api_key:
