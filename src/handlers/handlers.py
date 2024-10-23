@@ -20,7 +20,7 @@ model_display_names = {
     'openai': 'ChatGPT (OpenAI)',
     'anthropic': 'Claude (Anthropic)', 
     'groq': 'Groq',
-    'perplexity': 'Perplexity'
+    'perplexity': 'Perplexity AI'
 }
 
 class CommandRouter:

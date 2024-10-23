@@ -13,6 +13,7 @@ class Message(TypedDict):
 MODEL_CONFIGS = {
     "openai": OpenAI,
     "anthropic": Anthropic,
+    "perplexity": OpenAI,  # Perplexity uses OpenAI-compatible API
     "groq": None    # Placeholder until we implement Groq
 }
 
