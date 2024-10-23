@@ -14,7 +14,7 @@ MODEL_CONFIGS = {
     "openai": OpenAI,
     "anthropic": Anthropic,
     "perplexity": lambda api_key: OpenAI(api_key=api_key, base_url="https://api.perplexity.ai"),  # Perplexity API
-    "groq": None    # Placeholder until we implement Groq
+    "groq": lambda api_key: OpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1")    # Groq API
 }
 
 def get_llm(selected_model: str) -> Optional[Callable]:
