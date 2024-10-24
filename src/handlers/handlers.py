@@ -157,10 +157,26 @@ def callback_query_handler(bot: TeleBot, call):
     ensure_user_preferences(user_id)
     if call.data.startswith('model_'):
         model_name = call.data.split('_')[1]
+        
+        # Check if current conversation has images and switching to non-supported model
+        if user_id in user_conversation_history:
+            has_images = any(
+                isinstance(msg.get('content'), list) and '_raw_image_data' in msg 
+                for msg in user_conversation_history[user_id]
+            )
+            if has_images and model_name not in ['anthropic', 'openai']:
+                user_conversation_history[user_id] = []
+                bot.answer_callback_query(call.id, "Conversation reset: images are only supported with Claude and ChatGPT")
+                
         save_user_preferences(user_id, selected_model=model_name)
         display_name = next((name for model, name in model_display_names.items() if model == model_name), model_name)
         bot.answer_callback_query(call.id, f"Switched to {display_name}")
-        bot.edit_message_text(f"Model set to {display_name}", call.message.chat.id, call.message.message_id, reply_markup=None)
+        
+        message_text = f"Model set to {display_name}"
+        if model_name not in ['anthropic', 'openai']:
+            message_text += "\nNote: This model doesn't support image analysis"
+            
+        bot.edit_message_text(message_text, call.message.chat.id, call.message.message_id, reply_markup=None)
     elif call.data.startswith('sm_'):
         prompt_name = call.data.split('_')[1]
         system_message = get_system_prompts().get(prompt_name, "You are a helpful assistant.")
@@ -242,6 +258,10 @@ def handle_message(bot: TeleBot, message: Message) -> None:
             bot.send_message(message.chat.id, "Your conversation has been reset due to inactivity.")
 
         if message.content_type == 'photo':
+            if selected_model not in ['anthropic', 'openai']:
+                bot.reply_to(message, "Image analysis is only supported with Claude (Anthropic) and ChatGPT (OpenAI) models. Please switch to one of these models.")
+                return
+                
             image_data = process_image_message(message, bot, selected_model)
             caption = message.caption or "Please analyze this image."
             
