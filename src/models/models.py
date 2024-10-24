@@ -60,9 +60,17 @@ def prepare_anthropic_messages(kwargs):
     for message in messages:
         if message['role'] == 'system':
             continue  # Skip system message as it's handled separately
+            
+        if isinstance(message['content'], list):
+            # Already in correct format for images
+            content = message['content']
+        else:
+            # Convert text to content list format
+            content = [{'type': 'text', 'text': message['content']}]
+            
         anthropic_messages.append({
             'role': 'user' if message['role'] == 'user' else 'assistant',
-            'content': message['content']
+            'content': content
         })
     
     # Prepare kwargs for Anthropic API

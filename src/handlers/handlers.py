@@ -241,7 +241,17 @@ def handle_message(bot: TeleBot, message: Message) -> None:
             user_conversation_history[user_id] = [{"role": "system", "content": system_prompt}]
             bot.send_message(message.chat.id, "Your conversation has been reset due to inactivity.")
 
-        user_message = {"role": "user", "content": message.text}
+        if message.content_type == 'photo':
+            image_data = process_image_message(message, bot, selected_model)
+            user_message = {
+                "role": "user",
+                "content": [
+                    image_data,
+                    {"type": "text", "text": message.caption or "Please analyze this image."}
+                ]
+            }
+        else:
+            user_message = {"role": "user", "content": [{"type": "text", "text": message.text}]}
         user_conversation_history[user_id].append(user_message)
         user_conversation_history[user_id] = user_conversation_history[user_id][-10:]
         messages = get_conversation_messages(user_conversation_history, user_id)
