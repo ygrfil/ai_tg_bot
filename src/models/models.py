@@ -101,3 +101,43 @@ def prepare_perplexity_messages(kwargs):
 def get_conversation_messages(user_conversation_history: Dict[int, List[Message]], user_id: int) -> List[Message]:
     messages = user_conversation_history[user_id]
     return messages[:-1] if messages and messages[-1]["role"] == "assistant" else messages
+
+def format_messages_for_model(messages: List[Dict], model: str) -> List[Dict]:
+    formatted_messages = []
+    for msg in messages:
+        if msg['role'] == 'system':
+            formatted_messages.append(msg)
+            continue
+            
+        if isinstance(msg.get('content'), list) and '_raw_image_data' in msg:
+            # This is an image message that needs reformatting
+            caption = next((item['text'] for item in msg['content'] if isinstance(item, dict) and item.get('type') == 'text'), '')
+            
+            if model == 'anthropic':
+                formatted_content = [
+                    {"type": "text", "text": caption},
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/jpeg",
+                            "data": msg['_raw_image_data']
+                        }
+                    }
+                ]
+            else:  # openai and other models
+                formatted_content = [
+                    {"type": "text", "text": caption},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{msg['_raw_image_data']}"}}
+                ]
+            formatted_messages.append({"role": msg['role'], "content": formatted_content})
+        else:
+            # Regular text message
+            if isinstance(msg.get('content'), list):
+                # Convert list content to string if it's text only
+                text_content = next((item['text'] for item in msg['content'] if isinstance(item, dict) and item.get('type') == 'text'), '')
+                formatted_messages.append({"role": msg['role'], "content": text_content})
+            else:
+                formatted_messages.append(msg)
+    
+    return formatted_messages
