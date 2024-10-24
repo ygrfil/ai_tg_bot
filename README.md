@@ -1,37 +1,80 @@
-# AI Chatbot for Telegram
+# Advanced AI Telegram Bot
 
-This Telegram bot provides an interface to interact with various AI models, offering a range of features for both users and administrators.
+A powerful and versatile Telegram bot that provides seamless access to multiple AI language models, offering advanced features for both users and administrators. The bot supports natural language processing, image analysis, and various utility functions.
 
-## Features
+## Key Features
 
-### General Features
+### AI Model Integration
+- **Multiple AI Providers**:
+  - OpenAI (GPT-4 and variants)
+  - Anthropic (Claude and variants)
+  - Perplexity AI
+  - Groq
+  - Gemini
+- **Model Selection**: Switch between models using `/model` command
+- **Customizable Parameters**: Temperature and token limits configurable per model
 
-- **Multiple AI Models**: Choose between OpenAI, Anthropic, Perplexity, Groq, and Hyperbolic models.
-- **Customizable System Prompts**: Select or create different AI behaviors and contexts.
-- **Image Processing**: Send images for analysis (OpenAI and Anthropic models only).
-- **Conversation Management**: Maintains history with automatic reset after 2 hours of inactivity.
-- **Status Check**: View current model, system prompt, and usage statistics.
+### Image Processing
+- **Image Analysis**: Send images for AI analysis (supported by OpenAI and Anthropic)
+- **Multi-Modal Understanding**: Process images with text captions
+- **Format Handling**: Supports various image formats and sizes
 
-### User Commands
+### Conversation Management
+- **History Tracking**: Maintains conversation context
+- **Auto-Reset**: Conversations automatically reset after 2 hours of inactivity
+- **Manual Reset**: Use `/reset` command to start fresh
+- **Context Length Management**: Automatic handling of context limitations
 
-- `/start`: Introduction and available commands.
-- `/model`: Select AI model.
-- `/sm`: Choose system prompt.
-- `/reset`: Reset conversation history.
-- `/create_prompt`: Create a new system prompt.
-- `/status`: View current settings and usage.
-- `/btc`: Get the current Bitcoin price.
+### System Prompts
+- **Customizable Behavior**: Multiple pre-defined system prompts
+- **Custom Prompts**: Create and manage custom prompts
+- **Quick Switching**: Easy switching between different AI behaviors
+- **Prompt Management**: Add, remove, and modify system prompts
 
-### Admin Commands
+### User Management
+- **Access Control**: Whitelist-based user authorization
+- **Admin Controls**: Comprehensive admin interface
+- **Usage Tracking**: Detailed usage statistics per user
+- **Rate Limiting**: Built-in protection against overuse
 
-- `/startadmin`: View admin commands.
-- `/broadcast`: Send a message to all users.
-- `/usage`: View usage statistics.
-- `/list_users`: List all allowed users.
-- `/add_user`: Add a new allowed user.
-- `/remove_user`: Remove an allowed user.
-- `/remove_prompt`: Remove a system prompt.
-- `/reload`: Reload the model configuration.
+### Utility Features
+- **Cryptocurrency**: Real-time Bitcoin price tracking (`/btc`)
+- **Broadcasting**: Send announcements to all users
+- **Status Monitoring**: Check bot status and configuration
+- **Error Handling**: Robust error management and user feedback
+
+### Commands
+
+#### User Commands
+- `/start` - Introduction and basic instructions
+- `/model` - Select AI model
+- `/sm` - Choose system prompt
+- `/reset` - Reset conversation
+- `/create_prompt` - Create custom system prompt
+- `/status` - View current settings and usage
+- `/btc` - Get Bitcoin price
+
+#### Admin Commands
+- `/startadmin` - Access admin interface
+- `/broadcast` - Send message to all users
+- `/usage` - View detailed usage statistics
+- `/list_users` - Show all authorized users
+- `/add_user` - Add new authorized user
+- `/remove_user` - Remove user access
+- `/remove_prompt` - Delete system prompt
+- `/reload` - Reload configuration
+
+### Security Features
+- **API Key Management**: Secure handling of API keys
+- **User Authentication**: Multi-level access control
+- **Error Protection**: Graceful handling of API limits and errors
+- **Data Privacy**: Minimal data storage and secure handling
+
+### Performance
+- **Asynchronous Processing**: Efficient handling of requests
+- **Resource Management**: Optimized memory and API usage
+- **Reliability**: Automatic reconnection and error recovery
+- **Scalability**: Designed for growing user base
 
 ## Installation
 
