@@ -301,7 +301,10 @@ def handle_message(bot: TeleBot, message: Message) -> None:
                 temperature=temperature,
                 stream=False
             )
-            ai_response = response.choices[0].delta.content
+            if hasattr(response.choices[0], 'delta'):
+                ai_response = response.choices[0].delta.content
+            else:
+                ai_response = response.content[0].text
             stream_handler.on_llm_end(ai_response)
         else:
             response = llm_function(
@@ -350,9 +353,18 @@ def handle_message_error(bot: TeleBot, message: Message, placeholder_message: Me
         'rate_limit_exceeded': "Rate limit exceeded. Please try again in a few moments.",
         'invalid_request_error': "Invalid request. Please try again or switch models.",
         'context_length_exceeded': "Conversation too long. Please use /reset command.",
+        'content_policy_violation': "Content policy violation. Please try with different content.",
+        'invalid_api_key': "API key configuration error. Please contact the administrator.",
     }
 
     response = next((msg for key, msg in error_responses.items() if key in error_message), 
-                   f"An error occurred. Please try again or use /model command.")
+                   f"Error: {str(error)}. Please try again or use /model command.")
 
-    bot.edit_message_text(response, chat_id=message.chat.id, message_id=placeholder_message.message_id)
+    try:
+        bot.edit_message_text(response, chat_id=message.chat.id, message_id=placeholder_message.message_id)
+    except Exception as e:
+        logger.error(f"Error sending error message: {e}")
+        try:
+            bot.send_message(message.chat.id, response)
+        except Exception as e:
+            logger.error(f"Failed to send error message: {e}")
