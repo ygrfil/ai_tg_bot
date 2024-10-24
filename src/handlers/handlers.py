@@ -342,19 +342,17 @@ command_router.register('status', handle_status)
 command_router.register('reload', handle_reload_config)
 
 def handle_message_error(bot: TeleBot, message: Message, placeholder_message: Message, error: Exception, user_id: int, selected_model: str):
-    error_message = str(error)
+    error_message = str(error).lower()
     logger.error(f"Error in handle_message: {error_message}", exc_info=True)
 
-    if isinstance(error, ValueError) and "API key" in error_message:
-        response = f"Configuration error: {error_message} Please contact the administrator or choose a different model using the /model command."
-    elif 'rate_limit_exceeded' in error_message.lower():
-        response = "The API rate limit has been exceeded. Please try again in a few moments or choose a different model using the /model command."
-    elif 'invalid_request_error' in error_message.lower():
-        logger.error(f"Invalid Request Error. User ID: {user_id}, Model: {selected_model}, Message: {message.content_type}")
-        response = "There was an issue with the request. Please try again, choose a different model using the /model command, or contact support if the problem persists."
-    elif 'context_length_exceeded' in error_message.lower():
-        response = "The conversation is too long for the current model. Please use the /reset command to start a new conversation."
-    else:
-        response = f"An error occurred: {error_message}. Please try again or choose a different model using the /model command."
+    error_responses = {
+        'api key': "Configuration error. Please contact the administrator.",
+        'rate_limit_exceeded': "Rate limit exceeded. Please try again in a few moments.",
+        'invalid_request_error': "Invalid request. Please try again or switch models.",
+        'context_length_exceeded': "Conversation too long. Please use /reset command.",
+    }
+
+    response = next((msg for key, msg in error_responses.items() if key in error_message), 
+                   f"An error occurred. Please try again or use /model command.")
 
     bot.edit_message_text(response, chat_id=message.chat.id, message_id=placeholder_message.message_id)

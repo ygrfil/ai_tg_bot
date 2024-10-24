@@ -94,26 +94,16 @@ def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
-    retries = 0
-    while retries < MAX_RETRIES:
-        try:
-            logger.info("Starting bot...")
-            bot = create_bot()
-            init_db()
-            import_allowed_users()
-            setup_bot_handlers(bot)
-            logger.info("Bot is running...")
-            bot.polling(none_stop=True)
-        except (ApiException, requests.exceptions.RequestException) as e:
-            retries += 1
-            logger.error(f"Network error occurred: {e}. Retry {retries}/{MAX_RETRIES}")
-            time.sleep(RETRY_DELAY)
-        except Exception as e:
-            logger.error(f"Unexpected error: {e}", exc_info=True)
-            retries += 1
-            time.sleep(RETRY_DELAY)
-    
-    logger.error(f"Bot stopped after {MAX_RETRIES} failed attempts")
+    try:
+        logger.info("Starting bot...")
+        bot = create_bot()
+        init_db()
+        import_allowed_users()
+        setup_bot_handlers(bot)
+        logger.info("Bot is running...")
+        bot.infinity_polling(timeout=20, long_polling_timeout=5)
+    except Exception as e:
+        logger.error(f"Critical error: {e}", exc_info=True)
 
 if __name__ == "__main__":
     main()

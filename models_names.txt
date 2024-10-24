@@ -1,19 +1,21 @@
+# Image-capable models
 openai_model=chatgpt-4o-latest
 openai_temperature=0.4
 openai_max_tokens=1024
+
 anthropic_model=claude-3-5-sonnet-latest
 anthropic_temperature=0.4
 anthropic_max_tokens=1024
+
+# Text-only models
 perplexity_model=llama-3.1-sonar-large-128k-online
 perplexity_temperature=0.7
 perplexity_max_tokens=1024
-perplexity_base_url=https://api.perplexity.ai/chat/completions
+
 groq_model=llama-3.1-70b-versatile
 groq_temperature=0.4
 groq_max_tokens=1024
-hyperbolic_model=mattshumer/Reflection-Llama-3.1-70B
-hyperbolic_temperature=0.4
-hyperbolic_max_tokens=1024
+
 gemini_model=gemini-pro
 gemini_temperature=0.4
 gemini_max_tokens=1024
