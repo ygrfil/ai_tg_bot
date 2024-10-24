@@ -8,3 +8,4 @@ python-telegram-bot>=20.8
 typing-extensions>=4.5.0
 SQLAlchemy>=2.0.0
 pytest>=7.0.0
+cachetools>=5.3.0
