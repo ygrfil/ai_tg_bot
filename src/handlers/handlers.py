@@ -93,8 +93,27 @@ def handle_remove_user(bot: TeleBot, message: Message) -> None:
 
 @admin_only
 def handle_reload_config(bot: TeleBot, message: Message) -> None:
-    MODEL_CONFIG.update(load_model_config('models_names.txt'))
-    bot.reply_to(message, "Model configuration reloaded successfully.")
+    try:
+        new_config = load_model_config('models_names.txt')
+        MODEL_CONFIG.update(new_config)
+        
+        # Prepare message showing available models
+        model_info = "Model configuration reloaded successfully.\n\nAvailable models:"
+        for key in new_config:
+            if key.endswith('_model'):
+                model_name = key.replace('_model', '')
+                model_info += f"\n\n{model_name.capitalize()}:"
+                model_info += f"\n- Model: {new_config[key]}"
+                temp_key = f"{model_name}_temperature"
+                tokens_key = f"{model_name}_max_tokens"
+                if temp_key in new_config:
+                    model_info += f"\n- Temperature: {new_config[temp_key]}"
+                if tokens_key in new_config:
+                    model_info += f"\n- Max tokens: {new_config[tokens_key]}"
+        
+        bot.reply_to(message, model_info)
+    except Exception as e:
+        bot.reply_to(message, f"Error reloading configuration: {str(e)}")
 
 @admin_only
 def handle_remove_prompt(bot: TeleBot, message: Message) -> None:
