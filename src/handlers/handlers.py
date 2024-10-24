@@ -243,13 +243,22 @@ def handle_message(bot: TeleBot, message: Message) -> None:
 
         if message.content_type == 'photo':
             image_data = process_image_message(message, bot, selected_model)
-            user_message = {
-                "role": "user",
-                "content": [
-                    image_data,
-                    {"type": "text", "text": message.caption or "Please analyze this image."}
-                ]
-            }
+            if selected_model == "anthropic":
+                user_message = {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": message.caption or "Please analyze this image."},
+                        image_data
+                    ]
+                }
+            else:
+                user_message = {
+                    "role": "user",
+                    "content": [
+                        image_data,
+                        {"type": "text", "text": message.caption or "Please analyze this image."}
+                    ]
+                }
         else:
             user_message = {"role": "user", "content": [{"type": "text", "text": message.text}]}
         user_conversation_history[user_id].append(user_message)
