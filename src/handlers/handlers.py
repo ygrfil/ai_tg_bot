@@ -253,7 +253,7 @@ def handle_message(bot: TeleBot, message: Message) -> None:
                         image_data
                     ]
                 }
-            elif selected_model == "openai":
+            else:  # openai and other models
                 user_message = {
                     "role": "user",
                     "content": [
@@ -261,11 +261,13 @@ def handle_message(bot: TeleBot, message: Message) -> None:
                         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_data['source']['data']}"}}
                     ]
                 }
+            # Store the raw image data for potential model switching
+            user_message['_raw_image_data'] = image_data['source']['data']
         else:
-            user_message = {"role": "user", "content": [{"type": "text", "text": message.text}]}
+            user_message = {"role": "user", "content": message.text}
         user_conversation_history[user_id].append(user_message)
         user_conversation_history[user_id] = user_conversation_history[user_id][-10:]
-        messages = get_conversation_messages(user_conversation_history, user_id)
+        messages = format_messages_for_model(get_conversation_messages(user_conversation_history, user_id), selected_model)
         
         model_name = MODEL_CONFIG.get(f"{selected_model}_model")
         max_tokens = int(MODEL_CONFIG.get(f"{selected_model}_max_tokens", 1024))
