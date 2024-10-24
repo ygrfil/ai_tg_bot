@@ -8,6 +8,7 @@ import logging
 from src.database.database import is_user_allowed, get_user_preferences, get_last_interaction_time, update_last_interaction_time
 import requests
 import base64
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 

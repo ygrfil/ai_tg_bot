@@ -23,7 +23,7 @@ def create_bot() -> TeleBot:
 def setup_bot_handlers(bot):
     logger.info("Setting up bot handlers...")
 
-    @bot.message_handler(commands=['model', 'sm', 'broadcast', 'usage', 'list_users', 'add_user', 'remove_user', 'remove_prompt', 'status', 'reload'])
+    @bot.message_handler(commands=['model', 'sm', 'broadcast', 'usage', 'list_users', 'add_user', 'remove_user', 'remove_prompt', 'status', 'reload', 'btc'])
     def command_handler(message):
         try:
             logger.info(f"Received command: {message.text}")

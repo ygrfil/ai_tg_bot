@@ -343,6 +343,27 @@ command_router.register('remove_user', handle_remove_user)
 command_router.register('remove_prompt', handle_remove_prompt)
 command_router.register('status', handle_status)
 command_router.register('reload', handle_reload_config)
+command_router.register('btc', lambda bot, message: handle_btc_price(bot, message))
+
+def handle_btc_price(bot: TeleBot, message: Message) -> None:
+    """Handle /btc command to show current BTC price"""
+    try:
+        timestamp, price = get_btc_price()
+        bot.reply_to(message, f"🕒 {timestamp}\n💰 BTC/USD: ${price:,.2f}")
+    except Exception as e:
+        bot.reply_to(message, f"Error fetching BTC price: {str(e)}")
+
+def get_btc_price() -> tuple[str, float]:
+    """Fetch current BTC/USD price from CoinGecko API"""
+    try:
+        response = requests.get('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd')
+        response.raise_for_status()
+        price = response.json()['bitcoin']['usd']
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        return current_time, price
+    except Exception as e:
+        logger.error(f"Error fetching BTC price: {e}")
+        raise RuntimeError("Failed to fetch BTC price")
 
 def handle_message_error(bot: TeleBot, message: Message, placeholder_message: Message, error: Exception, user_id: int, selected_model: str):
     error_message = str(error).lower()
