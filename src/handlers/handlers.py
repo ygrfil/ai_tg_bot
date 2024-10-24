@@ -247,8 +247,8 @@ def handle_message(bot: TeleBot, message: Message) -> None:
                 user_message = {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": message.caption or "Please analyze this image."},
-                        image_data
+                        image_data,
+                        {"type": "text", "text": message.caption or "Please analyze this image."}
                     ]
                 }
             else:

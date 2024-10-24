@@ -116,11 +116,8 @@ def process_image_message(message: Message, bot: Any, selected_model: str) -> Di
     elif selected_model == "anthropic":
         return {
             "type": "image",
-            "source": {
-                "type": "base64",
-                "media_type": "image/jpeg",
-                "data": img_str
-            }
+            "media_type": "image/jpeg",
+            "data": img_str
         }
     else:
         raise ValueError(f"Image processing not supported for model: {selected_model}")
