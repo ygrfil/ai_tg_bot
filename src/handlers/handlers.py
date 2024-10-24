@@ -2,7 +2,7 @@ import logging
 from typing import Dict, List, Callable
 from telebot import TeleBot
 from telebot.types import Message
-from src.models.models import get_llm, get_conversation_messages
+from src.models.models import get_llm, get_conversation_messages, format_messages_for_model
 from src.database.database import (get_user_preferences, save_user_preferences, ensure_user_preferences,
                                    log_usage, get_monthly_usage, is_user_allowed,
                                    get_allowed_users, add_allowed_user, remove_allowed_user)

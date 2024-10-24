@@ -98,9 +98,6 @@ def prepare_perplexity_messages(kwargs):
     kwargs['messages'] = messages
     return kwargs
 
-def get_conversation_messages(user_conversation_history: Dict[int, List[Message]], user_id: int) -> List[Message]:
-    messages = user_conversation_history[user_id]
-    return messages[:-1] if messages and messages[-1]["role"] == "assistant" else messages
 
 def format_messages_for_model(messages: List[Dict], model: str) -> List[Dict]:
     formatted_messages = []
