@@ -99,6 +99,19 @@ def prepare_perplexity_messages(kwargs):
     return kwargs
 
 
+def get_conversation_messages(conversation_history: Dict[int, List[Dict]], user_id: int) -> List[Dict]:
+    """Get formatted conversation messages for the specified user."""
+    if user_id not in conversation_history:
+        return []
+    
+    messages = conversation_history[user_id]
+    
+    # If the last message is from the assistant, exclude it
+    if messages and messages[-1]['role'] == 'assistant':
+        messages = messages[:-1]
+    
+    return messages
+
 def format_messages_for_model(messages: List[Dict], model: str) -> List[Dict]:
     formatted_messages = []
     for msg in messages:
