@@ -8,7 +8,7 @@ from src.database.database import (get_user_preferences, save_user_preferences, 
                                    get_allowed_users, add_allowed_user, remove_allowed_user)
 from src.utils.utils import (should_reset_conversation, create_keyboard, get_system_prompts,
                              get_username, StreamHandler, is_authorized,
-                             remove_system_prompt, get_system_prompt)
+                             remove_system_prompt, get_system_prompt, process_image_message)
 from src.utils.decorators import authorized_only, admin_only
 from config import ENV, load_model_config, MODEL_CONFIG
 
