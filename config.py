@@ -8,8 +8,14 @@ def load_model_config(file_path: str) -> Dict[str, str]:
     config = {}
     with open(file_path, 'r') as file:
         for line in file:
-            key, value = line.strip().split('=')
-            config[key] = value
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            try:
+                key, value = line.split('=', 1)
+                config[key.strip()] = value.strip()
+            except ValueError:
+                logger.warning(f"Skipping invalid line in {file_path}: {line}")
     return config
 
 MODEL_CONFIG = load_model_config('models_names.txt')
