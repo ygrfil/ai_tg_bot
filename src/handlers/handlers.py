@@ -243,20 +243,22 @@ def handle_message(bot: TeleBot, message: Message) -> None:
 
         if message.content_type == 'photo':
             image_data = process_image_message(message, bot, selected_model)
+            caption = message.caption or "Please analyze this image."
+            
             if selected_model == "anthropic":
                 user_message = {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": message.caption or "Please analyze this image."},
+                        {"type": "text", "text": caption},
                         image_data
                     ]
                 }
-            else:
+            elif selected_model == "openai":
                 user_message = {
                     "role": "user",
                     "content": [
-                        image_data,
-                        {"type": "text", "text": message.caption or "Please analyze this image."}
+                        {"type": "text", "text": caption},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_data['source']['data']}"}}
                     ]
                 }
         else:

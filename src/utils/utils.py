@@ -111,16 +111,12 @@ def process_image_message(message: Message, bot: Any, selected_model: str) -> Di
     file_id = message.photo[-1].file_id
     img_str = download_and_encode_image(bot, file_id)
     
-    if selected_model == "openai":
-        return {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{img_str}"}}
-    elif selected_model == "anthropic":
-        return {
-            "type": "image",
-            "source": {
-                "type": "base64",
-                "media_type": "image/jpeg",
-                "data": img_str
-            }
+    # Always return in Anthropic format, will be converted if needed
+    return {
+        "type": "image",
+        "source": {
+            "type": "base64",
+            "media_type": "image/jpeg",
+            "data": img_str
         }
-    else:
-        raise ValueError(f"Image processing not supported for model: {selected_model}")
+    }
