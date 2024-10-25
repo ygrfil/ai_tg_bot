@@ -1,5 +1,5 @@
 # Image-capable models
-openai_model=gpt-4-vision
+openai_model=chatgpt-4o-latest
 openai_temperature=0.4
 openai_max_tokens=1024
 
@@ -12,7 +12,7 @@ perplexity_model=llama-3.1-sonar-large-128k-online
 perplexity_temperature=0.7
 perplexity_max_tokens=1024
 
-groq_model=llama-3.1-70b-versatile
+groq_model=llama-3.2-90b-text-preview
 groq_temperature=0.4
 groq_max_tokens=1024
 
