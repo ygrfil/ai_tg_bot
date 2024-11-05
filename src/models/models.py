@@ -104,15 +104,12 @@ def prepare_perplexity_messages(kwargs):
     perplexity_messages = []
     for message in messages:
         if message['role'] == 'system':
-            # Add system message as a user message with "System: " prefix
             perplexity_messages.append({
                 'role': 'user',
                 'content': f"System: {message['content']}"
             })
         else:
-            # Handle regular messages
             if isinstance(message.get('content'), list):
-                # Convert list content to string if it's text only
                 text_content = next((item['text'] for item in message['content'] 
                                    if isinstance(item, dict) and item.get('type') == 'text'), '')
                 perplexity_messages.append({
@@ -125,15 +122,13 @@ def prepare_perplexity_messages(kwargs):
     # Update kwargs with formatted messages
     kwargs['messages'] = perplexity_messages
     
-    # Add required Perplexity API parameters
-    model = MODEL_CONFIG.get('perplexity_model', 'pplx-70b-online')
-    max_tokens = int(MODEL_CONFIG.get('perplexity_max_tokens', 1024))
-    temperature = float(MODEL_CONFIG.get('perplexity_temperature', 0.7))
-    
+    # Read all parameters from MODEL_CONFIG
     kwargs.update({
-        'model': model,
-        'max_tokens': max_tokens,
-        'temperature': temperature
+        'model': MODEL_CONFIG.get('perplexity_model', 'pplx-70b-online'),
+        'max_tokens': int(MODEL_CONFIG.get('perplexity_max_tokens', 1024)),
+        'temperature': float(MODEL_CONFIG.get('perplexity_temperature', 0.7)),
+        'top_p': float(MODEL_CONFIG.get('perplexity_top_p', 0.9)),
+        'top_k': int(MODEL_CONFIG.get('perplexity_top_k', 40))
     })
     
     return kwargs
