@@ -15,3 +15,5 @@ perplexity_max_tokens=1024
 groq_model=llama-3.2-90b-text-preview
 groq_temperature=0.4
 groq_max_tokens=1024
+perplexity_top_p=0.9
+perplexity_top_k=40
