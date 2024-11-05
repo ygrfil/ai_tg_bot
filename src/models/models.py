@@ -122,12 +122,12 @@ def prepare_perplexity_messages(kwargs):
     # Update kwargs with formatted messages
     kwargs['messages'] = perplexity_messages
     
-    # Read supported parameters from MODEL_CONFIG
+    # Read parameters from MODEL_CONFIG without default values
     kwargs.update({
-        'model': MODEL_CONFIG.get('perplexity_model', 'pplx-70b-online'),
-        'max_tokens': int(MODEL_CONFIG.get('perplexity_max_tokens', 1024)),
-        'temperature': float(MODEL_CONFIG.get('perplexity_temperature', 0.7)),
-        'top_p': float(MODEL_CONFIG.get('perplexity_top_p', 0.9))
+        'model': MODEL_CONFIG['perplexity_model'],
+        'max_tokens': int(MODEL_CONFIG['perplexity_max_tokens']),
+        'temperature': float(MODEL_CONFIG['perplexity_temperature']),
+        'top_p': float(MODEL_CONFIG['perplexity_top_p'])
     })
     
     return kwargs
