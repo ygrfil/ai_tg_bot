@@ -13,8 +13,15 @@ class Message(TypedDict):
 MODEL_CONFIGS = {
     "openai": lambda api_key: OpenAI(api_key=api_key),
     "anthropic": lambda api_key: Anthropic(api_key=api_key),
-    "perplexity": lambda api_key: OpenAI(api_key=api_key, base_url="https://api.perplexity.ai"),  # Perplexity API
-    "groq": lambda api_key: OpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1")    # Groq API
+    "perplexity": lambda api_key: OpenAI(
+        api_key=api_key,
+        base_url="https://api.perplexity.ai",
+        default_headers={
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+        }
+    ),
+    "groq": lambda api_key: OpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1")
 }
 
 def get_llm(selected_model: str) -> Optional[Callable]:
@@ -92,10 +99,43 @@ def prepare_anthropic_messages(kwargs):
 
 def prepare_perplexity_messages(kwargs):
     messages = kwargs.get('messages', [])
-    if messages and messages[0]['role'] == 'system':
-        system_message = messages.pop(0)
-        messages.insert(0, {'role': 'user', 'content': f"System: {system_message['content']}"})
-    kwargs['messages'] = messages
+    
+    # Convert messages to Perplexity format
+    perplexity_messages = []
+    for message in messages:
+        if message['role'] == 'system':
+            # Add system message as a user message with "System: " prefix
+            perplexity_messages.append({
+                'role': 'user',
+                'content': f"System: {message['content']}"
+            })
+        else:
+            # Handle regular messages
+            if isinstance(message.get('content'), list):
+                # Convert list content to string if it's text only
+                text_content = next((item['text'] for item in message['content'] 
+                                   if isinstance(item, dict) and item.get('type') == 'text'), '')
+                perplexity_messages.append({
+                    'role': message['role'],
+                    'content': text_content
+                })
+            else:
+                perplexity_messages.append(message)
+    
+    # Update kwargs with formatted messages
+    kwargs['messages'] = perplexity_messages
+    
+    # Add required Perplexity API parameters
+    model = MODEL_CONFIG.get('perplexity_model', 'pplx-70b-online')
+    max_tokens = int(MODEL_CONFIG.get('perplexity_max_tokens', 1024))
+    temperature = float(MODEL_CONFIG.get('perplexity_temperature', 0.7))
+    
+    kwargs.update({
+        'model': model,
+        'max_tokens': max_tokens,
+        'temperature': temperature
+    })
+    
     return kwargs
 
 
