@@ -3,6 +3,7 @@ from typing import List, Dict, Optional, Callable, TypedDict
 from openai import OpenAI
 from anthropic import Anthropic
 from config import MODEL_CONFIG, ENV
+from src.models.conversation import get_conversation_history
 
 logger = logging.getLogger(__name__)
 
@@ -133,12 +134,9 @@ def prepare_perplexity_messages(kwargs):
     return kwargs
 
 
-def get_conversation_messages(conversation_history: Dict[int, List[Dict]], user_id: int) -> List[Dict]:
+def get_conversation_messages(conversation_history: List[Dict], user_id: int) -> List[Dict]:
     """Get formatted conversation messages for the specified user."""
-    if user_id not in conversation_history:
-        return []
-    
-    messages = conversation_history[user_id]
+    messages = conversation_history
     
     # If the last message is from the assistant, exclude it
     if messages and messages[-1]['role'] == 'assistant':

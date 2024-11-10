@@ -10,13 +10,13 @@ from src.database.database import (get_user_preferences, save_user_preferences, 
                                    get_allowed_users, add_allowed_user, remove_allowed_user)
 from src.utils.utils import (should_reset_conversation, create_keyboard, get_system_prompts,
                              get_username, StreamHandler, is_authorized,
-                             remove_system_prompt, get_system_prompt, process_image_message)
+                             remove_system_prompt, get_system_prompt, process_image_message,
+                             reset_conversation)
 from src.utils.decorators import authorized_only, admin_only
 from config import ENV, load_model_config, MODEL_CONFIG
+from src.models.conversation import get_conversation_history, set_conversation_history
 
 logger = logging.getLogger(__name__)
-
-user_conversation_history: Dict[int, List[Dict[str, str]]] = {}
 
 model_display_names = {
     'openai': 'ChatGPT (OpenAI)',
@@ -180,14 +180,18 @@ def callback_query_handler(bot: TeleBot, call):
         model_name = call.data.split('_')[1]
         
         # Check if current conversation has images and switching to non-supported model
-        if user_id in user_conversation_history:
+        if user_id in get_conversation_history(user_id):
             has_images = any(
                 isinstance(msg.get('content'), list) and '_raw_image_data' in msg 
-                for msg in user_conversation_history[user_id]
+                for msg in get_conversation_history(user_id)
             )
             if has_images and model_name not in ['anthropic', 'openai']:
-                user_conversation_history[user_id] = []
-                bot.answer_callback_query(call.id, "Conversation reset: images are only supported with Claude and ChatGPT")
+                reset_conversation(
+                    user_id=user_id,
+                    bot=bot,
+                    chat_id=call.message.chat.id,
+                    reason="images are only supported with Claude and ChatGPT"
+                )
                 
         save_user_preferences(user_id, selected_model=model_name)
         display_name = next((name for model, name in model_display_names.items() if model == model_name), model_name)
@@ -202,7 +206,12 @@ def callback_query_handler(bot: TeleBot, call):
         prompt_name = call.data.split('_')[1]
         system_message = get_system_prompts().get(prompt_name, "You are a helpful assistant.")
         save_user_preferences(user_id, system_prompt=prompt_name)
-        user_conversation_history[user_id] = [{"role": "system", "content": system_message}]
+        reset_conversation(
+            user_id=user_id,
+            bot=bot,
+            chat_id=call.message.chat.id,
+            message=f"System message set to {prompt_name}. Conversation has been reset."
+        )
         bot.answer_callback_query(call.id, f"Switched to {prompt_name} system message. Conversation has been reset.")
         bot.edit_message_text(f"System message set to {prompt_name}. Conversation has been reset.", call.message.chat.id, call.message.message_id, reply_markup=None)
 
@@ -235,24 +244,36 @@ def reset_command(bot: TeleBot, message: Message) -> None:
         bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
         return
     ensure_user_preferences(message.from_user.id)
-    user_conversation_history[message.from_user.id] = []
-    bot.reply_to(message, "Conversation has been reset.")
+    reset_conversation(
+        user_id=message.from_user.id,
+        bot=bot,
+        chat_id=message.chat.id,
+        message="Conversation has been reset."
+    )
 
+@authorized_only
 def handle_message(bot: TeleBot, message: Message) -> None:
-    if not is_authorized(message):
-        bot.reply_to(message, "Sorry, you are not authorized to use this bot.")
-        return
-
     user_id = message.from_user.id
+    
+    # Check for conversation timeout
+    if should_reset_conversation(user_id):
+        reset_conversation(
+            user_id=user_id,
+            bot=bot,
+            chat_id=message.chat.id,
+            reason="inactivity timeout"
+        )
+    
     ensure_user_preferences(user_id)
     user_prefs = get_user_preferences(user_id)
     selected_model = user_prefs.get('selected_model', 'openai')
 
-    if user_id not in user_conversation_history:
-        user_conversation_history[user_id] = []
+    conversation_history = get_conversation_history(user_id)
+    if not conversation_history:
+        set_conversation_history(user_id, [])
 
     if should_reset_conversation(user_id):
-        user_conversation_history[user_id] = []
+        set_conversation_history(user_id, [])
         bot.send_message(message.chat.id, "Your conversation has been reset due to inactivity.")
 
     placeholder_message = bot.send_message(message.chat.id, "Generating...")
@@ -275,7 +296,7 @@ def handle_message(bot: TeleBot, message: Message) -> None:
 
         if should_reset_conversation(user_id):
             system_prompt = get_system_prompt(user_id)
-            user_conversation_history[user_id] = [{"role": "system", "content": system_prompt}]
+            set_conversation_history(user_id, [{"role": "system", "content": system_prompt}])
             bot.send_message(message.chat.id, "Your conversation has been reset due to inactivity.")
 
         if message.content_type == 'photo':
@@ -306,9 +327,9 @@ def handle_message(bot: TeleBot, message: Message) -> None:
             user_message['_raw_image_data'] = image_data['source']['data']
         else:
             user_message = {"role": "user", "content": message.text}
-        user_conversation_history[user_id].append(user_message)
-        user_conversation_history[user_id] = user_conversation_history[user_id][-10:]
-        messages = format_messages_for_model(get_conversation_messages(user_conversation_history, user_id), selected_model)
+        set_conversation_history(user_id, get_conversation_history(user_id) + [user_message])
+        set_conversation_history(user_id, get_conversation_history(user_id)[-10:])
+        messages = format_messages_for_model(get_conversation_messages(get_conversation_history(user_id), user_id), selected_model)
         
         model_name = MODEL_CONFIG.get(f"{selected_model}_model")
         max_tokens = int(MODEL_CONFIG.get(f"{selected_model}_max_tokens", 1024))
@@ -346,8 +367,8 @@ def handle_message(bot: TeleBot, message: Message) -> None:
         if not ai_response:
             raise ValueError("No response generated from the model.")
         
-        user_conversation_history[user_id].append({"role": "assistant", "content": ai_response})
-        user_conversation_history[user_id] = user_conversation_history[user_id][-10:]
+        set_conversation_history(user_id, get_conversation_history(user_id) + [{"role": "assistant", "content": ai_response}])
+        set_conversation_history(user_id, get_conversation_history(user_id)[-10:])
         
         log_usage(user_id, selected_model, 1)
     except Exception as e:

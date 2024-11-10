@@ -9,6 +9,8 @@ from src.database.database import is_user_allowed, get_user_preferences, get_las
 import requests
 import base64
 from datetime import datetime
+from telebot import TeleBot
+from src.models.conversation import clear_conversation_history, set_conversation_history
 
 logger = logging.getLogger(__name__)
 
@@ -121,3 +123,24 @@ def process_image_message(message: Message, bot: Any, selected_model: str) -> Di
             "data": img_str
         }
     }
+
+def reset_conversation(
+    user_id: int, 
+    bot: Optional[TeleBot] = None, 
+    chat_id: Optional[int] = None, 
+    message: Optional[str] = None, 
+    reason: Optional[str] = None
+) -> None:
+    """
+    Reset conversation for a user with optional notification
+    """
+    system_prompt = get_system_prompt(user_id)
+    
+    if system_prompt:
+        set_conversation_history(user_id, [{"role": "system", "content": system_prompt}])
+    else:
+        clear_conversation_history(user_id)
+    
+    if bot and chat_id:
+        notification = message or f"Your conversation has been reset{f' due to {reason}' if reason else ''}."
+        bot.send_message(chat_id, notification)
