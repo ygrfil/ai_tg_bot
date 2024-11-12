@@ -15,7 +15,7 @@ from ..services.storage import JsonStorage
 from ..services.ai_providers import get_provider
 
 router = Router()
-storage = JsonStorage("ai_telegram_bot/data/user_settings.json")
+storage = JsonStorage("data/user_settings.json")
 
 # One model per provider
 PROVIDER_MODELS = {
@@ -52,16 +52,45 @@ async def cmd_start(message: Message, state: FSMContext):
 
     user_settings = storage.get_user_settings(message.from_user.id)
     if not user_settings:
-        default_provider = "groq"
-        user_settings = {
-            "current_provider": default_provider,
-            "current_model": PROVIDER_MODELS[default_provider]["name"]
-        }
-        storage.update_user_settings(message.from_user.id, user_settings)
+        # First time user
+        await message.answer(
+            f"👋 Welcome to AI Assistant Bot!\n\n"
+            f"Hello, {hbold(message.from_user.full_name)}!\n\n"
+            f"This bot provides access to various AI models including:\n"
+            f"• OpenAI GPT-4\n"
+            f"• Claude 3\n"
+            f"• Groq\n"
+            f"• Perplexity\n\n"
+            f"Click the button below to start!",
+            reply_markup=kb.get_welcome_keyboard()
+        )
+        return
+
+    # Returning user
+    await message.answer(
+        f"Welcome back, {hbold(message.from_user.full_name)}!\n"
+        f"Current AI: {user_settings['current_provider']} ({user_settings['current_model']})",
+        reply_markup=kb.get_main_menu()
+    )
+    await state.set_state(UserStates.chatting)
+
+@router.message(F.text == "🚀 Start Bot")
+async def handle_start_button(message: Message, state: FSMContext):
+    default_provider = "groq"
+    user_settings = {
+        "current_provider": default_provider,
+        "current_model": PROVIDER_MODELS[default_provider]["name"]
+    }
+    storage.update_user_settings(message.from_user.id, user_settings)
     
     await message.answer(
-        f"Welcome, {hbold(message.from_user.full_name)}!\n"
-        f"Current AI: {user_settings['current_provider']} ({user_settings['current_model']})",
+        f"✨ Great! I'm ready to help you!\n\n"
+        f"Current AI: {user_settings['current_provider']} ({user_settings['current_model']})\n\n"
+        f"You can:\n"
+        f"• Send text messages to chat with AI\n"
+        f"• Send images for analysis (with supported models)\n"
+        f"• Change AI models using '🤖 Choose AI Model'\n"
+        f"• Clear conversation history with '🗑 Clear History'",
         reply_markup=kb.get_main_menu()
     )
     await state.set_state(UserStates.chatting)

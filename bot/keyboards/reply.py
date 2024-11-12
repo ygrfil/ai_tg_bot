@@ -30,3 +30,11 @@ def get_back_menu() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
     builder.add(KeyboardButton(text="🔙 Back"))
     return builder.as_markup(resize_keyboard=True)
+
+def get_welcome_keyboard() -> ReplyKeyboardMarkup:
+    builder = ReplyKeyboardBuilder()
+    builder.row(KeyboardButton(text="🚀 Start Bot"))
+    return builder.as_markup(
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )

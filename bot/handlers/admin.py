@@ -5,7 +5,7 @@ from ..services.storage import JsonStorage
 from ..config import Config
 
 router = Router()
-storage = JsonStorage("ai_telegram_bot/data/user_settings.json")
+storage = JsonStorage("data/user_settings.json")
 config = Config.from_env()
 
 @router.message(Command("admin"), F.from_user.id == config.admin_id)

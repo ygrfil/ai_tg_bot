@@ -22,7 +22,7 @@ async def main():
     
     # Initialize storages
     memory_storage = MemoryStorage()  # For FSM
-    settings_storage = JsonStorage("ai_telegram_bot/data/user_settings.json")
+    settings_storage = JsonStorage("data/user_settings.json")
     
     # Initialize bot with new syntax
     bot = Bot(
@@ -46,8 +46,8 @@ async def main():
     dp.include_router(user.router)
     
     # Debug file paths
-    settings_path = "ai_telegram_bot/data/user_settings.json"
-    history_path = "ai_telegram_bot/data/chat_history.json"
+    settings_path = "data/user_settings.json"
+    history_path = "data/chat_history.json"
     
     print("\n=== Storage Files ===")
     print(f"Settings path: {os.path.abspath(settings_path)}")
