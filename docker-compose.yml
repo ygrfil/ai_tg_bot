@@ -1,9 +1,0 @@
-services:
-  telegramm-ai:
-    container_name: Telegramm-AI-Bot
-    build: .
-    volumes:
-      - .:/app
-    environment:
-      - .env
-    restart: unless-stopped
