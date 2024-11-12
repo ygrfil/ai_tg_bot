@@ -5,7 +5,6 @@ from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.utils.chat_action import ChatActionMiddleware
 from aiogram.client.default import DefaultBotProperties
-import os
 
 from bot.config import Config
 from bot.handlers import admin, user
@@ -44,17 +43,6 @@ async def main():
     dp.include_router(admin.router)
     print("[DEBUG] Registering user router")
     dp.include_router(user.router)
-    
-    # Debug file paths
-    settings_path = "data/user_settings.json"
-    history_path = "data/chat_history.json"
-    
-    print("\n=== Storage Files ===")
-    print(f"Settings path: {os.path.abspath(settings_path)}")
-    print(f"History path: {os.path.abspath(history_path)}")
-    print(f"Settings exists: {os.path.exists(settings_path)}")
-    print(f"History exists: {os.path.exists(history_path)}")
-    print("===================\n")
     
     # Start polling
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
