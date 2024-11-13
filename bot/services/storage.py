@@ -172,10 +172,10 @@ class Storage:
             try:
                 async with self._db_connect() as db:
                     async with db.execute("""
-                        SELECT content, is_bot, image_data, timestamp
+                        SELECT content, is_bot, image_data, created_at
                         FROM chat_history
                         WHERE user_id = ?
-                        ORDER BY timestamp DESC
+                        ORDER BY created_at DESC
                         LIMIT ?
                     """, (user_id, limit)) as cursor:
                         rows = await cursor.fetchall()

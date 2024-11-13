@@ -9,10 +9,13 @@ def sanitize_html_tags(text: str) -> str:
     # First, fix doubled closing tags (e.g., "</</b>" -> "</b>")
     text = re.sub(r'</+([a-zA-Z]+)>', r'</\1>', text)
     
+    # Fix malformed nested tags (e.g., "</b</b>" -> "</b>")
+    text = re.sub(r'</([a-zA-Z]+)</\1>', r'</\1>', text)
+    
     # List of allowed HTML tags in Telegram
     allowed_tags = ['b', 'i', 'u', 's', 'code', 'pre', 'a']
     
-    # Stack to keep track of opened tags and their positions
+    # Stack to keep track of opened tags
     tag_stack = []
     
     # Find all HTML tags in the text
@@ -42,25 +45,16 @@ def sanitize_html_tags(text: str) -> str:
                         if href_match:
                             chunks.append(f'<a href="{href_match.group(1)}">')
                         else:
-                            # Skip malformed anchor tags
                             continue
                     else:
                         chunks.append(f'<{tag_name}>')
                     tag_stack.append(tag_name)
                 else:
                     # Closing tag
-                    if tag_stack:
-                        # If the closing tag matches the last opened tag
-                        if tag_stack[-1] == tag_name:
-                            chunks.append(f'</{tag_name}>')
-                            tag_stack.pop()
-                        else:
-                            # If we have a mismatched closing tag, close all tags up to the matching one
-                            if tag_name in tag_stack:
-                                while tag_stack and tag_stack[-1] != tag_name:
-                                    chunks.append(f'</{tag_stack.pop()}>')
-                                if tag_stack:
-                                    chunks.append(f'</{tag_stack.pop()}>')
+                    if tag_stack and tag_stack[-1] == tag_name:
+                        chunks.append(f'</{tag_name}>')
+                        tag_stack.pop()
+            
             last_end = end
         
         # Add remaining text
