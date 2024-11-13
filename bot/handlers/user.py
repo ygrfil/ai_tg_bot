@@ -1,6 +1,6 @@
 from aiogram import Router, F, types
 from aiogram.types import Message
-from aiogram.filters import Command, StateFilter
+from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.markdown import hbold
@@ -174,16 +174,17 @@ async def btc_price(message: Message):
                 low_24h = float(price_data['l'][1])
                 volume = float(price_data['v'][1])
                 
-                time = datetime.now().strftime("%H:%M:%S")
+                time = datetime.now().strftime("%H:%M")  # Removed seconds
                 
                 await message.answer(
-                    f"₿ Bitcoin Price (Kraken):\n\n"
-                    f"Current: ${current_price:,.2f}\n"
-                    f"24h High: ${high_24h:,.2f}\n"
-                    f"24h Low: ${low_24h:,.2f}\n"
-                    f"24h Volume: {volume:,.2f} BTC\n\n"
-                    f"Time: {time}",
-                    reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
+                    f"<b>Bitcoin Price:</b>\n\n"
+                    f"🔼 <b>24h High:</b> ${high_24h:,.0f}\n"  # Minimalistic green arrow for high
+                    f"💰 <b>Current:</b> <code>${current_price:,.0f}</code>\n"  # Highlighted current price
+                    f"🔽 <b>24h Low:</b> ${low_24h:,.0f}\n"  # Minimalistic red arrow for low
+                    f"📊 <b>24h Volume:</b> {volume:,.2f} BTC\n\n"
+                    f"🕒 <b>Time:</b> {time}",
+                    reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id),
+                    parse_mode='HTML'
                 )
     except Exception as e:
         await message.answer(
