@@ -6,6 +6,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.markdown import hbold
 import aiohttp
 from datetime import datetime
+import logging
 
 from bot.keyboards import reply as kb
 from bot.services.storage import Storage
@@ -37,8 +38,9 @@ PROVIDER_MODELS = {
 }
 
 class UserStates(StatesGroup):
-    chatting = State()
-    choosing_provider = State()
+    """States for user interaction with the bot."""
+    chatting = State()         # Default state for general chat
+    choosing_provider = State() # State when user is selecting AI provider
 
 DEFAULT_PROVIDER = "openai"
 DEFAULT_MODEL = "gpt-4o"
@@ -81,38 +83,33 @@ async def cmd_start(message: Message, state: FSMContext):
     )
 
 # Button handlers (put these BEFORE the general message handler)
-@router.message(UserStates.choosing_provider, F.text.in_(["OpenAI", "Claude", "Groq", "Perplexity"]))
-async def provider_selected(message: Message, state: FSMContext):
-    if not is_user_authorized(message.from_user.id):
-        return
+@router.message(UserStates.choosing_provider)
+async def handle_provider_choice(message: Message, state: FSMContext):
+    # Update available providers list to match PROVIDER_MODELS
+    available_providers = ["OpenAI", "Claude", "Groq", "Perplexity"]
     
-    provider = message.text.lower()
-    if provider not in PROVIDER_MODELS:
-        await message.answer("Invalid provider selected. Please try again.")
-        return
-    
-    try:
+    if message.text in available_providers:
         settings = await get_or_create_settings(message.from_user.id)
-        settings.update({
-            'current_provider': provider,
-            'current_model': PROVIDER_MODELS[provider]['name']
-        })
-        await storage.save_user_settings(message.from_user.id, settings)
+        settings['current_provider'] = message.text.lower()
+        settings['current_model'] = PROVIDER_MODELS[settings['current_provider']]['name']
         
-        is_admin = str(message.from_user.id) == config.admin_id
-        await message.answer(
-            f"✅ Provider updated successfully!\n\n"
-            f"Current Provider: {provider}\n"
-            f"Model: {PROVIDER_MODELS[provider]['name']}",
-            reply_markup=kb.get_main_menu(is_admin=is_admin)
+        await storage.save_user_settings(
+            message.from_user.id, 
+            settings
         )
-        await state.set_state(UserStates.chatting)
-    except Exception as e:
+        
         await message.answer(
-            "❌ Error updating provider settings. Please try again.",
+            f"Provider changed to {message.text}. Ready to chat!",
             reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
         )
         await state.set_state(UserStates.chatting)
+    else:
+        # Show all available providers in error message
+        providers_list = ", ".join(available_providers)
+        await message.answer(
+            f"Please select a provider from the menu: {providers_list}",
+            reply_markup=kb.get_provider_menu()
+        )
 
 @router.message(F.text == "🤖 Choose AI Model")
 async def choose_model_button(message: Message, state: FSMContext):
@@ -121,7 +118,7 @@ async def choose_model_button(message: Message, state: FSMContext):
     
     settings = await get_or_create_settings(message.from_user.id)
     current_provider = settings.get('current_provider', DEFAULT_PROVIDER)
-    current_model = settings.get('current_model', PROVIDER_MODELS[DEFAULT_PROVIDER]['name'])
+    current_model = PROVIDER_MODELS[current_provider]['name']
     
     await message.answer(
         f"Choose AI Provider:\n\n"
@@ -216,38 +213,66 @@ async def back_button(message: Message, state: FSMContext):
 async def handle_message(message: Message, state: FSMContext):
     if not is_user_authorized(message.from_user.id):
         return
-    
-    # Skip processing for button presses
-    if message.text and message.text in ["OpenAI", "Claude", "Groq", "Perplexity", "🤖 Choose AI Model", "⚙️ Settings", "🗑 Clear History", "₿", "🔙 Back"]:
+
+    # Skip processing for button presses but maintain chat state
+    if message.text and message.text.startswith(('🤖', '⚙️', '🗑', '₿', '🔙')):
+        await message.answer(
+            "Please use the menu buttons or send a message to chat.",
+            reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
+        )
         return
-    
+
     settings = await get_or_create_settings(message.from_user.id)
-    provider_name = settings.get('current_provider', DEFAULT_PROVIDER)
+    provider_name = settings.get('current_provider', 'openai')
     model_config = PROVIDER_MODELS[provider_name]
     
     try:
-        # Update last activity for any message
-        await storage.update_last_activity(message.from_user.id)
+        # Handle image if present
+        image_data = None
+        message_text = message.text or ""
         
+        if message.photo:
+            photo = message.photo[-1]
+            image_file = await message.bot.get_file(photo.file_id)
+            image_bytes = await message.bot.download_file(image_file.file_path)
+            image_data = image_bytes.read()
+            
+            if not message_text:
+                message_text = "Please analyze this image."
+
+        # Save user message with image if present
+        await storage.add_message(
+            user_id=message.from_user.id,
+            content=message_text,
+            is_bot=False,
+            image_data=image_data
+        )
+
         # Get chat history
         history = await storage.get_chat_history(message.from_user.id)
         
-        # Save user message
-        await storage.add_message(message.from_user.id, message.text, is_bot=False)
-        
-        # Get AI response
+        # Get AI provider
         ai_provider = get_provider(provider_name, config)
+        
+        # Process response
         response = await ai_provider.chat_completion(
-            message=message.text,
+            message=message_text,
             model_config=model_config,
-            history=history
+            history=history,
+            image=image_data if message.photo else None
         )
         
         # Save bot response
-        await storage.add_message(message.from_user.id, response, is_bot=True)
+        await storage.add_message(
+            user_id=message.from_user.id,
+            content=response,
+            is_bot=True
+        )
         
         await message.answer(response)
+        
     except Exception as e:
+        logging.error(f"Error processing message: {e}")
         await message.answer(
             f"❌ Error processing your message: {str(e)}\n"
             "Please try again or choose a different AI model."

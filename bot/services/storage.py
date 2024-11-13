@@ -1,4 +1,4 @@
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from datetime import datetime
 import aiosqlite
 import os
@@ -36,37 +36,19 @@ class Storage:
             self.is_initialized = True
 
     async def _init_db(self):
-        """Initialize database with all required tables and columns"""
+        """Initialize the database with required tables."""
         async with self._lock:
             async with self._db_connect() as db:
-                # First create tables if they don't exist
+                # Create users table
                 await db.execute("""
                     CREATE TABLE IF NOT EXISTS users (
                         user_id INTEGER PRIMARY KEY,
-                        current_provider TEXT NOT NULL DEFAULT 'openai',
-                        current_model TEXT NOT NULL DEFAULT 'gpt-4',
-                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                        settings TEXT,
+                        last_activity DATETIME DEFAULT CURRENT_TIMESTAMP
                     )
                 """)
-                
-                # Check if last_activity column exists
-                async with db.execute("PRAGMA table_info(users)") as cursor:
-                    columns = await cursor.fetchall()
-                    column_names = [col[1] for col in columns]
-                    
-                    # Add last_activity column if it doesn't exist
-                    if 'last_activity' not in column_names:
-                        await db.execute("""
-                            ALTER TABLE users 
-                            ADD COLUMN last_activity DATETIME
-                        """)
-                        await db.execute("""
-                            UPDATE users 
-                            SET last_activity = datetime('now')
-                            WHERE last_activity IS NULL
-                        """)
-                
+
+                # Create chat_history table
                 await db.execute("""
                     CREATE TABLE IF NOT EXISTS chat_history (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,7 +59,18 @@ class Storage:
                         FOREIGN KEY (user_id) REFERENCES users(user_id)
                     )
                 """)
-                
+
+                # Check if image_data column exists, if not add it
+                async with db.execute("PRAGMA table_info(chat_history)") as cursor:
+                    columns = await cursor.fetchall()
+                    column_names = [col[1] for col in columns]
+                    
+                    if 'image_data' not in column_names:
+                        await db.execute("""
+                            ALTER TABLE chat_history 
+                            ADD COLUMN image_data BLOB
+                        """)
+
                 await db.commit()
 
     async def get_user_settings(self, user_id: int) -> Dict[str, Any]:
@@ -129,49 +122,54 @@ class Storage:
                 logging.error(f"Error saving user settings: {e}")
                 raise
 
-    async def add_message(self, user_id: int, content: str, is_bot: bool):
+    async def add_message(self, user_id: int, content: str, is_bot: bool, image_data: Optional[bytes] = None):
         await self.ensure_initialized()
         async with self._lock:
             try:
                 async with self._db_connect() as db:
+                    # If this is a new message with an image, remove previous image messages
+                    if image_data:
+                        await db.execute("""
+                            UPDATE chat_history 
+                            SET image_data = NULL 
+                            WHERE user_id = ? AND image_data IS NOT NULL
+                        """, (user_id,))
+                    
                     await db.execute(
-                        """INSERT INTO chat_history (user_id, content, is_bot) 
-                           VALUES (?, ?, ?)""",
-                        (user_id, content, is_bot)
+                        """INSERT INTO chat_history (user_id, content, is_bot, image_data) 
+                           VALUES (?, ?, ?, ?)""",
+                        (user_id, content, is_bot, image_data)
                     )
-                    if not is_bot:
-                        await db.execute(
-                            """UPDATE users 
-                               SET last_activity = datetime('now') 
-                               WHERE user_id = ?""",
-                            (user_id,)
-                        )
                     await db.commit()
             except Exception as e:
                 logging.error(f"Error adding message: {e}")
                 raise
 
-    async def get_chat_history(self, user_id: int, limit: int = 10) -> List[Dict[str, Any]]:
+    async def get_chat_history(self, user_id: int, limit: int = 20) -> List[Dict[str, Any]]:
         await self.ensure_initialized()
         async with self._lock:
             try:
                 async with self._db_connect() as db:
-                    async with db.execute(
-                        """SELECT content, is_bot, timestamp 
-                           FROM chat_history 
-                           WHERE user_id = ? 
-                           ORDER BY timestamp DESC LIMIT ?""",
-                        (user_id, limit)
-                    ) as cursor:
+                    async with db.execute("""
+                        SELECT content, is_bot, image_data, timestamp
+                        FROM chat_history
+                        WHERE user_id = ?
+                        ORDER BY timestamp DESC
+                        LIMIT ?
+                    """, (user_id, limit)) as cursor:
                         rows = await cursor.fetchall()
-                        return [
-                            {
-                                "content": row[0],
-                                "is_bot": bool(row[1]),
-                                "timestamp": row[2]
-                            }
-                            for row in reversed(rows)
-                        ]
+                    
+                    history = []
+                    for row in reversed(rows):  # Maintain chronological order
+                        entry = {
+                            "content": row[0],
+                            "is_bot": row[1],
+                            "image": row[2],  # Include image data directly
+                            "timestamp": row[3]
+                        }
+                        history.append(entry)
+                    
+                    return history
             except Exception as e:
                 logging.error(f"Error getting chat history: {e}")
                 return []

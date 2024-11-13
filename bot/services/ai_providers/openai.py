@@ -24,15 +24,37 @@ class OpenAIProvider(BaseAIProvider):
             messages.append({"role": "system", "content": system_prompt})
         
         if history:
-            messages.extend(self._format_history(history))
-            
+            for msg in history:
+                if msg.get("is_bot"):
+                    messages.append({"role": "assistant", "content": msg["content"]})
+                else:
+                    content = msg["content"]
+                    img_data = msg.get("image")
+                    
+                    if img_data and model_config.get('vision'):
+                        base64_image = base64.b64encode(img_data).decode('utf-8')
+                        messages.append({
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": content},
+                                {"type": "image_url", "image_url": {
+                                    "url": f"data:image/jpeg;base64,{base64_image}"
+                                }}
+                            ]
+                        })
+                    else:
+                        messages.append({"role": "user", "content": content})
+        
+        # Add current message with image if present
         if image and model_config.get('vision'):
             base64_image = base64.b64encode(image).decode('utf-8')
             messages.append({
                 "role": "user",
                 "content": [
                     {"type": "text", "text": message},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                    {"type": "image_url", "image_url": {
+                        "url": f"data:image/jpeg;base64,{base64_image}"
+                    }}
                 ]
             })
         else:

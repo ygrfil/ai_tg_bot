@@ -16,20 +16,56 @@ class ClaudeProvider(BaseAIProvider):
         image: Optional[bytes] = None
     ) -> str:
         messages = []
+        
         if history:
-            messages.extend(self._format_history(history))
-            
+            for msg in history:
+                if msg.get("is_bot"):
+                    messages.append({
+                        "role": "assistant",
+                        "content": msg["content"]
+                    })
+                else:
+                    content = msg["content"]
+                    img_data = msg.get("image")
+                    
+                    if img_data and model_config.get('vision'):
+                        base64_image = base64.b64encode(img_data).decode('utf-8')
+                        messages.append({
+                            "role": "user",
+                            "content": [
+                                {"type": "image", "source": {
+                                    "type": "base64",
+                                    "media_type": "image/jpeg",
+                                    "data": base64_image
+                                }},
+                                {"type": "text", "text": content}
+                            ]
+                        })
+                    else:
+                        messages.append({
+                            "role": "user",
+                            "content": content
+                        })
+        
+        # Add current message with image if present
         if image and model_config.get('vision'):
             base64_image = base64.b64encode(image).decode('utf-8')
             messages.append({
                 "role": "user",
                 "content": [
-                    {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": base64_image}},
+                    {"type": "image", "source": {
+                        "type": "base64",
+                        "media_type": "image/jpeg",
+                        "data": base64_image
+                    }},
                     {"type": "text", "text": message}
                 ]
             })
         else:
-            messages.append({"role": "user", "content": message})
+            messages.append({
+                "role": "user",
+                "content": message
+            })
 
         try:
             response = await self.client.messages.create(
