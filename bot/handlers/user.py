@@ -214,11 +214,14 @@ async def handle_message(message: Message, state: FSMContext):
     if not is_user_authorized(message.from_user.id):
         return
 
-    settings = await get_or_create_settings(message.from_user.id)
-    provider_name = settings.get('current_provider', 'openai')
-    model_config = PROVIDER_MODELS[provider_name]
-    
     try:
+        # Ensure user exists in database
+        await storage.ensure_user_exists(message.from_user.id)
+        
+        settings = await get_or_create_settings(message.from_user.id)
+        provider_name = settings.get('current_provider', 'openai')
+        model_config = PROVIDER_MODELS[provider_name]
+        
         await message.bot.send_chat_action(message.chat.id, "typing")
         
         # Handle image if present

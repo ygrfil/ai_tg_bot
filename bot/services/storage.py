@@ -39,12 +39,15 @@ class Storage:
         """Initialize the database with required tables."""
         async with self._lock:
             async with self._db_connect() as db:
-                # Create users table
+                # Create users table with all necessary columns
                 await db.execute("""
                     CREATE TABLE IF NOT EXISTS users (
                         user_id INTEGER PRIMARY KEY,
+                        current_provider TEXT DEFAULT 'openai',
+                        current_model TEXT DEFAULT 'gpt-4o',
                         settings TEXT,
-                        last_activity DATETIME DEFAULT CURRENT_TIMESTAMP
+                        last_activity DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
                     )
                 """)
 
@@ -56,21 +59,10 @@ class Storage:
                         content TEXT NOT NULL,
                         is_bot BOOLEAN NOT NULL,
                         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        image_data BLOB,
                         FOREIGN KEY (user_id) REFERENCES users(user_id)
                     )
                 """)
-
-                # Check if image_data column exists, if not add it
-                async with db.execute("PRAGMA table_info(chat_history)") as cursor:
-                    columns = await cursor.fetchall()
-                    column_names = [col[1] for col in columns]
-                    
-                    if 'image_data' not in column_names:
-                        await db.execute("""
-                            ALTER TABLE chat_history 
-                            ADD COLUMN image_data BLOB
-                        """)
-
                 await db.commit()
 
     async def get_user_settings(self, user_id: int) -> Dict[str, Any]:
@@ -78,9 +70,20 @@ class Storage:
         async with self._lock:
             try:
                 async with self._db_connect() as db:
+                    # First, ensure user exists
+                    await db.execute(
+                        """INSERT OR IGNORE INTO users 
+                           (user_id, current_provider, current_model) 
+                           VALUES (?, ?, ?)""",
+                        (user_id, "openai", "gpt-4o")
+                    )
+                    await db.commit()
+
+                    # Then get settings
                     async with db.execute(
                         """SELECT current_provider, current_model 
-                           FROM users WHERE user_id = ?""", 
+                           FROM users 
+                           WHERE user_id = ?""",
                         (user_id,)
                     ) as cursor:
                         row = await cursor.fetchone()
@@ -89,17 +92,10 @@ class Storage:
                                 "current_provider": row[0],
                                 "current_model": row[1]
                             }
-                        
-                        # Create default settings if user doesn't exist
-                        default_settings = {
-                            "current_provider": "openai",
-                            "current_model": "gpt-4"
-                        }
-                        await self.save_user_settings(user_id, default_settings)
-                        return default_settings
+                        return {"current_provider": "openai", "current_model": "gpt-4o"}
             except Exception as e:
                 logging.error(f"Error getting user settings: {e}")
-                return {"current_provider": "openai", "current_model": "gpt-4"}
+                return {"current_provider": "openai", "current_model": "gpt-4o"}
 
     async def save_user_settings(self, user_id: int, settings: Dict[str, Any]):
         await self.ensure_initialized()
@@ -231,3 +227,20 @@ class Storage:
                     logging.info(f"Cleared chat history for inactive user {user_id}")
                 
                 await db.commit()
+
+    async def ensure_user_exists(self, user_id: int):
+        """Ensure user exists in database"""
+        await self.ensure_initialized()
+        async with self._lock:
+            try:
+                async with self._db_connect() as db:
+                    await db.execute(
+                        """INSERT OR IGNORE INTO users 
+                           (user_id, current_provider, current_model) 
+                           VALUES (?, ?, ?)""",
+                        (user_id, "openai", "gpt-4o")
+                    )
+                    await db.commit()
+            except Exception as e:
+                logging.error(f"Error ensuring user exists: {e}")
+                raise
