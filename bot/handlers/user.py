@@ -178,9 +178,9 @@ async def btc_price(message: Message):
                 
                 await message.answer(
                     f"<b>Bitcoin Price:</b>\n\n"
-                    f"🔼 <b>24h High:</b> ${high_24h:,.0f}\n"  # Minimalistic green arrow for high
-                    f"💰 <b>Current:</b> <code>${current_price:,.0f}</code>\n"  # Highlighted current price
-                    f"🔽 <b>24h Low:</b> ${low_24h:,.0f}\n"  # Minimalistic red arrow for low
+                    f"🔼 <b>24h:</b> ${high_24h:,.0f}\n"  # Minimalistic green arrow for high
+                    f"💰 <b>Now:</b> <code>${current_price:,.0f}</code>\n"  # Highlighted current price
+                    f"🔽 <b>24h:</b> ${low_24h:,.0f}\n"  # Minimalistic red arrow for low
                     f"📊 <b>24h Volume:</b> {volume:,.2f} BTC\n\n"
                     f"🕒 <b>Time:</b> {time}",
                     reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id),
