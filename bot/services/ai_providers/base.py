@@ -1,10 +1,14 @@
 from abc import ABC, abstractmethod
 from typing import Optional, List, Dict, Any, AsyncGenerator
 import base64
+from bot.config import Config
 
 class BaseAIProvider(ABC):
     """Base class for AI providers implementing common interface."""
     
+    def __init__(self, config: Config):
+        self.config = config  # Store config in base class
+
     @abstractmethod
     async def chat_completion_stream(
         self, 
@@ -53,4 +57,16 @@ class BaseAIProvider(ABC):
     def _supports_vision(self, model_config: Dict[str, Any]) -> bool:
         """Check if the current model configuration supports vision."""
         return model_config.get('vision', False)
+
+    def _get_max_tokens(self, model_config: Dict[str, Any]) -> int:
+        """Get max tokens with priority:
+        1. Model-specific config
+        2. Global config
+        3. Default fallback
+        """
+        return (
+            model_config.get('max_tokens') or 
+            self.config.max_tokens or 
+            1024  # Default fallback
+        )
 

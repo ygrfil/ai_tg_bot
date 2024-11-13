@@ -3,9 +3,11 @@ from anthropic import AsyncAnthropic
 import base64
 from .base import BaseAIProvider
 from ...config.prompts import get_system_prompt
+from ...config.settings import Config
 
 class ClaudeProvider(BaseAIProvider):
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, config: Config = None):
+        super().__init__(config)
         self.client = AsyncAnthropic(api_key=api_key)
         
     async def chat_completion_stream(
@@ -74,7 +76,7 @@ class ClaudeProvider(BaseAIProvider):
                 model=model_config['name'],
                 messages=messages,
                 system=system_prompt,
-                max_tokens=4096,
+                max_tokens=self._get_max_tokens(model_config),
                 stream=True
             )
             

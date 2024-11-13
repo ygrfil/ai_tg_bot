@@ -9,10 +9,10 @@ from ...config import Config
 def get_provider(provider_name: str, config: Config) -> BaseAIProvider:
     """Get AI provider instance by name."""
     providers = {
-        'openai': lambda: OpenAIProvider(config.openai_api_key),
-        'claude': lambda: ClaudeProvider(config.anthropic_api_key),
-        'groq': lambda: GroqProvider(config.groq_api_key),
-        'perplexity': lambda: PerplexityProvider(config.perplexity_api_key)
+        'openai': lambda: OpenAIProvider(config.openai_api_key, config=config),
+        'claude': lambda: ClaudeProvider(config.anthropic_api_key, config=config),
+        'groq': lambda: GroqProvider(config.groq_api_key, config=config),
+        'perplexity': lambda: PerplexityProvider(config.perplexity_api_key, config=config)
     }
     
     provider_factory = providers.get(provider_name)

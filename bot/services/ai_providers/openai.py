@@ -3,9 +3,11 @@ import base64
 from typing import Optional, List, Dict, Any, AsyncGenerator
 from .base import BaseAIProvider
 from ...config.prompts import get_system_prompt
+from ...config.settings import Config
 
 class OpenAIProvider(BaseAIProvider):
-    def __init__(self, api_key: str, base_url: Optional[str] = None):
+    def __init__(self, api_key: str, base_url: Optional[str] = None, config: Config = None):
+        super().__init__(config)
         self.client = AsyncOpenAI(
             api_key=api_key,
             base_url=base_url
@@ -65,7 +67,8 @@ class OpenAIProvider(BaseAIProvider):
                 model=model_config['name'],
                 messages=messages,
                 temperature=0.7,
-                stream=True  # Enable streaming
+                max_tokens=self._get_max_tokens(model_config),
+                stream=True
             )
             
             async for chunk in stream:

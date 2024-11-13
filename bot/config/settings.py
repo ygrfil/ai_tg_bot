@@ -9,7 +9,8 @@ class Config:
                  openai_api_key: str,
                  groq_api_key: str,
                  anthropic_api_key: str,
-                 perplexity_api_key: str):
+                 perplexity_api_key: str,
+                 max_tokens: int = 1024):
         self.bot_token = bot_token
         self.allowed_user_ids = allowed_user_ids
         self.admin_id = admin_id
@@ -17,6 +18,7 @@ class Config:
         self.groq_api_key = groq_api_key
         self.anthropic_api_key = anthropic_api_key
         self.perplexity_api_key = perplexity_api_key
+        self.max_tokens = max_tokens
 
     @classmethod
     def from_env(cls):
@@ -32,5 +34,6 @@ class Config:
             openai_api_key=env.str("OPENAI_API_KEY"),
             groq_api_key=env.str("GROQ_API_KEY"),
             anthropic_api_key=env.str("ANTHROPIC_API_KEY"),
-            perplexity_api_key=env.str("PERPLEXITY_API_KEY")
+            perplexity_api_key=env.str("PERPLEXITY_API_KEY"),
+            max_tokens=env.int("MAX_TOKENS", 4096)
         ) 

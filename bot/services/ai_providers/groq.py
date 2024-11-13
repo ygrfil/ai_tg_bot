@@ -2,9 +2,11 @@ from groq import AsyncGroq
 from typing import Optional, List, Dict, Any, AsyncGenerator
 import base64
 from .base import BaseAIProvider
+from ...config.settings import Config
 
 class GroqProvider(BaseAIProvider):
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, config: Config = None):
+        super().__init__(config)
         self.client = AsyncGroq(api_key=api_key)
 
     async def chat_completion_stream(
@@ -67,7 +69,7 @@ class GroqProvider(BaseAIProvider):
                 model=model_config['name'],
                 messages=messages,
                 temperature=0.7,
-                max_tokens=1024,
+                max_tokens=self._get_max_tokens(model_config),
                 stream=True
             )
             

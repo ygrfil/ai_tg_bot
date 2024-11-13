@@ -5,7 +5,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.markdown import hbold
 import aiohttp
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 
 from bot.keyboards import reply as kb
@@ -240,6 +240,10 @@ async def handle_message(message: Message, state: FSMContext):
         
         # Send initial response message
         bot_response = await message.answer("...")
+        last_update_time = datetime.now()
+        update_interval = timedelta(milliseconds=100)  # 100ms between updates
+        buffer_size = 50  # characters to buffer before update
+        
         collected_response = ""
         last_update_length = 0
         
@@ -252,11 +256,16 @@ async def handle_message(message: Message, state: FSMContext):
         ):
             if response_chunk:
                 collected_response += response_chunk
-                # Update more frequently (every 20 chars) and only if there's new content
-                if len(collected_response) - last_update_length >= 20:
+                current_time = datetime.now()
+                
+                # Update if enough new content AND enough time has passed
+                if (len(collected_response) - last_update_length >= buffer_size and 
+                    current_time - last_update_time >= update_interval):
                     try:
                         await bot_response.edit_text(collected_response)
                         last_update_length = len(collected_response)
+                        last_update_time = current_time
+                        
                         # Keep typing indicator active
                         await message.bot.send_chat_action(message.chat.id, "typing")
                     except Exception as e:
