@@ -1,83 +1,83 @@
 import re
 from typing import Optional
+import logging
 
 def sanitize_html_tags(text: str) -> str:
     """
-    Enhanced HTML sanitizer that handles nested tags and malformed HTML.
+    Simplified HTML sanitizer that ensures all tags are properly closed.
     Supported tags: b, i, u, s, code, pre, a
     """
-    # First, fix doubled closing tags (e.g., "</</b>" -> "</b>")
-    text = re.sub(r'</+([a-zA-Z]+)>', r'</\1>', text)
-    
-    # Fix malformed nested tags (e.g., "</b</b>" -> "</b>")
-    text = re.sub(r'</([a-zA-Z]+)</\1>', r'</\1>', text)
-    
-    # List of allowed HTML tags in Telegram
-    allowed_tags = ['b', 'i', 'u', 's', 'code', 'pre', 'a']
-    
-    # Stack to keep track of opened tags
-    tag_stack = []
-    
-    # Find all HTML tags in the text
-    tag_pattern = re.compile(r'<(/?)([a-zA-Z]+)([^>]*)>')
-    
-    # Split text into chunks preserving tags
-    chunks = []
-    last_end = 0
-    
     try:
-        for match in tag_pattern.finditer(text):
-            start, end = match.span()
-            is_closing = bool(match.group(1))
-            tag_name = match.group(2).lower()
-            
-            # Add text before the tag
-            if start > last_end:
-                chunks.append(text[last_end:start])
-            
-            # Handle only allowed tags
-            if tag_name in allowed_tags:
-                if not is_closing:
-                    # Opening tag
-                    if tag_name == 'a':
-                        # Preserve href attribute for links
-                        href_match = re.search(r'href=["\'](.*?)["\']', match.group(3))
-                        if href_match:
-                            chunks.append(f'<a href="{href_match.group(1)}">')
-                        else:
-                            continue
-                    else:
-                        chunks.append(f'<{tag_name}>')
-                    tag_stack.append(tag_name)
-                else:
-                    # Closing tag
-                    if tag_stack and tag_stack[-1] == tag_name:
-                        chunks.append(f'</{tag_name}>')
-                        tag_stack.pop()
-            
-            last_end = end
+        # Strip any existing malformed or nested tags first
+        text = re.sub(r'<([a-zA-Z]+)[^>]*</', '</', text)
         
-        # Add remaining text
-        if last_end < len(text):
-            chunks.append(text[last_end:])
+        # Define allowed tags
+        allowed_tags = '|'.join(['b', 'i', 'u', 's', 'code', 'pre', 'a'])
+        
+        # Remove any tags that aren't in our allowed list
+        text = re.sub(f'<(?!/?)(?!(?:{allowed_tags})\b)[^>]*>', '', text)
+        
+        # Process the text character by character
+        result = []
+        tag_stack = []
+        current_tag = []
+        in_tag = False
+        
+        for char in text:
+            if char == '<':
+                in_tag = True
+                current_tag = ['<']
+                continue
+                
+            if in_tag:
+                current_tag.append(char)
+                if char == '>':
+                    tag_str = ''.join(current_tag)
+                    
+                    # Check if it's a closing tag
+                    if tag_str.startswith('</'):
+                        tag_name = re.match(r'</([a-zA-Z]+)', tag_str)
+                        if tag_name and tag_name.group(1).lower() in allowed_tags.split('|'):
+                            if tag_stack and tag_stack[-1] == tag_name.group(1).lower():
+                                result.append(tag_str)
+                                tag_stack.pop()
+                    
+                    # Check if it's an opening tag
+                    else:
+                        tag_name = re.match(r'<([a-zA-Z]+)', tag_str)
+                        if tag_name and tag_name.group(1).lower() in allowed_tags.split('|'):
+                            if tag_name.group(1).lower() == 'a':
+                                # Special handling for <a> tags with href
+                                href_match = re.search(r'href=["\'](.*?)["\']', tag_str)
+                                if href_match:
+                                    result.append(f'<a href="{href_match.group(1)}">')
+                                    tag_stack.append('a')
+                            else:
+                                result.append(f'<{tag_name.group(1).lower()}>')
+                                tag_stack.append(tag_name.group(1).lower())
+                    
+                    in_tag = False
+                    current_tag = []
+                continue
+            
+            if not in_tag:
+                result.append(char)
         
         # Close any remaining open tags in reverse order
         for tag in reversed(tag_stack):
-            chunks.append(f'</{tag}>')
+            result.append(f'</{tag}>')
         
-        result = ''.join(chunks)
+        sanitized = ''.join(result)
         
-        # Additional cleanup for common issues
-        result = (result
-                 .replace('<<', '<')
-                 .replace('>>', '>')
-                 .replace('<//', '</'))
+        # Final cleanup
+        sanitized = (sanitized
+            .replace('><', '> <')  # Add space between adjacent tags
+            .replace('  ', ' ')    # Remove double spaces
+            .strip())
         
-        # Remove any remaining invalid HTML tags
-        result = re.sub(r'<(?![/]?(?:' + '|'.join(allowed_tags) + r')\b)[^>]*>', '', result)
+        return sanitized
         
-        return result
-    
     except Exception as e:
-        # If any error occurs during sanitization, strip all HTML tags
-        return re.sub(r'<[^>]+>', '', text)
+        logging.error(f"Sanitization error: {e}")
+        # If anything goes wrong, strip all HTML tags
+        return re.sub(r'<[^>]*>', '', text)

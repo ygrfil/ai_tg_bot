@@ -31,34 +31,35 @@ class Storage:
                     raise
 
     async def ensure_initialized(self):
-        """Initialize database without default values"""
+        """Initialize database with all required tables and columns"""
         if self._initialized:
             return
 
         async with self._lock:
             try:
                 async with self._db_connect() as db:
-                    # Create users table
+                    # Create users table with all necessary columns
                     await db.execute("""
                         CREATE TABLE IF NOT EXISTS users (
                             user_id INTEGER PRIMARY KEY,
-                            current_provider TEXT NULL,
-                            current_model TEXT NULL,
-                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                            last_activity DATETIME DEFAULT CURRENT_TIMESTAMP
+                            current_provider TEXT DEFAULT 'anthropic',
+                            current_model TEXT DEFAULT 'claude-3-opus',
+                            settings TEXT,
+                            last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                         )
                     """)
-
-                    # Create chat history table
+                    
+                    # Create chat_history table
                     await db.execute("""
                         CREATE TABLE IF NOT EXISTS chat_history (
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            user_id INTEGER,
-                            content TEXT,
-                            is_bot BOOLEAN,
-                            image_data BLOB NULL,
-                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                            user_id INTEGER NOT NULL,
+                            content TEXT NOT NULL,
+                            is_bot BOOLEAN NOT NULL,
+                            image_data BLOB,
+                            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                             FOREIGN KEY (user_id) REFERENCES users(user_id)
                         )
                     """)
@@ -66,38 +67,8 @@ class Storage:
                     await db.commit()
                     self._initialized = True
             except Exception as e:
-                logging.error(f"Error initializing database: {e}")
+                logging.error(f"Database initialization error: {e}")
                 raise
-
-    async def _init_db(self):
-        """Initialize the database with required tables."""
-        async with self._lock:
-            async with self._db_connect() as db:
-                # Create users table with all necessary columns
-                await db.execute("""
-                    CREATE TABLE IF NOT EXISTS users (
-                        user_id INTEGER PRIMARY KEY,
-                        current_provider TEXT DEFAULT 'openai',
-                        current_model TEXT DEFAULT 'gpt-4o',
-                        settings TEXT,
-                        last_activity DATETIME DEFAULT CURRENT_TIMESTAMP,
-                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-                    )
-                """)
-
-                # Create chat_history table
-                await db.execute("""
-                    CREATE TABLE IF NOT EXISTS chat_history (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        user_id INTEGER NOT NULL,
-                        content TEXT NOT NULL,
-                        is_bot BOOLEAN NOT NULL,
-                        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                        image_data BLOB,
-                        FOREIGN KEY (user_id) REFERENCES users(user_id)
-                    )
-                """)
-                await db.commit()
 
     async def get_user_settings(self, user_id: int) -> Optional[Dict[str, Any]]:
         """Get user settings without defaults"""
@@ -172,10 +143,10 @@ class Storage:
             try:
                 async with self._db_connect() as db:
                     async with db.execute("""
-                        SELECT content, is_bot, image_data, created_at
+                        SELECT content, is_bot, image_data, timestamp
                         FROM chat_history
                         WHERE user_id = ?
-                        ORDER BY created_at DESC
+                        ORDER BY timestamp DESC
                         LIMIT ?
                     """, (user_id, limit)) as cursor:
                         rows = await cursor.fetchall()
