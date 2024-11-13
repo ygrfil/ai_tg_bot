@@ -10,7 +10,7 @@ class Storage:
     def __init__(self, db_path: str = "data/chat.db"):
         self.db_path = db_path
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
-        self.is_initialized = False
+        self._initialized = False
         self._lock = asyncio.Lock()
 
     @asynccontextmanager
@@ -31,9 +31,43 @@ class Storage:
                     raise
 
     async def ensure_initialized(self):
-        if not self.is_initialized:
-            await self._init_db()
-            self.is_initialized = True
+        """Initialize database without default values"""
+        if self._initialized:
+            return
+
+        async with self._lock:
+            try:
+                async with self._db_connect() as db:
+                    # Create users table
+                    await db.execute("""
+                        CREATE TABLE IF NOT EXISTS users (
+                            user_id INTEGER PRIMARY KEY,
+                            current_provider TEXT NULL,
+                            current_model TEXT NULL,
+                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                            last_activity DATETIME DEFAULT CURRENT_TIMESTAMP
+                        )
+                    """)
+
+                    # Create chat history table
+                    await db.execute("""
+                        CREATE TABLE IF NOT EXISTS chat_history (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            user_id INTEGER,
+                            content TEXT,
+                            is_bot BOOLEAN,
+                            image_data BLOB NULL,
+                            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                            FOREIGN KEY (user_id) REFERENCES users(user_id)
+                        )
+                    """)
+                    
+                    await db.commit()
+                    self._initialized = True
+            except Exception as e:
+                logging.error(f"Error initializing database: {e}")
+                raise
 
     async def _init_db(self):
         """Initialize the database with required tables."""
@@ -65,21 +99,12 @@ class Storage:
                 """)
                 await db.commit()
 
-    async def get_user_settings(self, user_id: int) -> Dict[str, Any]:
+    async def get_user_settings(self, user_id: int) -> Optional[Dict[str, Any]]:
+        """Get user settings without defaults"""
         await self.ensure_initialized()
         async with self._lock:
             try:
                 async with self._db_connect() as db:
-                    # First, ensure user exists
-                    await db.execute(
-                        """INSERT OR IGNORE INTO users 
-                           (user_id, current_provider, current_model) 
-                           VALUES (?, ?, ?)""",
-                        (user_id, "openai", "gpt-4o")
-                    )
-                    await db.commit()
-
-                    # Then get settings
                     async with db.execute(
                         """SELECT current_provider, current_model 
                            FROM users 
@@ -87,15 +112,15 @@ class Storage:
                         (user_id,)
                     ) as cursor:
                         row = await cursor.fetchone()
-                        if row:
+                        if row and row[0] and row[1]:  # Only return if both provider and model are set
                             return {
                                 "current_provider": row[0],
                                 "current_model": row[1]
                             }
-                        return {"current_provider": "openai", "current_model": "gpt-4o"}
+                        return None
             except Exception as e:
                 logging.error(f"Error getting user settings: {e}")
-                return {"current_provider": "openai", "current_model": "gpt-4o"}
+                return None
 
     async def save_user_settings(self, user_id: int, settings: Dict[str, Any]):
         await self.ensure_initialized()
@@ -229,16 +254,16 @@ class Storage:
                 await db.commit()
 
     async def ensure_user_exists(self, user_id: int):
-        """Ensure user exists in database"""
+        """Ensure user exists in database without any defaults"""
         await self.ensure_initialized()
         async with self._lock:
             try:
                 async with self._db_connect() as db:
                     await db.execute(
                         """INSERT OR IGNORE INTO users 
-                           (user_id, current_provider, current_model) 
-                           VALUES (?, ?, ?)""",
-                        (user_id, "openai", "gpt-4o")
+                           (user_id) 
+                           VALUES (?)""",
+                        (user_id,)
                     )
                     await db.commit()
             except Exception as e:

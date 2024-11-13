@@ -7,45 +7,23 @@ from aiogram.utils.markdown import hbold
 import aiohttp
 from datetime import datetime, timedelta
 import logging
-import re
+from typing import Optional
 
 from bot.keyboards import reply as kb
 from bot.services.storage import Storage
 from bot.services.ai_providers import get_provider
 from bot.config import Config
 from bot.utils.message_sanitizer import sanitize_html_tags
+from bot.services.ai_providers.providers import PROVIDER_MODELS
 
 router = Router()
 storage = Storage("data/chat.db")
 config = Config.from_env()
 
-# One model per provider
-PROVIDER_MODELS = {
-    "openai": {
-        "name": "gpt-4o",
-        "vision": True
-    },
-    "groq": {
-        "name": "llama-3.2-90b-vision-preview",
-        "vision": True
-    },
-    "claude": {
-        "name": "claude-3-5-sonnet-20241022",
-        "vision": True
-    },
-    "perplexity": {
-        "name": "llama-3.1-sonar-huge-128k-online",
-        "vision": False
-    }
-}
-
 class UserStates(StatesGroup):
     """States for user interaction with the bot."""
     chatting = State()         # Default state for general chat
     choosing_provider = State() # State when user is selecting AI provider
-
-DEFAULT_PROVIDER = "openai"
-DEFAULT_MODEL = "gpt-4o"
 
 # Helper functions
 def is_user_authorized(user_id: int) -> bool:
@@ -53,16 +31,10 @@ def is_user_authorized(user_id: int) -> bool:
     user_id_str = str(user_id)
     return user_id_str == config.admin_id or user_id_str in config.allowed_user_ids
 
-async def get_or_create_settings(user_id: int) -> dict:
-    """Get user settings or create default ones"""
-    settings = await storage.get_user_settings(user_id)
-    if not settings:
-        settings = {
-            'current_provider': DEFAULT_PROVIDER,
-            'current_model': DEFAULT_MODEL
-        }
-        await storage.save_user_settings(user_id, settings)
-    return settings
+async def get_or_create_settings(user_id: int) -> Optional[dict]:
+    """Get user settings without creating defaults"""
+    await storage.ensure_user_exists(user_id)  # Just ensure user exists in DB
+    return await storage.get_user_settings(user_id)
 
 # Command handlers first
 @router.message(Command("start"))
@@ -76,24 +48,32 @@ async def cmd_start(message: Message, state: FSMContext):
     await state.clear()  # Clear any existing state
     await state.set_state(UserStates.chatting)  # Set initial state
     
-    await message.answer(
-        f"Welcome, {hbold(message.from_user.full_name)}!\n"
-        f"Current AI: {settings.get('current_provider', DEFAULT_PROVIDER)} "
-        f"({settings.get('current_model', PROVIDER_MODELS[DEFAULT_PROVIDER]['name'])})\n\n"
-        "You can start chatting now or use the menu buttons below.",
-        reply_markup=kb.get_main_menu(is_admin=is_admin)
-    )
+    if settings and settings.get('current_provider'):
+        await message.answer(
+            f"Welcome, {hbold(message.from_user.full_name)}!\n"
+            f"Current AI: {settings['current_provider']} "
+            f"({settings['current_model']})\n\n"
+            "You can start chatting now or use the menu buttons below.",
+            reply_markup=kb.get_main_menu(is_admin=is_admin)
+        )
+    else:
+        await message.answer(
+            f"Welcome, {hbold(message.from_user.full_name)}!\n"
+            "Please select an AI provider to start chatting:",
+            reply_markup=kb.get_provider_menu()
+        )
+        await state.set_state(UserStates.choosing_provider)
 
 # Button handlers (put these BEFORE the general message handler)
 @router.message(UserStates.choosing_provider)
 async def handle_provider_choice(message: Message, state: FSMContext):
-    # Update available providers list to match PROVIDER_MODELS
-    available_providers = ["OpenAI", "Claude", "Groq", "Perplexity"]
-    
-    if message.text in available_providers:
+    provider = message.text.lower()
+    if provider in PROVIDER_MODELS:  # Use PROVIDER_MODELS directly for validation
         settings = await get_or_create_settings(message.from_user.id)
-        settings['current_provider'] = message.text.lower()
-        settings['current_model'] = PROVIDER_MODELS[settings['current_provider']]['name']
+        if not settings:
+            settings = {}
+        settings['current_provider'] = provider
+        settings['current_model'] = PROVIDER_MODELS[provider]['name']
         
         await storage.save_user_settings(
             message.from_user.id, 
@@ -106,8 +86,8 @@ async def handle_provider_choice(message: Message, state: FSMContext):
         )
         await state.set_state(UserStates.chatting)
     else:
-        # Show all available providers in error message
-        providers_list = ", ".join(available_providers)
+        # Show available providers from PROVIDER_MODELS
+        providers_list = ", ".join(PROVIDER_MODELS.keys())
         await message.answer(
             f"Please select a provider from the menu: {providers_list}",
             reply_markup=kb.get_provider_menu()
@@ -119,15 +99,22 @@ async def choose_model_button(message: Message, state: FSMContext):
         return
     
     settings = await get_or_create_settings(message.from_user.id)
-    current_provider = settings.get('current_provider', DEFAULT_PROVIDER)
-    current_model = PROVIDER_MODELS[current_provider]['name']
     
-    await message.answer(
-        f"Choose AI Provider:\n\n"
-        f"Current provider: {current_provider}\n"
-        f"Current model: {current_model}",
-        reply_markup=kb.get_provider_menu()
-    )
+    if settings and settings.get('current_provider'):
+        current_provider = settings['current_provider']
+        current_model = settings['current_model']
+        await message.answer(
+            f"Choose AI Provider:\n\n"
+            f"Current provider: {current_provider}\n"
+            f"Current model: {current_model}",
+            reply_markup=kb.get_provider_menu()
+        )
+    else:
+        await message.answer(
+            "Choose AI Provider:",
+            reply_markup=kb.get_provider_menu()
+        )
+    
     await state.set_state(UserStates.choosing_provider)
 
 @router.message(F.text == "⚙️ Settings")
@@ -135,16 +122,22 @@ async def settings_button(message: Message, state: FSMContext):
     if not is_user_authorized(message.from_user.id):
         return
     
-    settings = await get_or_create_settings(message.from_user.id)
-    current_provider = settings.get('current_provider', DEFAULT_PROVIDER)
-    current_model = settings.get('current_model', PROVIDER_MODELS[DEFAULT_PROVIDER]['name'])
+    settings = await storage.get_user_settings(message.from_user.id)
     
-    await message.answer(
-        f"Current Settings:\n\n"
-        f"Provider: {current_provider}\n"
-        f"Model: {current_model}",
-        reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
-    )
+    if settings:
+        await message.answer(
+            f"Current Settings:\n\n"
+            f"Provider: {settings['current_provider']}\n"
+            f"Model: {settings['current_model']}",
+            reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
+        )
+    else:
+        await message.answer(
+            "⚙️ No AI provider selected yet.\n"
+            "Please choose your provider:",
+            reply_markup=kb.get_provider_menu()
+        )
+        await state.set_state(UserStates.choosing_provider)
 
 @router.message(F.text == "🗑 Clear History")
 async def clear_history(message: Message):
@@ -216,12 +209,21 @@ async def handle_message(message: Message, state: FSMContext):
     if not is_user_authorized(message.from_user.id):
         return
 
+    settings = await storage.get_user_settings(message.from_user.id)
+    
     try:
         # Ensure user exists in database
         await storage.ensure_user_exists(message.from_user.id)
         
-        settings = await get_or_create_settings(message.from_user.id)
-        provider_name = settings.get('current_provider', 'openai')
+        if not settings or 'current_provider' not in settings:
+            await message.answer(
+                "Please select an AI provider first:",
+                reply_markup=kb.get_provider_menu()
+            )
+            await state.set_state(UserStates.choosing_provider)
+            return
+            
+        provider_name = settings['current_provider']
         model_config = PROVIDER_MODELS[provider_name]
         
         await message.bot.send_chat_action(message.chat.id, "typing")
@@ -268,30 +270,21 @@ async def handle_message(message: Message, state: FSMContext):
                     current_time - last_update_time >= update_interval):
                     try:
                         sanitized_response = sanitize_html_tags(collected_response)
-                        if sanitized_response:  # Only update if we have valid content
-                            await bot_response.edit_text(sanitized_response, parse_mode="HTML")
-                            last_update_length = len(collected_response)
-                            last_update_time = current_time
-                            
-                            # Keep typing indicator active
-                            await message.bot.send_chat_action(message.chat.id, "typing")
+                        await bot_response.edit_text(sanitized_response)
+                        last_update_length = len(collected_response)
+                        last_update_time = current_time
+                        
+                        # Keep typing indicator active
+                        await message.bot.send_chat_action(message.chat.id, "typing")
                     except Exception as e:
                         logging.error(f"Error updating message: {e}")
-                        # Try without HTML parsing if we get a parsing error
-                        try:
-                            plain_text = re.sub(r'<[^>]+>', '', collected_response)
-                            await bot_response.edit_text(plain_text)
-                            last_update_length = len(collected_response)
-                            last_update_time = current_time
-                        except Exception as e2:
-                            logging.error(f"Error updating plain text message: {e2}")
                         continue
         
         # Final update with complete response
         if collected_response and len(collected_response) > last_update_length:
             try:
                 sanitized_response = sanitize_html_tags(collected_response)
-                await bot_response.edit_text(sanitized_response, parse_mode="HTML")
+                await bot_response.edit_text(sanitized_response)
                 # Save to history
                 await storage.add_message(
                     user_id=message.from_user.id,
@@ -299,23 +292,13 @@ async def handle_message(message: Message, state: FSMContext):
                     is_bot=True
                 )
             except Exception as e:
-                # Try without HTML parsing as fallback
-                try:
-                    plain_text = re.sub(r'<[^>]+>', '', collected_response)
-                    await bot_response.edit_text(plain_text)
-                    await storage.add_message(
-                        user_id=message.from_user.id,
-                        content=plain_text,
-                        is_bot=True
-                    )
-                except Exception as e2:
-                    logging.error(f"Error saving final response (plain text): {e2}")
-                    
+                logging.error(f"Error saving final response: {e}")
+                
     except Exception as e:
         logging.error(f"Error processing message: {e}")
         await message.answer(
-            "❌ Error processing your message. Please try again.",
-            reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
+            f"❌ Error processing your message: {str(e)}\n"
+            "Please try again or choose a different AI model."
         )
 
 # Unauthorized handler should be last

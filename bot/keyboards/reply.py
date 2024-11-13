@@ -1,5 +1,6 @@
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
+from bot.services.ai_providers.providers import PROVIDER_MODELS
 
 def get_main_menu(is_admin: bool = False) -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
@@ -23,14 +24,15 @@ def get_main_menu(is_admin: bool = False) -> ReplyKeyboardMarkup:
 
 def get_provider_menu() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
-    builder.row(
-        KeyboardButton(text="OpenAI"),
-        KeyboardButton(text="Groq")
-    )
-    builder.row(
-        KeyboardButton(text="Claude"),
-        KeyboardButton(text="Perplexity")
-    )
+    
+    # Create pairs of providers
+    providers = list(PROVIDER_MODELS.keys())
+    for i in range(0, len(providers), 2):
+        row_buttons = [providers[i].capitalize()]
+        if i + 1 < len(providers):
+            row_buttons.append(providers[i + 1].capitalize())
+        builder.row(*[KeyboardButton(text=btn) for btn in row_buttons])
+    
     builder.row(KeyboardButton(text="🔙 Back"))
     return builder.as_markup(resize_keyboard=True)
 
