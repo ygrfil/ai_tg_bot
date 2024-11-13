@@ -7,11 +7,13 @@ from aiogram.utils.markdown import hbold
 import aiohttp
 from datetime import datetime, timedelta
 import logging
+import re
 
 from bot.keyboards import reply as kb
 from bot.services.storage import Storage
 from bot.services.ai_providers import get_provider
 from bot.config import Config
+from bot.utils.message_sanitizer import sanitize_html_tags
 
 router = Router()
 storage = Storage("data/chat.db")
@@ -265,34 +267,55 @@ async def handle_message(message: Message, state: FSMContext):
                 if (len(collected_response) - last_update_length >= buffer_size and 
                     current_time - last_update_time >= update_interval):
                     try:
-                        await bot_response.edit_text(collected_response)
-                        last_update_length = len(collected_response)
-                        last_update_time = current_time
-                        
-                        # Keep typing indicator active
-                        await message.bot.send_chat_action(message.chat.id, "typing")
+                        sanitized_response = sanitize_html_tags(collected_response)
+                        if sanitized_response:  # Only update if we have valid content
+                            await bot_response.edit_text(sanitized_response, parse_mode="HTML")
+                            last_update_length = len(collected_response)
+                            last_update_time = current_time
+                            
+                            # Keep typing indicator active
+                            await message.bot.send_chat_action(message.chat.id, "typing")
                     except Exception as e:
                         logging.error(f"Error updating message: {e}")
+                        # Try without HTML parsing if we get a parsing error
+                        try:
+                            plain_text = re.sub(r'<[^>]+>', '', collected_response)
+                            await bot_response.edit_text(plain_text)
+                            last_update_length = len(collected_response)
+                            last_update_time = current_time
+                        except Exception as e2:
+                            logging.error(f"Error updating plain text message: {e2}")
                         continue
         
         # Final update with complete response
         if collected_response and len(collected_response) > last_update_length:
             try:
-                await bot_response.edit_text(collected_response)
+                sanitized_response = sanitize_html_tags(collected_response)
+                await bot_response.edit_text(sanitized_response, parse_mode="HTML")
                 # Save to history
                 await storage.add_message(
                     user_id=message.from_user.id,
-                    content=collected_response,
+                    content=sanitized_response,
                     is_bot=True
                 )
             except Exception as e:
-                logging.error(f"Error saving final response: {e}")
-                
+                # Try without HTML parsing as fallback
+                try:
+                    plain_text = re.sub(r'<[^>]+>', '', collected_response)
+                    await bot_response.edit_text(plain_text)
+                    await storage.add_message(
+                        user_id=message.from_user.id,
+                        content=plain_text,
+                        is_bot=True
+                    )
+                except Exception as e2:
+                    logging.error(f"Error saving final response (plain text): {e2}")
+                    
     except Exception as e:
         logging.error(f"Error processing message: {e}")
         await message.answer(
-            f"❌ Error processing your message: {str(e)}\n"
-            "Please try again or choose a different AI model."
+            "❌ Error processing your message. Please try again.",
+            reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
         )
 
 # Unauthorized handler should be last
