@@ -1,11 +1,13 @@
 services:
   bot:
+    container_name: tg-ai-bot
     build: .
     volumes:
-      - ./data:/app/data
+      - ./data:/app/data:rw
     env_file:
       - .env
     restart: unless-stopped
+    user: "1000:1000"
     # healthcheck:
     #   test: ["CMD", "ps", "aux", "|", "grep", "python"]
     #   interval: 30s

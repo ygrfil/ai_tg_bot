@@ -17,11 +17,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY bot/ bot/
 COPY main.py .
 
-# Create data directory for persistence
-RUN mkdir -p data
+# Create data directory and set permissions
+RUN mkdir -p /app/data && \
+    chown -R 1000:1000 /app/data
 
 # Run as non-root user for security
-RUN useradd -m botuser && chown -R botuser:botuser /app
+RUN useradd -m -u 1000 botuser && \
+    chown -R botuser:botuser /app
 USER botuser
 
 CMD ["python", "main.py"] 
