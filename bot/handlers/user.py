@@ -117,8 +117,8 @@ async def choose_model_button(message: Message, state: FSMContext):
     
     await state.set_state(UserStates.choosing_provider)
 
-@router.message(F.text == "⚙️ Settings")
-async def settings_button(message: Message, state: FSMContext):
+@router.message(F.text == "ℹ️ Info")
+async def info_button(message: Message, state: FSMContext):
     if not is_user_authorized(message.from_user.id):
         return
     
@@ -126,14 +126,14 @@ async def settings_button(message: Message, state: FSMContext):
     
     if settings:
         await message.answer(
-            f"Current Settings:\n\n"
+            f"ℹ️ Current Configuration:\n\n"
             f"Provider: {settings['current_provider']}\n"
             f"Model: {settings['current_model']}",
             reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
         )
     else:
         await message.answer(
-            "⚙️ No AI provider selected yet.\n"
+            "ℹ️ No AI provider selected yet.\n"
             "Please choose your provider:",
             reply_markup=kb.get_provider_menu()
         )

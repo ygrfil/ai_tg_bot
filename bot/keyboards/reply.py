@@ -6,7 +6,7 @@ def get_main_menu(is_admin: bool = False) -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
     builder.row(
         KeyboardButton(text="🤖 Choose AI Model"),
-        KeyboardButton(text="⚙️ Settings")
+        KeyboardButton(text="ℹ️ Info")
     )
     builder.row(
         KeyboardButton(text="🗑 Clear History"),
