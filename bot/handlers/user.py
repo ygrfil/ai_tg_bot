@@ -1,21 +1,20 @@
-from aiogram import Router, F
-from aiogram.types import Message, FSInputFile
+from aiogram import Router, F, types
+from aiogram.types import Message
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.markdown import hbold
-from aiogram.utils.chat_action import ChatActionSender
-import base64
-from io import BytesIO
 import aiohttp
-from datetime import datetime, timezone
+from datetime import datetime
 
-from ..keyboards import reply as kb
-from ..services.storage import JsonStorage
-from ..services.ai_providers import get_provider
+from bot.keyboards import reply as kb
+from bot.services.storage import Storage
+from bot.services.ai_providers import get_provider
+from bot.config import Config
 
 router = Router()
-storage = JsonStorage("data/user_settings.json")
+storage = Storage("data/chat.db")
+config = Config.from_env()
 
 # One model per provider
 PROVIDER_MODELS = {
@@ -41,252 +40,241 @@ class UserStates(StatesGroup):
     chatting = State()
     choosing_provider = State()
 
-def log_message(msg: str):
-    print(f"\n[DEBUG] {msg}")
+DEFAULT_PROVIDER = "openai"
+DEFAULT_MODEL = "gpt-4o"
 
+# Helper functions
+def is_user_authorized(user_id: int) -> bool:
+    """Check if user is authorized to use the bot"""
+    user_id_str = str(user_id)
+    return user_id_str == config.admin_id or user_id_str in config.allowed_user_ids
+
+async def get_or_create_settings(user_id: int) -> dict:
+    """Get user settings or create default ones"""
+    settings = await storage.get_user_settings(user_id)
+    if not settings:
+        settings = {
+            'current_provider': DEFAULT_PROVIDER,
+            'current_model': DEFAULT_MODEL
+        }
+        await storage.save_user_settings(user_id, settings)
+    return settings
+
+# Command handlers first
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
-    if not storage.is_user_allowed(message.from_user.id):
-        await message.answer("Sorry, you don't have access to this bot.")
+    if not is_user_authorized(message.from_user.id):
         return
+        
+    settings = await get_or_create_settings(message.from_user.id)
+    is_admin = str(message.from_user.id) == config.admin_id
 
-    user_settings = storage.get_user_settings(message.from_user.id)
-    if not user_settings:
-        # First time user
-        await message.answer(
-            f"👋 Welcome to AI Assistant Bot!\n\n"
-            f"Hello, {hbold(message.from_user.full_name)}!\n\n"
-            f"This bot provides access to various AI models including:\n"
-            f"• OpenAI GPT-4\n"
-            f"• Claude 3\n"
-            f"• Groq\n"
-            f"• Perplexity\n\n"
-            f"Click the button below to start!",
-            reply_markup=kb.get_welcome_keyboard()
-        )
-        return
-
-    # Returning user
-    await message.answer(
-        f"Welcome back, {hbold(message.from_user.full_name)}!\n"
-        f"Current AI: {user_settings['current_provider']} ({user_settings['current_model']})",
-        reply_markup=kb.get_main_menu()
-    )
-    await state.set_state(UserStates.chatting)
-
-@router.message(F.text == "🚀 Start Bot")
-async def handle_start_button(message: Message, state: FSMContext):
-    default_provider = "groq"
-    user_settings = {
-        "current_provider": default_provider,
-        "current_model": PROVIDER_MODELS[default_provider]["name"]
-    }
-    storage.update_user_settings(message.from_user.id, user_settings)
+    await state.clear()  # Clear any existing state
+    await state.set_state(UserStates.chatting)  # Set initial state
     
     await message.answer(
-        f"✨ Great! I'm ready to help you!\n\n"
-        f"Current AI: {user_settings['current_provider']} ({user_settings['current_model']})\n\n"
-        f"You can:\n"
-        f"• Send text messages to chat with AI\n"
-        f"• Send images for analysis (with supported models)\n"
-        f"• Change AI models using '🤖 Choose AI Model'\n"
-        f"• Clear conversation history with '🗑 Clear History'",
-        reply_markup=kb.get_main_menu()
+        f"Welcome, {hbold(message.from_user.full_name)}!\n"
+        f"Current AI: {settings.get('current_provider', DEFAULT_PROVIDER)} "
+        f"({settings.get('current_model', PROVIDER_MODELS[DEFAULT_PROVIDER]['name'])})\n\n"
+        "You can start chatting now or use the menu buttons below.",
+        reply_markup=kb.get_main_menu(is_admin=is_admin)
     )
-    await state.set_state(UserStates.chatting)
+
+# Button handlers (put these BEFORE the general message handler)
+@router.message(UserStates.choosing_provider, F.text.in_(["OpenAI", "Claude", "Groq", "Perplexity"]))
+async def provider_selected(message: Message, state: FSMContext):
+    if not is_user_authorized(message.from_user.id):
+        return
+    
+    provider = message.text.lower()
+    if provider not in PROVIDER_MODELS:
+        await message.answer("Invalid provider selected. Please try again.")
+        return
+    
+    try:
+        settings = await get_or_create_settings(message.from_user.id)
+        settings.update({
+            'current_provider': provider,
+            'current_model': PROVIDER_MODELS[provider]['name']
+        })
+        await storage.save_user_settings(message.from_user.id, settings)
+        
+        is_admin = str(message.from_user.id) == config.admin_id
+        await message.answer(
+            f"✅ Provider updated successfully!\n\n"
+            f"Current Provider: {provider}\n"
+            f"Model: {PROVIDER_MODELS[provider]['name']}",
+            reply_markup=kb.get_main_menu(is_admin=is_admin)
+        )
+        await state.set_state(UserStates.chatting)
+    except Exception as e:
+        await message.answer(
+            "❌ Error updating provider settings. Please try again.",
+            reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
+        )
+        await state.set_state(UserStates.chatting)
 
 @router.message(F.text == "🤖 Choose AI Model")
 async def choose_model_button(message: Message, state: FSMContext):
-    settings = storage.get_user_settings(message.from_user.id)
+    if not is_user_authorized(message.from_user.id):
+        return
+    
+    settings = await get_or_create_settings(message.from_user.id)
+    current_provider = settings.get('current_provider', DEFAULT_PROVIDER)
+    current_model = settings.get('current_model', PROVIDER_MODELS[DEFAULT_PROVIDER]['name'])
+    
     await message.answer(
-        f"Current provider: {settings['current_provider']}\n"
-        f"Current model: {settings['current_model']}\n\n"
-        "Choose new provider:",
+        f"Choose AI Provider:\n\n"
+        f"Current provider: {current_provider}\n"
+        f"Current model: {current_model}",
         reply_markup=kb.get_provider_menu()
     )
     await state.set_state(UserStates.choosing_provider)
 
 @router.message(F.text == "⚙️ Settings")
-async def settings_button(message: Message):
-    settings = storage.get_user_settings(message.from_user.id)
-    provider_name = settings['current_provider']
-    vision_capable = "✅" if PROVIDER_MODELS[provider_name]["vision"] else "❌"
-    await message.answer(
-        f"Current settings:\n"
-        f"Provider: {provider_name}\n"
-        f"Model: {settings['current_model']}\n"
-        f"Vision capability: {vision_capable}",
-        reply_markup=kb.get_main_menu()
-    )
-
-@router.message(StateFilter(UserStates.choosing_provider))
-async def handle_provider_selection(message: Message, state: FSMContext):
-    if message.text == "🔙 Back":
-        await message.answer(
-            "Back to chat mode",
-            reply_markup=kb.get_main_menu()
-        )
-        await state.set_state(UserStates.chatting)
+async def settings_button(message: Message, state: FSMContext):
+    if not is_user_authorized(message.from_user.id):
         return
-
-    if message.text not in ["OpenAI", "Groq", "Claude", "Perplexity"]:
-        await message.answer("Please select a valid provider")
-        return
-
-    provider_name = message.text.lower()
-    user_settings = storage.get_user_settings(message.from_user.id)
     
-    user_settings.update({
-        "current_provider": provider_name,
-        "current_model": PROVIDER_MODELS[provider_name]["name"]
-    })
-    
-    storage.update_user_settings(message.from_user.id, user_settings)
+    settings = await get_or_create_settings(message.from_user.id)
+    current_provider = settings.get('current_provider', DEFAULT_PROVIDER)
+    current_model = settings.get('current_model', PROVIDER_MODELS[DEFAULT_PROVIDER]['name'])
     
     await message.answer(
-        f"AI provider set to {message.text}\n"
-        f"Model: {PROVIDER_MODELS[provider_name]['name']}\n"
-        "You can start chatting!",
-        reply_markup=kb.get_main_menu()
+        f"Current Settings:\n\n"
+        f"Provider: {current_provider}\n"
+        f"Model: {current_model}",
+        reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
     )
-    await state.set_state(UserStates.chatting)
 
 @router.message(F.text == "🗑 Clear History")
-async def clear_history_command(message: Message):
+async def clear_history(message: Message):
+    if not is_user_authorized(message.from_user.id):
+        return
+    
     try:
-        if storage.clear_history(message.from_user.id):
-            settings = storage.get_user_settings(message.from_user.id)
-            await message.answer(
-                "✅ Conversation history cleared!\n"
-                f"Current AI: {settings.get('current_provider', 'groq')} "
-                f"({settings.get('current_model', 'default')})"
-            )
-        else:
-            await message.answer("❌ Error: Could not clear history")
+        await storage.clear_user_history(message.from_user.id)
+        await message.answer(
+            "✅ Chat history cleared!",
+            reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
+        )
     except Exception as e:
-        await message.answer(f"Error clearing history: {str(e)}")
+        await message.answer(
+            "❌ Error: Could not clear history",
+            reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
+        )
 
 @router.message(F.text == "₿")
-async def btc_price_button(message: Message):
+async def btc_price(message: Message):
+    if not is_user_authorized(message.from_user.id):
+        return
+    
     try:
         async with aiohttp.ClientSession() as session:
             async with session.get('https://api.kraken.com/0/public/Ticker?pair=XBTUSD') as response:
                 data = await response.json()
-                price = int(float(data['result']['XXBTZUSD']['c'][0]))
-                now = datetime.now(timezone.utc)
-                date = now.strftime("%Y-%m-%d")
-                time = now.strftime("%H:%M")
+                if data.get('error'):
+                    raise Exception(data['error'][0])
+                    
+                price_data = data['result']['XXBTZUSD']
+                current_price = float(price_data['c'][0])
+                high_24h = float(price_data['h'][1])
+                low_24h = float(price_data['l'][1])
+                volume = float(price_data['v'][1])
+                
+                time = datetime.now().strftime("%H:%M:%S")
                 
                 await message.answer(
-                    f"🕒 {date} {time}\n"
-                    f"💰 BTC/USD <b>${price:,}</b>",
-                    reply_markup=kb.get_main_menu(),
-                    parse_mode="HTML"
+                    f"₿ Bitcoin Price (Kraken):\n\n"
+                    f"Current: ${current_price:,.2f}\n"
+                    f"24h High: ${high_24h:,.2f}\n"
+                    f"24h Low: ${low_24h:,.2f}\n"
+                    f"24h Volume: {volume:,.2f} BTC\n\n"
+                    f"Time: {time}",
+                    reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
                 )
     except Exception as e:
         await message.answer(
-            "Sorry, couldn't fetch BTC price. Please try again later.",
-            reply_markup=kb.get_main_menu()
+            "❌ Error fetching BTC price from Kraken",
+            reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
         )
 
+@router.message(F.text == "🔙 Back")
+async def back_button(message: Message, state: FSMContext):
+    if not is_user_authorized(message.from_user.id):
+        return
+    
+    is_admin = str(message.from_user.id) == config.admin_id
+    await message.answer(
+        "Main Menu",
+        reply_markup=kb.get_main_menu(is_admin=is_admin)
+    )
+    await state.set_state(UserStates.chatting)
+
+# Chat handler for normal messages (put this AFTER button handlers)
+@router.message(UserStates.chatting)
+async def handle_message(message: Message, state: FSMContext):
+    if not is_user_authorized(message.from_user.id):
+        return
+    
+    # Skip processing for button presses
+    if message.text and message.text in ["OpenAI", "Claude", "Groq", "Perplexity", "🤖 Choose AI Model", "⚙️ Settings", "🗑 Clear History", "₿", "🔙 Back"]:
+        return
+    
+    settings = await get_or_create_settings(message.from_user.id)
+    provider_name = settings.get('current_provider', DEFAULT_PROVIDER)
+    model_config = PROVIDER_MODELS[provider_name]
+    
+    try:
+        # Update last activity for any message
+        await storage.update_last_activity(message.from_user.id)
+        
+        # Get chat history
+        history = await storage.get_chat_history(message.from_user.id)
+        
+        # Save user message
+        await storage.add_message(message.from_user.id, message.text, is_bot=False)
+        
+        # Get AI response
+        ai_provider = get_provider(provider_name, config)
+        response = await ai_provider.chat_completion(
+            message=message.text,
+            model_config=model_config,
+            history=history
+        )
+        
+        # Save bot response
+        await storage.add_message(message.from_user.id, response, is_bot=True)
+        
+        await message.answer(response)
+    except Exception as e:
+        await message.answer(
+            f"❌ Error processing your message: {str(e)}\n"
+            "Please try again or choose a different AI model."
+        )
+
+# Unauthorized handler should be last
 @router.message()
-async def handle_message(message: Message):
-    if not storage.is_user_allowed(message.from_user.id):
+async def handle_unauthorized(message: Message, state: FSMContext):
+    """Handle unauthorized users and unhandled messages"""
+    if not is_user_authorized(message.from_user.id):
+        await message.answer(
+            "⛔️ Access Denied\n\n"
+            "Sorry, you don't have permission to use this bot.\n"
+            "Please contact the administrator if you need access.",
+            reply_markup=types.ReplyKeyboardRemove()
+        )
         return
-        
-    # Skip handling button texts
-    if message.text in ["🤖 Choose AI Model", "⚙️ Settings", "🗑 Clear History", "₿"]:
-        return
-
-    settings = storage.get_user_settings(message.from_user.id)
-    if not settings:
-        default_provider = "groq"
-        settings = {
-            "current_provider": default_provider,
-            "current_model": PROVIDER_MODELS[default_provider]["name"]
-        }
-        storage.update_user_settings(message.from_user.id, settings)
-
-    provider = get_provider(settings['current_provider'])
-    history = storage.get_history(message.from_user.id)
     
-    async with ChatActionSender.typing(bot=message.bot, chat_id=message.chat.id):
-        try:
-            # Handle image if present
-            if message.photo and PROVIDER_MODELS[settings['current_provider']]["vision"]:
-                photo = message.photo[-1]
-                file = await message.bot.get_file(photo.file_id)
-                file_path = file.file_path
-                file_bytes = await message.bot.download_file(file_path)
-                image_bytes = file_bytes.read()
-                
-                # Convert image bytes to base64 for JSON storage
-                base64_image = base64.b64encode(image_bytes).decode('utf-8')
-                
-                # Store user message with base64 encoded image
-                storage.add_to_history(
-                    message.from_user.id,
-                    {
-                        "is_bot": False,
-                        "content": message.caption or "What's in this image?",
-                        "image": base64_image,
-                        "image_id": photo.file_id
-                    }
-                )
-                
-                response = await provider.generate_response(
-                    prompt=message.caption or "What's in this image?",
-                    model=settings['current_model'],
-                    history=None if settings['current_provider'] == "perplexity" else history,
-                    image=image_bytes
-                )
-            elif message.text:
-                # Store user message
-                storage.add_to_history(
-                    message.from_user.id,
-                    {
-                        "is_bot": False,
-                        "content": message.text
-                    }
-                )
-                
-                response = await provider.generate_response(
-                    prompt=message.text,
-                    model=settings['current_model'],
-                    history=None if settings['current_provider'] == "perplexity" else history
-                )
-            else:
-                return
-                
-            # Store bot response
-            storage.add_to_history(
-                message.from_user.id,
-                {
-                    "is_bot": True,
-                    "content": response,
-                    "provider": settings['current_provider'],
-                    "model": settings['current_model']
-                }
-            )
-            
-            await message.answer(response)
-        except Exception as e:
-            await message.answer(f"Error generating response: {str(e)}")
-
-@router.message(Command("history"))
-async def show_history(message: Message):
-    history = storage.get_history(message.from_user.id)
-    if not history:
-        await message.answer("No conversation history yet.")
-        return
-        
-    response = "Conversation History:\n\n"
-    for msg in history:
-        prefix = "🤖" if msg["is_bot"] else "👤"
-        provider = f" ({msg['provider']})" if msg.get("provider") else ""
-        content = msg["content"]
-        if msg.get("image"):
-            content = "[Image] " + content
-        response += f"{prefix}{provider}: {content}\n\n"
-    
-    await message.answer(response)
+    # For authorized users, check if we're in a state
+    current_state = await state.get_state()
+    if not current_state:
+        # If no state, set to chatting and process as a chat message
+        await state.set_state(UserStates.chatting)
+        await handle_message(message, state)
+    else:
+        # If in a state but message not handled by other handlers
+        await message.answer(
+            "Please use the menu buttons or send a message to chat.",
+            reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
+        )
