@@ -227,6 +227,7 @@ async def handle_message(message: Message, state: FSMContext):
         provider_name = settings['current_provider']
         model_config = PROVIDER_MODELS[provider_name]
         
+        # Initial typing indicator
         await message.bot.send_chat_action(message.chat.id, "typing")
         
         # Handle image if present
@@ -249,8 +250,10 @@ async def handle_message(message: Message, state: FSMContext):
         # Send initial response message
         bot_response = await message.answer("...")
         last_update_time = datetime.now()
-        update_interval = timedelta(milliseconds=200)  # 100ms between updates
-        buffer_size = 50  # characters to buffer before update
+        last_typing_time = datetime.now()
+        update_interval = timedelta(milliseconds=300)  # Increased from 200ms to 500ms
+        typing_interval = timedelta(seconds=1)  # Only send typing action every 4 seconds
+        buffer_size = 70  # Increased from 50 to 100 characters
         
         collected_response = ""
         last_update_length = 0
@@ -266,7 +269,15 @@ async def handle_message(message: Message, state: FSMContext):
                 collected_response += response_chunk
                 current_time = datetime.now()
                 
-                # Update if enough new content AND enough time has passed
+                # Update typing status with rate limiting
+                if current_time - last_typing_time >= typing_interval:
+                    try:
+                        await message.bot.send_chat_action(message.chat.id, "typing")
+                        last_typing_time = current_time
+                    except Exception as e:
+                        logging.warning(f"Typing indicator error (non-critical): {e}")
+                
+                # Update message content with rate limiting
                 if (len(collected_response) - last_update_length >= buffer_size and 
                     current_time - last_update_time >= update_interval):
                     try:
@@ -274,13 +285,10 @@ async def handle_message(message: Message, state: FSMContext):
                         await bot_response.edit_text(sanitized_response)
                         last_update_length = len(collected_response)
                         last_update_time = current_time
-                        
-                        # Keep typing indicator active
-                        await message.bot.send_chat_action(message.chat.id, "typing")
                     except Exception as e:
-                        logging.error(f"Error updating message: {e}")
+                        logging.warning(f"Message update error (non-critical): {e}")
                         continue
-        
+
         # Final update with complete response
         if collected_response and len(collected_response) > last_update_length:
             try:

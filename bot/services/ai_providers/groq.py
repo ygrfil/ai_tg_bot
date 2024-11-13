@@ -3,6 +3,7 @@ from typing import Optional, List, Dict, Any, AsyncGenerator
 import base64
 from .base import BaseAIProvider
 from ...config.settings import Config
+from ...config.prompts import get_system_prompt
 
 class GroqProvider(BaseAIProvider):
     def __init__(self, api_key: str, config: Config = None):
@@ -17,6 +18,11 @@ class GroqProvider(BaseAIProvider):
         image: Optional[bytes] = None
     ) -> AsyncGenerator[str, None]:
         messages = []
+        
+        # Add system prompt
+        system_prompt = get_system_prompt(model_config['name'])
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
         
         if history:
             for msg in history:

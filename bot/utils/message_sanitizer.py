@@ -61,7 +61,6 @@ def sanitize_html_tags(text: str) -> str:
                                     chunks.append(f'</{tag_stack.pop()}>')
                                 if tag_stack:
                                     chunks.append(f'</{tag_stack.pop()}>')
-            
             last_end = end
         
         # Add remaining text

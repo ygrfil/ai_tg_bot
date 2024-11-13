@@ -13,13 +13,9 @@ def get_main_menu(is_admin: bool = False) -> ReplyKeyboardMarkup:
         KeyboardButton(text="₿")
     )
     if is_admin:
-        builder.row(
-            KeyboardButton(text="👑 Admin Panel"),
-            KeyboardButton(text="📊 Stats")
-        )
-        builder.row(
-            KeyboardButton(text="📢 Broadcast")
-        )
+        admin_button = KeyboardButton(text="👑 Admin Panel")
+        builder.row(admin_button)
+        builder.add(KeyboardButton(text="📊 Stats"), KeyboardButton(text="📢 Broadcast"))
     return builder.as_markup(resize_keyboard=True)
 
 def get_provider_menu() -> ReplyKeyboardMarkup:
