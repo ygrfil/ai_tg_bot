@@ -185,6 +185,7 @@ class Storage:
         await self.ensure_initialized()
         async with self._lock:
             async with self._db_connect() as db:
+                # First, get the image data that needs to be cleaned up
                 await db.execute("""
                     DELETE FROM chat_history 
                     WHERE datetime(timestamp) < datetime('now', '-2 hours')

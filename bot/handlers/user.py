@@ -232,17 +232,32 @@ async def handle_message(message: Message, state: FSMContext):
         
         # Handle image if present
         image_data = None
-        message_text = message.text or ""
+        message_text = ""
         
+        # Get caption or text message
+        if message.caption:
+            message_text = message.caption
+        elif message.text:
+            message_text = message.text
+
         if message.photo:
             photo = message.photo[-1]
             image_file = await message.bot.get_file(photo.file_id)
             image_bytes = await message.bot.download_file(image_file.file_path)
             image_data = image_bytes.read()
             
+            # Only use default prompt if no caption provided
             if not message_text:
                 message_text = "Please analyze this image."
 
+        # After processing the image and text, add to history
+        await storage.add_message(
+            user_id=message.from_user.id,
+            content=message_text,
+            is_bot=False,
+            image_data=image_data  # Add the image data to storage
+        )
+        
         # Get chat history and AI provider
         history = await storage.get_chat_history(message.from_user.id)
         ai_provider = get_provider(provider_name, config)
