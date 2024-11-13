@@ -1,19 +1,19 @@
 from abc import ABC, abstractmethod
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, AsyncGenerator
 import base64
 
 class BaseAIProvider(ABC):
     """Base class for AI providers implementing common interface."""
     
     @abstractmethod
-    async def chat_completion(
+    async def chat_completion_stream(
         self, 
         message: str,
         model_config: Dict[str, Any],
         history: Optional[List[Dict[str, Any]]] = None,
         image: Optional[bytes] = None
-    ) -> str:
-        """Generate a response from the AI model."""
+    ) -> AsyncGenerator[str, None]:
+        """Generate a streaming response from the AI model."""
         pass
 
     def _format_history(self, history: List[Dict[str, Any]], model_config: Dict[str, Any]) -> List[Dict[str, str]]:

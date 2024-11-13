@@ -1,6 +1,6 @@
 from openai import AsyncOpenAI
 import base64
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, AsyncGenerator
 from .base import BaseAIProvider
 from ...config.prompts import get_system_prompt
 
@@ -11,13 +11,13 @@ class OpenAIProvider(BaseAIProvider):
             base_url=base_url
         )
 
-    async def chat_completion(
+    async def chat_completion_stream(
         self, 
         message: str, 
         model_config: Dict[str, Any],
         history: Optional[List[Dict[str, Any]]] = None,
         image: Optional[bytes] = None
-    ) -> str:
+    ) -> AsyncGenerator[str, None]:
         messages = []
         system_prompt = get_system_prompt(model_config['name'])
         if system_prompt:
@@ -61,11 +61,16 @@ class OpenAIProvider(BaseAIProvider):
             messages.append({"role": "user", "content": message})
 
         try:
-            response = await self.client.chat.completions.create(
+            stream = await self.client.chat.completions.create(
                 model=model_config['name'],
                 messages=messages,
-                temperature=0.7
+                temperature=0.7,
+                stream=True  # Enable streaming
             )
-            return response.choices[0].message.content
+            
+            async for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+                    
         except Exception as e:
             raise Exception(f"OpenAI error: {str(e)}")

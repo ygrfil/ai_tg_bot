@@ -1,4 +1,4 @@
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, AsyncGenerator
 from anthropic import AsyncAnthropic
 import base64
 from .base import BaseAIProvider
@@ -8,13 +8,13 @@ class ClaudeProvider(BaseAIProvider):
     def __init__(self, api_key: str):
         self.client = AsyncAnthropic(api_key=api_key)
         
-    async def chat_completion(
+    async def chat_completion_stream(
         self, 
         message: str, 
         model_config: Dict[str, Any],
         history: Optional[List[Dict[str, Any]]] = None,
         image: Optional[bytes] = None
-    ) -> str:
+    ) -> AsyncGenerator[str, None]:
         messages = []
         
         if history:
@@ -68,11 +68,30 @@ class ClaudeProvider(BaseAIProvider):
             })
 
         try:
-            response = await self.client.messages.create(
+            system_prompt = get_system_prompt(model_config['name'])
+            
+            stream = await self.client.messages.create(
                 model=model_config['name'],
                 messages=messages,
-                max_tokens=1000
+                system=system_prompt,
+                max_tokens=4096,
+                stream=True
             )
-            return response.content[0].text
+            
+            async for chunk in stream:
+                # Handle different types of streaming responses
+                if hasattr(chunk, 'type'):
+                    if chunk.type == 'content_block_start':
+                        continue
+                    elif chunk.type == 'content_block_delta':
+                        if hasattr(chunk, 'delta') and hasattr(chunk.delta, 'text'):
+                            yield chunk.delta.text
+                    elif chunk.type == 'message_delta':
+                        if hasattr(chunk, 'delta') and hasattr(chunk.delta, 'content'):
+                            yield chunk.delta.content
+                elif hasattr(chunk, 'content'):
+                    # Handle non-streaming response format
+                    yield chunk.content
+                    
         except Exception as e:
             raise Exception(f"Claude error: {str(e)}")

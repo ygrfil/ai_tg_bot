@@ -214,19 +214,13 @@ async def handle_message(message: Message, state: FSMContext):
     if not is_user_authorized(message.from_user.id):
         return
 
-    # Skip processing for button presses but maintain chat state
-    if message.text and message.text.startswith(('🤖', '⚙️', '🗑', '₿', '🔙')):
-        await message.answer(
-            "Please use the menu buttons or send a message to chat.",
-            reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
-        )
-        return
-
     settings = await get_or_create_settings(message.from_user.id)
     provider_name = settings.get('current_provider', 'openai')
     model_config = PROVIDER_MODELS[provider_name]
     
     try:
+        await message.bot.send_chat_action(message.chat.id, "typing")
+        
         # Handle image if present
         image_data = None
         message_text = message.text or ""
@@ -240,37 +234,48 @@ async def handle_message(message: Message, state: FSMContext):
             if not message_text:
                 message_text = "Please analyze this image."
 
-        # Save user message with image if present
-        await storage.add_message(
-            user_id=message.from_user.id,
-            content=message_text,
-            is_bot=False,
-            image_data=image_data
-        )
-
-        # Get chat history
+        # Get chat history and AI provider
         history = await storage.get_chat_history(message.from_user.id)
-        
-        # Get AI provider
         ai_provider = get_provider(provider_name, config)
         
-        # Process response
-        response = await ai_provider.chat_completion(
+        # Send initial response message
+        bot_response = await message.answer("...")
+        collected_response = ""
+        last_update_length = 0
+        
+        # Stream the response
+        async for response_chunk in ai_provider.chat_completion_stream(
             message=message_text,
             model_config=model_config,
             history=history,
-            image=image_data if message.photo else None
-        )
+            image=image_data
+        ):
+            if response_chunk:
+                collected_response += response_chunk
+                # Update more frequently (every 20 chars) and only if there's new content
+                if len(collected_response) - last_update_length >= 20:
+                    try:
+                        await bot_response.edit_text(collected_response)
+                        last_update_length = len(collected_response)
+                        # Keep typing indicator active
+                        await message.bot.send_chat_action(message.chat.id, "typing")
+                    except Exception as e:
+                        logging.error(f"Error updating message: {e}")
+                        continue
         
-        # Save bot response
-        await storage.add_message(
-            user_id=message.from_user.id,
-            content=response,
-            is_bot=True
-        )
-        
-        await message.answer(response)
-        
+        # Final update with complete response
+        if collected_response and len(collected_response) > last_update_length:
+            try:
+                await bot_response.edit_text(collected_response)
+                # Save to history
+                await storage.add_message(
+                    user_id=message.from_user.id,
+                    content=collected_response,
+                    is_bot=True
+                )
+            except Exception as e:
+                logging.error(f"Error saving final response: {e}")
+                
     except Exception as e:
         logging.error(f"Error processing message: {e}")
         await message.answer(
