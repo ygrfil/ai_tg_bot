@@ -244,7 +244,7 @@ async def handle_message(message: Message, state: FSMContext):
         # Send initial response message
         bot_response = await message.answer("...")
         last_update_time = datetime.now()
-        update_interval = timedelta(milliseconds=100)  # 100ms between updates
+        update_interval = timedelta(milliseconds=200)  # 100ms between updates
         buffer_size = 50  # characters to buffer before update
         
         collected_response = ""
