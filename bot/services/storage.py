@@ -166,8 +166,8 @@ class Storage:
                     if row:
                         settings = json.loads(row[0]) if row[0] else {}
                         settings.update({
-                            'current_provider': row[1] or 'claude',
-                            'current_model': row[2] or 'claude-3-sonnet'
+                            'current_provider': row[1],
+                            'current_model': row[2]
                         })
                         self.cache.set(cache_key, settings, ttl=300)  # Cache for 5 minutes
                         return settings
@@ -181,27 +181,14 @@ class Storage:
         async with self._lock:
             try:
                 async with self._db_connect() as db:
-                    # Check if first_name column exists
-                    async with db.execute("""
-                        SELECT name FROM pragma_table_info('users') 
-                        WHERE name='first_name'
-                    """) as cursor:
-                        has_first_name = await cursor.fetchone() is not None
-
-                    # Add first_name column if it doesn't exist
-                    if not has_first_name:
-                        await db.execute("""
-                            ALTER TABLE users 
-                            ADD COLUMN first_name TEXT
-                        """)
-
-                    # Create or update users table
+                    # Create users table first
                     await db.execute("""
                         CREATE TABLE IF NOT EXISTS users (
                             user_id INTEGER PRIMARY KEY,
                             username TEXT,
                             first_name TEXT,
                             current_provider TEXT,
+                            current_model TEXT,
                             settings TEXT,
                             last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -222,7 +209,7 @@ class Storage:
                         )
                     """)
 
-                    # Create or update usage_stats table
+                    # Create usage_stats table
                     await db.execute("""
                         CREATE TABLE IF NOT EXISTS usage_stats (
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -237,22 +224,10 @@ class Storage:
                         )
                     """)
 
-                    # Check if model column exists in usage_stats
-                    async with db.execute("PRAGMA table_info(usage_stats)") as cursor:
-                        columns = await cursor.fetchall()
-                        column_names = [col[1] for col in columns]
-                        
-                        if 'model' not in column_names:
-                            await db.execute("ALTER TABLE usage_stats ADD COLUMN model TEXT NOT NULL DEFAULT 'unknown'")
-
-                    # Add optimized indices
+                    # Create indices
                     await db.execute("""
                         CREATE INDEX IF NOT EXISTS idx_chat_history_user_id_timestamp 
                         ON chat_history(user_id, timestamp DESC)
-                    """)
-                    await db.execute("""
-                        CREATE INDEX IF NOT EXISTS idx_chat_history_duplicate_check
-                        ON chat_history(user_id, content, is_bot, timestamp)
                     """)
                     await db.execute("""
                         CREATE INDEX IF NOT EXISTS idx_usage_stats_combined
@@ -264,6 +239,7 @@ class Storage:
                     """)
 
                     await db.commit()
+
             except Exception as e:
                 logging.error(f"Database initialization error: {e}")
                 raise
@@ -337,8 +313,8 @@ class Storage:
                         return {
                             "user_id": row[0],
                             "username": row[1],
-                            "current_provider": row[2] or "claude",  # Default to claude if None
-                            "current_model": row[3] or "claude-3-sonnet",  # Default model
+                            "current_provider": row[2],  # Default to claude if None
+                            "current_model": row[3],  # Default model
                             "settings": row[4],
                             "last_activity": row[5]
                         }
@@ -350,15 +326,15 @@ class Storage:
                             current_provider,
                             current_model,
                             settings
-                        ) VALUES (?, 'claude', 'claude-3-sonnet', '{}')
+                        ) VALUES (?, '{}')
                     """, (user_id,))
                     await db.commit()
                     
                     return {
                         "user_id": user_id,
                         "username": None,
-                        "current_provider": "claude",
-                        "current_model": "claude-3-sonnet",
+                        "current_provider": None,  # Default provider with no value
+                        "current_model": None,      # Default model with no value
                         "settings": "{}",
                         "last_activity": None
                     }
@@ -369,8 +345,8 @@ class Storage:
             return {
                 "user_id": user_id,
                 "username": None,
-                "current_provider": "claude",
-                "current_model": "claude-3-sonnet",
+                "current_provider": None,
+                "current_model": None,
                 "settings": "{}",
                 "last_activity": None
             }
