@@ -177,12 +177,27 @@ async def handle_broadcast(message: Message, state: FSMContext):
         return
 
     try:
+        # Validate that we have content to broadcast
+        has_content = bool(
+            message.text or 
+            message.photo or 
+            message.video or 
+            message.caption
+        )
+        
+        if not has_content:
+            await message.answer(
+                "❌ Cannot broadcast empty message. Please send text, photo, or video.",
+                reply_markup=kb.get_back_menu()
+            )
+            return
+
         # Get all allowed users
         allowed_users = set([config.admin_id] + config.allowed_user_ids)
         success_count = 0
         fail_count = 0
 
-        # Send status message with inline keyboard
+        # Send status message
         status_msg = await message.answer(
             "📤 Broadcasting message...",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[])
@@ -191,32 +206,41 @@ async def handle_broadcast(message: Message, state: FSMContext):
         for user_id in allowed_users:
             try:
                 if message.photo:
+                    caption = message.caption or ""  # Use empty string if no caption
                     await message.bot.send_photo(
                         chat_id=user_id,
                         photo=message.photo[-1].file_id,
-                        caption=f"📢 <b>Broadcast from Admin:</b>\n\n{message.caption if message.caption else ''}",
+                        caption=f"📢 <b>Broadcast from Admin:</b>\n\n{caption}",
                         parse_mode="HTML"
                     )
                 elif message.video:
+                    caption = message.caption or ""  # Use empty string if no caption
                     await message.bot.send_video(
                         chat_id=user_id,
                         video=message.video.file_id,
-                        caption=f"📢 <b>Broadcast from Admin:</b>\n\n{message.caption if message.caption else ''}",
+                        caption=f"📢 <b>Broadcast from Admin:</b>\n\n{caption}",
                         parse_mode="HTML"
                     )
                 elif message.text:
-                    await message.bot.send_message(
-                        chat_id=user_id,
-                        text=f"📢 <b>Broadcast from Admin:</b>\n\n{message.text}",
-                        parse_mode="HTML"
-                    )
+                    # Only send text messages if there's actual text
+                    if message.text.strip():
+                        await message.bot.send_message(
+                            chat_id=user_id,
+                            text=f"📢 <b>Broadcast from Admin:</b>\n\n{message.text}",
+                            parse_mode="HTML"
+                        )
                 success_count += 1
             except Exception as e:
                 logging.error(f"Failed to send broadcast to user {user_id}: {str(e)}")
                 fail_count += 1
 
-        # Update status message
-        await status_msg.delete()  # Delete the status message
+        # Delete status message and show results
+        try:
+            await status_msg.delete()
+        except Exception as e:
+            logging.warning(f"Failed to delete status message: {str(e)}")
+
+        # Show results with proper keyboard
         await message.answer(
             f"✅ Broadcast completed!\n\n"
             f"📨 Sent successfully: {success_count}\n"
@@ -229,7 +253,7 @@ async def handle_broadcast(message: Message, state: FSMContext):
 
     except Exception as e:
         logging.error(f"Broadcast error: {str(e)}")
-        logging.error(traceback.format_exc())  # Add full traceback
+        logging.error(traceback.format_exc())
         await message.answer(
             "❌ Error during broadcast operation.",
             reply_markup=kb.get_admin_menu()

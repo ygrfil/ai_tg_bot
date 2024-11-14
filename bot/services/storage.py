@@ -6,6 +6,28 @@ import logging
 import asyncio
 from contextlib import asynccontextmanager
 import json
+from functools import lru_cache
+import time
+
+class CacheManager:
+    def __init__(self, ttl: int = 300):  # 5 minutes TTL
+        self.ttl = ttl
+        self.cache: Dict[str, tuple[Any, float]] = {}
+        
+    def get(self, key: str) -> Optional[Any]:
+        if key in self.cache:
+            value, timestamp = self.cache[key]
+            if time.time() - timestamp < self.ttl:
+                return value
+            del self.cache[key]
+        return None
+        
+    def set(self, key: str, value: Any):
+        self.cache[key] = (value, time.time())
+        
+    def invalidate(self, key: str):
+        if key in self.cache:
+            del self.cache[key]
 
 class Storage:
     def __init__(self, db_path: str = "data/chat.db"):
@@ -13,6 +35,7 @@ class Storage:
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         self._initialized = False
         self._lock = asyncio.Lock()
+        self.cache = CacheManager()
 
     @asynccontextmanager
     async def _db_connect(self):
@@ -85,6 +108,20 @@ class Storage:
                         
                         if 'model' not in column_names:
                             await db.execute("ALTER TABLE usage_stats ADD COLUMN model TEXT NOT NULL DEFAULT 'unknown'")
+
+                    # Add performance-critical indices
+                    await db.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_chat_history_user_id_timestamp 
+                        ON chat_history(user_id, timestamp)
+                    """)
+                    await db.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_usage_stats_user_id_timestamp 
+                        ON usage_stats(user_id, timestamp)
+                    """)
+                    await db.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_users_last_activity 
+                        ON users(last_activity)
+                    """)
 
                     await db.commit()
 
@@ -165,40 +202,27 @@ class Storage:
                 raise
 
     async def get_chat_history(self, user_id: int, limit: int = 10) -> List[Dict[str, Any]]:
-        """Get chat history for a user"""
+        """Optimized chat history retrieval"""
         try:
             async with self._db_connect() as db:
-                # Get the last N complete exchanges (pairs of user messages and bot responses)
+                # Use a more efficient query with LIMIT
                 async with db.execute("""
-                    WITH numbered_messages AS (
-                        SELECT 
-                            content,
-                            image_data,
-                            is_bot,
-                            timestamp,
-                            ROW_NUMBER() OVER (ORDER BY timestamp DESC) as row_num
-                        FROM chat_history
-                        WHERE user_id = ?
-                        ORDER BY timestamp DESC
-                        LIMIT ?
-                    )
-                    SELECT content, image_data, is_bot, timestamp
-                    FROM numbered_messages
-                    ORDER BY timestamp ASC
-                """, (user_id, limit * 2)) as cursor:  # Multiply limit by 2 to get pairs
+                    SELECT content, image_data, is_bot
+                    FROM chat_history
+                    WHERE user_id = ?
+                    ORDER BY timestamp DESC
+                    LIMIT ?
+                """, (user_id, limit * 2)) as cursor:  # Fetch pairs of messages
                     rows = await cursor.fetchall()
                     
-                history = [
+                return [
                     {
                         "content": row[0],
                         "image": row[1],
-                        "is_bot": bool(row[2]),
-                        "timestamp": row[3]
+                        "is_bot": row[2]
                     }
-                    for row in rows
+                    for row in reversed(rows)  # Reverse to get chronological order
                 ]
-                return history
-                
         except Exception as e:
             logging.error(f"Error getting chat history: {e}")
             return []

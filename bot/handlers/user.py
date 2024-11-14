@@ -8,6 +8,7 @@ import aiohttp
 from datetime import datetime, timedelta
 import logging
 from typing import Optional
+import asyncio
 
 from bot.keyboards import reply as kb
 from bot.services.storage import Storage
@@ -213,11 +214,11 @@ async def handle_message(message: Message, state: FSMContext):
         if not is_user_authorized(message.from_user.id):
             return
 
-        settings = await storage.get_user_settings(message.from_user.id)
+        # Get settings and history concurrently
+        settings_task = storage.get_user_settings(message.from_user.id)
+        history_task = storage.get_chat_history(message.from_user.id)
         
-        # Ensure user exists in database with username
-        username = message.from_user.username
-        await storage.ensure_user_exists(message.from_user.id, username)
+        settings, history = await asyncio.gather(settings_task, history_task)
         
         if not settings or 'current_provider' not in settings:
             await message.answer(
@@ -262,14 +263,14 @@ async def handle_message(message: Message, state: FSMContext):
         
         # Initialize response handling
         collected_response = ""
-        current_message = "..."  # Track current message content
+        current_message = None  # Track current message content
         last_update_time = datetime.now()
         last_typing_time = datetime.now()
         update_interval = timedelta(milliseconds=300)
         typing_interval = timedelta(seconds=1)
         
-        # Send initial response message
-        bot_response = await message.answer(current_message)
+        # Send initial response message with placeholder
+        bot_response = await message.answer("Processing...")
         
         # Stream the response
         async for response_chunk in ai_provider.chat_completion_stream(
@@ -292,8 +293,9 @@ async def handle_message(message: Message, state: FSMContext):
                 
                 # Update message content with rate limiting
                 sanitized_response = sanitize_html_tags(collected_response)
-                if (sanitized_response.strip() != current_message and 
-                    (len(sanitized_response) >= len(current_message) + 70 or 
+                if (sanitized_response.strip() and  # Ensure we have non-empty content
+                    (current_message is None or
+                     len(sanitized_response) >= len(current_message) + 70 or 
                      current_time - last_update_time >= update_interval)):
                     try:
                         await bot_response.edit_text(sanitized_response, parse_mode="HTML")
