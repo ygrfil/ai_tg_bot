@@ -7,6 +7,7 @@ from ..config import Config
 from ..keyboards import reply as kb
 from ..handlers.user import UserStates
 import aiosqlite
+import logging
 
 # Create router with name
 router = Router(name='admin_router')
@@ -40,14 +41,105 @@ async def back_button(message: Message, state: FSMContext):
         reply_markup=kb.get_main_menu(is_admin=True)
     )
 
-@router.message(F.text == "📊 Stats", F.from_user.id == config.admin_id)
-async def stats_button(message: Message):
-    """Handle stats button press"""
-    print("[DEBUG] Stats button pressed")
-    async with aiosqlite.connect(storage.db_path) as db:
-        async with db.execute("SELECT COUNT(DISTINCT user_id) FROM users") as cursor:
-            total_users = await cursor.fetchone()
-    await message.answer(f"Bot Statistics:\nTotal users: {total_users[0]}")
+@router.message(F.text == "📊 Stats", UserStates.admin_menu)
+async def stats_button(message: Message, state: FSMContext):
+    """Handle stats button press with detailed statistics"""
+    if str(message.from_user.id) != config.admin_id:
+        return
+        
+    try:
+        async with aiosqlite.connect(storage.db_path) as db:
+            # Step 1: Just get total users
+            async with db.execute("""
+                SELECT COUNT(*) as total 
+                FROM users
+            """) as cursor:
+                total_users = (await cursor.fetchone())[0]
+            
+            # Step 2: Get active users (last 24h)
+            async with db.execute("""
+                SELECT COUNT(DISTINCT chat_history.user_id) as active_users
+                FROM chat_history
+                WHERE chat_history.timestamp > datetime('now', '-1 day')
+            """) as cursor:
+                active_users = (await cursor.fetchone())[0]
+
+            # Step 3: Get message counts by provider
+            async with db.execute("""
+                SELECT 
+                    users.settings->>'current_provider' as provider,
+                    COUNT(DISTINCT chat_history.user_id) as unique_users,
+                    COUNT(*) as total_messages
+                FROM chat_history
+                INNER JOIN users 
+                    ON chat_history.user_id = users.user_id
+                WHERE chat_history.timestamp > datetime('now', '-30 day')
+                GROUP BY users.settings->>'current_provider'
+            """) as cursor:
+                provider_stats = await cursor.fetchall()
+
+            # Step 4: Get top users
+            async with db.execute("""
+                SELECT 
+                    chat_history.user_id,
+                    COUNT(*) as message_count,
+                    users.settings->>'current_provider' as current_provider
+                FROM chat_history
+                INNER JOIN users 
+                    ON chat_history.user_id = users.user_id
+                WHERE chat_history.timestamp > datetime('now', '-30 day')
+                GROUP BY chat_history.user_id
+                ORDER BY message_count DESC
+                LIMIT 5
+            """) as cursor:
+                top_users = await cursor.fetchall()
+
+        # Format the response
+        response = [
+            "<b>📊 Bot Statistics</b>\n",
+            f"👥 <b>Total Users:</b> {total_users}",
+            f"📱 <b>Active Users (24h):</b> {active_users}"
+        ]
+
+        # Add provider stats
+        if provider_stats:
+            response.append("\n<b>Provider Usage (30 days):</b>")
+            for provider, users, messages in provider_stats:
+                provider_name = provider.capitalize() if provider else 'Unknown'
+                response.append(
+                    f"\n🤖 <b>{provider_name}</b>\n"
+                    f"├ Users: {users}\n"
+                    f"└ Messages: {messages:,}"
+                )
+        else:
+            response.append("\n<i>No provider usage data available</i>")
+
+        # Add top users
+        if top_users:
+            response.append("\n<b>Top Users (30 days):</b>")
+            for user_id, messages, provider in top_users:
+                provider_name = provider.capitalize() if provider else 'N/A'
+                response.append(
+                    f"👤 User ID: {user_id}\n"
+                    f"├ Messages: {messages:,}\n"
+                    f"└ Provider: {provider_name}"
+                )
+
+        await message.answer(
+            "\n".join(response),
+            parse_mode="HTML",
+            reply_markup=kb.get_admin_menu()
+        )
+
+    except Exception as e:
+        logging.error(f"Error in stats command: {str(e)}")
+        # Print full error traceback for debugging
+        import traceback
+        logging.error(traceback.format_exc())
+        await message.answer(
+            "❌ Error fetching statistics",
+            reply_markup=kb.get_admin_menu()
+        )
 
 @router.message(F.text == "📢 Broadcast", F.from_user.id == config.admin_id)
 async def broadcast_button(message: Message):

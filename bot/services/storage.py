@@ -64,6 +64,26 @@ class Storage:
                         )
                     """)
                     
+                    # Add usage_stats table
+                    await db.execute("""
+                        CREATE TABLE IF NOT EXISTS usage_stats (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            user_id INTEGER NOT NULL,
+                            provider TEXT NOT NULL,
+                            message_count INTEGER DEFAULT 0,
+                            token_count INTEGER DEFAULT 0,
+                            image_count INTEGER DEFAULT 0,
+                            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            FOREIGN KEY (user_id) REFERENCES users(user_id)
+                        )
+                    """)
+                    
+                    # Add index for faster queries
+                    await db.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_usage_stats_user_provider 
+                        ON usage_stats(user_id, provider, timestamp)
+                    """)
+                    
                     await db.commit()
                     self._initialized = True
             except Exception as e:
@@ -241,3 +261,72 @@ class Storage:
             except Exception as e:
                 logging.error(f"Error ensuring user exists: {e}")
                 raise
+
+    async def log_usage(self, user_id: int, provider: str, tokens: int = 0, has_image: bool = False):
+        """Log usage statistics for a user and provider"""
+        async with self._lock:
+            try:
+                async with self._db_connect() as db:
+                    await db.execute("""
+                        INSERT INTO usage_stats 
+                        (user_id, provider, message_count, token_count, image_count) 
+                        VALUES (?, ?, 1, ?, ?)
+                    """, (user_id, provider, tokens, 1 if has_image else 0))
+                    await db.commit()
+            except Exception as e:
+                logging.error(f"Error logging usage: {e}")
+
+    async def get_usage_stats(self, period: str = 'month') -> Dict[str, Any]:
+        """Get usage statistics for all users"""
+        async with self._lock:
+            try:
+                async with self._db_connect() as db:
+                    # Get total users
+                    async with db.execute("SELECT COUNT(DISTINCT user_id) FROM users") as cursor:
+                        total_users = (await cursor.fetchone())[0]
+
+                    # Get active users in the last 24 hours
+                    async with db.execute("""
+                        SELECT COUNT(DISTINCT user_id) FROM users 
+                        WHERE datetime(last_activity) > datetime('now', '-1 day')
+                    """) as cursor:
+                        active_users_24h = (await cursor.fetchone())[0]
+
+                    # Get monthly usage per provider
+                    async with db.execute("""
+                        SELECT 
+                            provider,
+                            COUNT(DISTINCT user_id) as unique_users,
+                            SUM(message_count) as total_messages,
+                            SUM(token_count) as total_tokens,
+                            SUM(image_count) as total_images
+                        FROM usage_stats 
+                        WHERE datetime(timestamp) > datetime('now', '-30 day')
+                        GROUP BY provider
+                    """) as cursor:
+                        provider_stats = await cursor.fetchall()
+
+                    # Get top users
+                    async with db.execute("""
+                        SELECT 
+                            u.user_id,
+                            SUM(us.message_count) as total_messages,
+                            COUNT(DISTINCT us.provider) as providers_used
+                        FROM users u
+                        JOIN usage_stats us ON u.user_id = us.user_id
+                        WHERE datetime(us.timestamp) > datetime('now', '-30 day')
+                        GROUP BY u.user_id
+                        ORDER BY total_messages DESC
+                        LIMIT 5
+                    """) as cursor:
+                        top_users = await cursor.fetchall()
+
+                    return {
+                        "total_users": total_users,
+                        "active_users_24h": active_users_24h,
+                        "provider_stats": provider_stats,
+                        "top_users": top_users
+                    }
+            except Exception as e:
+                logging.error(f"Error getting usage stats: {e}")
+                return {}

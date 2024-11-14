@@ -319,6 +319,13 @@ async def handle_message(message: Message, state: FSMContext):
             except Exception as e:
                 logging.error(f"Error saving final response: {e}")
                 
+        # Log usage
+        await storage.log_usage(
+            user_id=message.from_user.id,
+            provider=provider_name,
+            tokens=len(collected_response.split()),  # Approximate token count
+            has_image=bool(image_data)
+        )
     except Exception as e:
         logging.error(f"Error processing message: {e}")
         await message.answer(
