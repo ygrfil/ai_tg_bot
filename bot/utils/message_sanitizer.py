@@ -7,6 +7,9 @@ def sanitize_html_tags(text: str) -> str:
     Simplified HTML sanitizer that ensures all tags are properly closed.
     Supported tags: b, i, u, s, code, pre, a
     """
+    if not text or not text.strip():
+        return "Processing..."  # Return placeholder for empty content
+        
     try:
         # Strip any existing malformed or nested tags first
         text = re.sub(r'<([a-zA-Z]+)[^>]*</', '</', text)
