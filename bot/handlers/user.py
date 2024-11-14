@@ -214,14 +214,15 @@ async def back_button(message: Message, state: FSMContext):
 # Chat handler for normal messages (put this AFTER button handlers)
 @router.message(UserStates.chatting)
 async def handle_message(message: Message, state: FSMContext):
-    user = message.from_user
-    if user:
-        await storage.ensure_user_exists(
-            user_id=user.id,
-            username=user.username,
-            first_name=user.first_name
-        )
     try:
+        user = message.from_user
+        if user:
+            await storage.ensure_user_exists(
+                user_id=user.id,
+                username=user.username,
+                first_name=user.first_name
+            )
+        
         if not is_user_authorized(message.from_user.id):
             return
 
@@ -233,12 +234,12 @@ async def handle_message(message: Message, state: FSMContext):
         
         if not settings or 'current_provider' not in settings:
             await message.answer(
-                "Please select an AI provider first:",
+                "🤖 Please select an AI Model first:",
                 reply_markup=kb.get_provider_menu()
             )
             await state.set_state(UserStates.choosing_provider)
             return
-        
+            
         provider_name = settings['current_provider']
         model_config = PROVIDER_MODELS[provider_name]
         
@@ -344,11 +345,15 @@ async def handle_message(message: Message, state: FSMContext):
         )
 
     except Exception as e:
-        logging.error(f"Error processing message: {e}")
-        await message.answer(
-            "❌ Error processing your message. Please try again.",
-            reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
-        )
+        logging.error(f"Error in handle_message: {str(e)}")
+        if str(e) == "None":  # Specific check for None provider
+            await message.answer(
+                "🤖 Please select an AI Model first:",
+                reply_markup=kb.get_provider_menu()
+            )
+            await state.set_state(UserStates.choosing_provider)
+        else:
+            await message.answer("❌ An error occurred. Please try again later.")
 
 # Unauthorized handler should be last
 @router.message()
