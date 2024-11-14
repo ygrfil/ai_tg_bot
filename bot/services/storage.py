@@ -6,56 +6,200 @@ import logging
 import asyncio
 from contextlib import asynccontextmanager
 import json
-from functools import lru_cache
-import time
+from collections import deque
+from .cache import CacheManager  # Assuming cache.py is created
 
-class CacheManager:
-    def __init__(self, ttl: int = 300):  # 5 minutes TTL
-        self.ttl = ttl
-        self.cache: Dict[str, tuple[Any, float]] = {}
-        
-    def get(self, key: str) -> Optional[Any]:
-        if key in self.cache:
-            value, timestamp = self.cache[key]
-            if time.time() - timestamp < self.ttl:
-                return value
-            del self.cache[key]
-        return None
-        
-    def set(self, key: str, value: Any):
-        self.cache[key] = (value, time.time())
-        
-    def invalidate(self, key: str):
-        if key in self.cache:
-            del self.cache[key]
+class DatabasePool:
+    def __init__(self, db_path: str, max_connections: int = 5):
+        self.db_path = db_path
+        self.max_connections = max_connections
+        self.pool = deque()
+        self.lock = asyncio.Lock()
+        self._creating = 0
+
+    async def acquire(self):
+        async with self.lock:
+            while True:
+                if self.pool:
+                    return self.pool.popleft()
+                if self._creating < self.max_connections:
+                    self._creating += 1
+                    break
+                await asyncio.sleep(0.1)
+
+        try:
+            db = await aiosqlite.connect(self.db_path)
+            await self._optimize_db_settings(db)
+            return db
+        finally:
+            self._creating -= 1
+
+    async def release(self, db):
+        async with self.lock:
+            self.pool.append(db)
+
+    @staticmethod
+    async def _optimize_db_settings(db):
+        await db.execute("PRAGMA journal_mode=WAL")
+        await db.execute("PRAGMA synchronous=NORMAL")
+        await db.execute("PRAGMA cache_size=-64000")  # 64MB cache
+        await db.execute("PRAGMA mmap_size=268435456")  # 256MB mmap
+        await db.execute("PRAGMA page_size=4096")
+        await db.execute("PRAGMA temp_store=MEMORY")
 
 class Storage:
     def __init__(self, db_path: str = "data/chat.db"):
         self.db_path = db_path
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
-        self._initialized = False
-        self._lock = asyncio.Lock()
+        self.pool = DatabasePool(db_path)
         self.cache = CacheManager()
+        self._lock = asyncio.Lock()
 
     @asynccontextmanager
     async def _db_connect(self):
-        """Context manager for database connections with retry logic"""
-        for attempt in range(3):  # Reduced retries to 3
-            try:
-                async with aiosqlite.connect(self.db_path, timeout=10.0) as db:  # Reduced timeout
-                    await db.execute("PRAGMA journal_mode=WAL")  # Enable Write-Ahead Logging
-                    await db.execute("PRAGMA synchronous=NORMAL")  # Faster synchronization
-                    await db.execute("PRAGMA cache_size=-64000")  # 64MB cache
-                    yield db
-                break
-            except aiosqlite.OperationalError as e:
-                if "database is locked" in str(e) and attempt < 2:
-                    await asyncio.sleep(0.1 * (attempt + 1))  # Shorter backoff
+        db = await self.pool.acquire()
+        try:
+            yield db
+        finally:
+            await self.pool.release(db)
+
+    async def get_chat_history(self, user_id: int, limit: int = 10) -> List[Dict[str, Any]]:
+        """Get chat history with caching"""
+        # Don't cache chat history with images at all for reliability
+        try:
+            async with self._db_connect() as db:
+                async with db.execute("""
+                    SELECT content, image_data, is_bot
+                    FROM chat_history
+                    WHERE user_id = ?
+                    ORDER BY timestamp DESC
+                    LIMIT ?
+                """, (user_id, limit * 2)) as cursor:
+                    rows = await cursor.fetchall()
+                    
+                # Process rows in reverse order to maintain chronological order
+                result = []
+                for row in reversed(rows):
+                    message = {
+                        "content": row[0],
+                        "is_bot": bool(row[2])
+                    }
+                    # Only add image if it exists
+                    if row[1] is not None:
+                        message["image"] = row[1]
+                    result.append(message)
+                
+                return result
+        except Exception as e:
+            logging.error(f"Error getting chat history: {e}")
+            return []
+
+    async def add_to_history(
+        self,
+        user_id: int,
+        content: str,
+        is_bot: bool,
+        image_data: Optional[bytes] = None
+    ) -> None:
+        """Add message to history"""
+        try:
+            async with self._db_connect() as db:
+                # If adding a message with an image
+                if image_data:
+                    # First, nullify image data in previous messages
+                    await db.execute("""
+                        UPDATE chat_history 
+                        SET image_data = NULL 
+                        WHERE user_id = ? AND image_data IS NOT NULL
+                    """, (user_id,))
+                    
+                    # Then insert the new message with image
+                    await db.execute("""
+                        INSERT INTO chat_history (
+                            user_id, content, image_data, is_bot, timestamp
+                        ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    """, (user_id, content, image_data, is_bot))
                 else:
-                    raise
+                    # Check for duplicates only for text messages
+                    async with db.execute("""
+                        SELECT id FROM chat_history 
+                        WHERE user_id = ? 
+                        AND content = ? 
+                        AND is_bot = ?
+                        AND timestamp > datetime('now', '-1 minute')
+                        AND image_data IS NULL
+                    """, (user_id, content, is_bot)) as cursor:
+                        if await cursor.fetchone():
+                            return
+
+                    # Insert text-only message
+                    await db.execute("""
+                        INSERT INTO chat_history (
+                            user_id, content, is_bot, timestamp
+                        ) VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                    """, (user_id, content, is_bot))
+
+                # Update user's last activity
+                await db.execute("""
+                    UPDATE users 
+                    SET last_activity = CURRENT_TIMESTAMP 
+                    WHERE user_id = ?
+                """, (user_id,))
+                
+                await db.commit()
+                
+        except Exception as e:
+            logging.error(f"Error adding to chat history: {e}")
+            raise
+
+    async def clear_user_history(self, user_id: int):
+        """Clear user history and invalidate cache"""
+        try:
+            async with self._db_connect() as db:
+                await db.execute(
+                    "DELETE FROM chat_history WHERE user_id = ?",
+                    (user_id,)
+                )
+                await db.commit()
+                
+                # Invalidate all user-related caches
+                self.cache.invalidate(f"chat_history:{user_id}*")
+                self.cache.invalidate(f"user_settings:{user_id}")
+                
+        except Exception as e:
+            logging.error(f"Error clearing user history: {e}")
+            raise
+
+    async def get_user_settings(self, user_id: int) -> Optional[dict]:
+        """Get user settings with caching"""
+        cache_key = f"user_settings:{user_id}"
+        cached_result = self.cache.get(cache_key)
+        if cached_result is not None:
+            return cached_result
+
+        try:
+            async with self._db_connect() as db:
+                async with db.execute("""
+                    SELECT settings, current_provider, current_model
+                    FROM users 
+                    WHERE user_id = ?
+                """, (user_id,)) as cursor:
+                    row = await cursor.fetchone()
+                    if row:
+                        settings = json.loads(row[0]) if row[0] else {}
+                        settings.update({
+                            'current_provider': row[1] or 'claude',
+                            'current_model': row[2] or 'claude-3-sonnet'
+                        })
+                        self.cache.set(cache_key, settings, ttl=300)  # Cache for 5 minutes
+                        return settings
+                    return None
+        except Exception as e:
+            logging.error(f"Error getting user settings: {e}")
+            return None
 
     async def ensure_initialized(self):
-        """Initialize database tables if they don't exist"""
+        """Initialize database with optimized indices"""
         async with self._lock:
             try:
                 async with self._db_connect() as db:
@@ -109,49 +253,28 @@ class Storage:
                         if 'model' not in column_names:
                             await db.execute("ALTER TABLE usage_stats ADD COLUMN model TEXT NOT NULL DEFAULT 'unknown'")
 
-                    # Add performance-critical indices
+                    # Add optimized indices
                     await db.execute("""
                         CREATE INDEX IF NOT EXISTS idx_chat_history_user_id_timestamp 
-                        ON chat_history(user_id, timestamp)
+                        ON chat_history(user_id, timestamp DESC)
                     """)
                     await db.execute("""
-                        CREATE INDEX IF NOT EXISTS idx_usage_stats_user_id_timestamp 
-                        ON usage_stats(user_id, timestamp)
+                        CREATE INDEX IF NOT EXISTS idx_chat_history_duplicate_check
+                        ON chat_history(user_id, content, is_bot, timestamp)
                     """)
                     await db.execute("""
-                        CREATE INDEX IF NOT EXISTS idx_users_last_activity 
-                        ON users(last_activity)
+                        CREATE INDEX IF NOT EXISTS idx_usage_stats_combined
+                        ON usage_stats(user_id, provider, timestamp)
+                    """)
+                    await db.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_users_settings
+                        ON users(user_id, current_provider, current_model)
                     """)
 
                     await db.commit()
-
             except Exception as e:
                 logging.error(f"Database initialization error: {e}")
                 raise
-
-    async def get_user_settings(self, user_id: int) -> Optional[dict]:
-        """Get user settings from database"""
-        await self.ensure_initialized()
-        try:
-            async with self._db_connect() as db:
-                async with db.execute("""
-                    SELECT settings, current_provider, current_model
-                    FROM users 
-                    WHERE user_id = ?
-                """, (user_id,)) as cursor:
-                    row = await cursor.fetchone()
-                    if row:
-                        settings = json.loads(row[0]) if row[0] else {}
-                        # Merge column values with JSON settings
-                        settings.update({
-                            'current_provider': row[1] or 'claude',
-                            'current_model': row[2] or 'claude-3-sonnet'
-                        })
-                        return settings
-                    return None
-        except Exception as e:
-            logging.error(f"Error getting user settings: {e}")
-            return None
 
     async def save_user_settings(self, user_id: int, settings: dict):
         """Save user settings to database"""
@@ -201,45 +324,64 @@ class Storage:
                 logging.error(f"Error adding message: {e}")
                 raise
 
-    async def get_chat_history(self, user_id: int, limit: int = 10) -> List[Dict[str, Any]]:
-        """Optimized chat history retrieval"""
+    async def get_user(self, user_id: int) -> Dict[str, Any]:
+        """Get user data from the database"""
         try:
             async with self._db_connect() as db:
-                # Use a more efficient query with LIMIT
                 async with db.execute("""
-                    SELECT content, image_data, is_bot
-                    FROM chat_history
+                    SELECT 
+                        user_id,
+                        username,
+                        current_provider,
+                        current_model,
+                        settings,
+                        last_activity
+                    FROM users 
                     WHERE user_id = ?
-                    ORDER BY timestamp DESC
-                    LIMIT ?
-                """, (user_id, limit * 2)) as cursor:  # Fetch pairs of messages
-                    rows = await cursor.fetchall()
+                """, (user_id,)) as cursor:
+                    row = await cursor.fetchone()
                     
-                return [
-                    {
-                        "content": row[0],
-                        "image": row[1],
-                        "is_bot": row[2]
-                    }
-                    for row in reversed(rows)  # Reverse to get chronological order
-                ]
-        except Exception as e:
-            logging.error(f"Error getting chat history: {e}")
-            return []
-
-    async def clear_user_history(self, user_id: int):
-        await self.ensure_initialized()
-        async with self._lock:
-            try:
-                async with self._db_connect() as db:
-                    await db.execute(
-                        "DELETE FROM chat_history WHERE user_id = ?",
-                        (user_id,)
-                    )
+                    if row:
+                        return {
+                            "user_id": row[0],
+                            "username": row[1],
+                            "current_provider": row[2] or "claude",  # Default to claude if None
+                            "current_model": row[3] or "claude-3-sonnet",  # Default model
+                            "settings": row[4],
+                            "last_activity": row[5]
+                        }
+                    
+                    # If user doesn't exist, create new user with default settings
+                    await db.execute("""
+                        INSERT INTO users (
+                            user_id, 
+                            current_provider,
+                            current_model,
+                            settings
+                        ) VALUES (?, 'claude', 'claude-3-sonnet', '{}')
+                    """, (user_id,))
                     await db.commit()
-            except Exception as e:
-                logging.error(f"Error clearing user history: {e}")
-                raise
+                    
+                    return {
+                        "user_id": user_id,
+                        "username": None,
+                        "current_provider": "claude",
+                        "current_model": "claude-3-sonnet",
+                        "settings": "{}",
+                        "last_activity": None
+                    }
+                    
+        except Exception as e:
+            logging.error(f"Error getting user data: {e}")
+            # Return default values if there's an error
+            return {
+                "user_id": user_id,
+                "username": None,
+                "current_provider": "claude",
+                "current_model": "claude-3-sonnet",
+                "settings": "{}",
+                "last_activity": None
+            }
 
     async def cleanup_old_history(self):
         """Clear chat history older than 2 hours"""
@@ -387,103 +529,3 @@ class Storage:
             except Exception as e:
                 logging.error(f"Error getting usage stats: {e}")
                 return {}
-
-    async def add_to_history(
-        self,
-        user_id: int,
-        content: str,
-        is_bot: bool,
-        image_data: Optional[bytes] = None
-    ) -> None:
-        """Add a message to chat history"""
-        try:
-            async with self._db_connect() as db:
-                # Check for potential duplicate message
-                async with db.execute("""
-                    SELECT id FROM chat_history 
-                    WHERE user_id = ? 
-                    AND content = ? 
-                    AND is_bot = ?
-                    AND timestamp > datetime('now', '-1 minute')
-                """, (user_id, content, is_bot)) as cursor:
-                    if await cursor.fetchone():
-                        logging.warning(f"Duplicate message detected for user {user_id}")
-                        return
-
-                # Add new message
-                await db.execute("""
-                    INSERT INTO chat_history (
-                        user_id, content, image_data, is_bot, timestamp
-                    ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-                """, (user_id, content, image_data, is_bot))
-                
-                # Update user's last activity
-                await db.execute("""
-                    UPDATE users 
-                    SET last_activity = CURRENT_TIMESTAMP 
-                    WHERE user_id = ?
-                """, (user_id,))
-                
-                await db.commit()
-                
-        except Exception as e:
-            logging.error(f"Error adding to chat history: {e}")
-
-    async def get_user(self, user_id: int) -> Dict[str, Any]:
-        """Get user data from the database"""
-        try:
-            async with self._db_connect() as db:
-                async with db.execute("""
-                    SELECT 
-                        user_id,
-                        username,
-                        current_provider,
-                        current_model,
-                        settings,
-                        last_activity
-                    FROM users 
-                    WHERE user_id = ?
-                """, (user_id,)) as cursor:
-                    row = await cursor.fetchone()
-                    
-                    if row:
-                        return {
-                            "user_id": row[0],
-                            "username": row[1],
-                            "current_provider": row[2] or "claude",  # Default to claude if None
-                            "current_model": row[3] or "claude-3-sonnet",  # Default model
-                            "settings": row[4],
-                            "last_activity": row[5]
-                        }
-                    
-                    # If user doesn't exist, create new user with default settings
-                    await db.execute("""
-                        INSERT INTO users (
-                            user_id, 
-                            current_provider,
-                            current_model,
-                            settings
-                        ) VALUES (?, 'claude', 'claude-3-sonnet', '{}')
-                    """, (user_id,))
-                    await db.commit()
-                    
-                    return {
-                        "user_id": user_id,
-                        "username": None,
-                        "current_provider": "claude",
-                        "current_model": "claude-3-sonnet",
-                        "settings": "{}",
-                        "last_activity": None
-                    }
-                    
-        except Exception as e:
-            logging.error(f"Error getting user data: {e}")
-            # Return default values if there's an error
-            return {
-                "user_id": user_id,
-                "username": None,
-                "current_provider": "claude",
-                "current_model": "claude-3-sonnet",
-                "settings": "{}",
-                "last_activity": None
-            }
