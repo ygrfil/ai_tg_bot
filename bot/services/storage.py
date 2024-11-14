@@ -186,8 +186,7 @@ class Storage:
                         CREATE TABLE IF NOT EXISTS users (
                             user_id INTEGER PRIMARY KEY,
                             username TEXT,
-                            current_provider TEXT DEFAULT 'claude',
-                            current_model TEXT DEFAULT 'claude-3-sonnet',
+                            current_provider TEXT,
                             settings TEXT,
                             last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -407,21 +406,25 @@ class Storage:
                 await db.commit()
 
     async def ensure_user_exists(self, user_id: int, username: str = None):
-        """Ensure user exists in database and update username if provided"""
+        """Ensure user exists in database and update username"""
         await self.ensure_initialized()
         async with self._lock:
             try:
                 async with self._db_connect() as db:
-                    # First try to update existing user's username
-                    await db.execute("""
-                        INSERT INTO users (user_id, username) 
-                        VALUES (?, ?)
-                        ON CONFLICT(user_id) DO UPDATE SET 
-                            username = CASE 
-                                WHEN ? IS NOT NULL THEN ?
-                                ELSE users.username
-                            END
-                    """, (user_id, username, username, username))
+                    # Only update username if it's not None
+                    if username:
+                        await db.execute("""
+                            INSERT INTO users (user_id, username) 
+                            VALUES (?, ?)
+                            ON CONFLICT(user_id) DO UPDATE SET 
+                                username = ?,
+                                updated_at = CURRENT_TIMESTAMP
+                        """, (user_id, username, username))
+                    else:
+                        await db.execute("""
+                            INSERT OR IGNORE INTO users (user_id) 
+                            VALUES (?)
+                        """, (user_id,))
                     await db.commit()
             except Exception as e:
                 logging.error(f"Error ensuring user exists: {e}")

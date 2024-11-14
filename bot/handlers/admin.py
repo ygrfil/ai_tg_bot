@@ -91,7 +91,7 @@ async def stats_button(message: Message, state: FSMContext):
                 FROM users u
                 JOIN usage_stats us ON u.user_id = us.user_id
                 WHERE datetime(us.timestamp) > datetime('now', '-30 day')
-                GROUP BY u.user_id
+                GROUP BY u.user_id, u.username
                 ORDER BY total_messages DESC
                 LIMIT 5
             """) as cursor:
@@ -123,10 +123,10 @@ async def stats_button(message: Message, state: FSMContext):
         if top_users:
             response.append("\n<b>Top Users (30 days):</b>")
             for user_id, username, messages, tokens, images, providers in top_users:
-                username_display = f"@{username}" if username else f"ID: {user_id}"
-                providers_list = providers.split(',')
+                display_name = f"@{username}" if username else f"ID: {user_id}"
+                providers_list = providers.split(',') if providers else []
                 response.append(
-                    f"\n👤 {username_display}\n"
+                    f"\n👤 <b>{display_name}</b>\n"
                     f"├ Messages: {messages:,}\n"
                     f"├ Tokens: {tokens:,}\n"
                     f"├ Images: {images:,}\n"

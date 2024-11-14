@@ -34,9 +34,13 @@ def is_user_authorized(user_id: int) -> bool:
     user_id_str = str(user_id)
     return user_id_str == config.admin_id or user_id_str in config.allowed_user_ids
 
-async def get_or_create_settings(user_id: int) -> Optional[dict]:
-    """Get user settings without creating defaults"""
-    await storage.ensure_user_exists(user_id)  # Just ensure user exists in DB
+async def get_or_create_settings(user_id: int, message: Optional[Message] = None) -> Optional[dict]:
+    """Get user settings and update username if message is provided"""
+    if message and message.from_user:
+        await storage.ensure_user_exists(
+            user_id=user_id,
+            username=message.from_user.username
+        )
     return await storage.get_user_settings(user_id)
 
 # Command handlers first
@@ -210,6 +214,12 @@ async def back_button(message: Message, state: FSMContext):
 # Chat handler for normal messages (put this AFTER button handlers)
 @router.message(UserStates.chatting)
 async def handle_message(message: Message, state: FSMContext):
+    user = message.from_user
+    if user and user.username:  # Only save if username exists
+        await storage.ensure_user_exists(
+            user_id=user.id,
+            username=user.username
+        )
     try:
         if not is_user_authorized(message.from_user.id):
             return
