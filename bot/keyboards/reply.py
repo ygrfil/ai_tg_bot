@@ -1,4 +1,4 @@
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.utils.keyboard import ReplyKeyboardBuilder
 from bot.services.ai_providers.providers import PROVIDER_MODELS
 
@@ -13,9 +13,16 @@ def get_main_menu(is_admin: bool = False) -> ReplyKeyboardMarkup:
         KeyboardButton(text="₿")
     )
     if is_admin:
-        admin_button = KeyboardButton(text="👑 Admin Panel")
-        builder.row(admin_button)
-        builder.add(KeyboardButton(text="📊 Stats"), KeyboardButton(text="📢 Broadcast"))
+        builder.row(KeyboardButton(text="👑 Admin"))
+    return builder.as_markup(resize_keyboard=True)
+
+def get_admin_menu() -> ReplyKeyboardMarkup:
+    builder = ReplyKeyboardBuilder()
+    builder.row(
+        KeyboardButton(text="📊 Stats"),
+        KeyboardButton(text="📢 Broadcast")
+    )
+    builder.row(KeyboardButton(text="🔙 Back"))
     return builder.as_markup(resize_keyboard=True)
 
 def get_provider_menu() -> ReplyKeyboardMarkup:
