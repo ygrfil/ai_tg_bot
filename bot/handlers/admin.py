@@ -84,6 +84,7 @@ async def stats_button(message: Message, state: FSMContext):
                 SELECT 
                     u.user_id,
                     u.username,
+                    u.first_name,
                     SUM(us.message_count) as total_messages,
                     SUM(us.token_count) as total_tokens,
                     SUM(us.image_count) as total_images,
@@ -91,7 +92,7 @@ async def stats_button(message: Message, state: FSMContext):
                 FROM users u
                 JOIN usage_stats us ON u.user_id = us.user_id
                 WHERE datetime(us.timestamp) > datetime('now', '-30 day')
-                GROUP BY u.user_id, u.username
+                GROUP BY u.user_id, u.username, u.first_name
                 ORDER BY total_messages DESC
                 LIMIT 5
             """) as cursor:
@@ -122,9 +123,17 @@ async def stats_button(message: Message, state: FSMContext):
         # Add top users
         if top_users:
             response.append("\n<b>Top Users (30 days):</b>")
-            for user_id, username, messages, tokens, images, providers in top_users:
-                display_name = f"@{username}" if username else f"ID: {user_id}"
+            for user_id, username, first_name, messages, tokens, images, providers in top_users:
+                # Create display name with both username and first name
+                display_parts = []
+                if username:
+                    display_parts.append(f"@{username}")
+                if first_name:
+                    display_parts.append(first_name)
+                
+                display_name = " | ".join(display_parts) if display_parts else f"ID: {user_id}"
                 providers_list = providers.split(',') if providers else []
+                
                 response.append(
                     f"\n👤 <b>{display_name}</b>\n"
                     f"├ Messages: {messages:,}\n"

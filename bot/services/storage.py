@@ -177,15 +177,30 @@ class Storage:
             return None
 
     async def ensure_initialized(self):
-        """Initialize database with optimized indices"""
+        """Initialize the database with all required tables"""
         async with self._lock:
             try:
                 async with self._db_connect() as db:
-                    # Create users table
+                    # Check if first_name column exists
+                    async with db.execute("""
+                        SELECT name FROM pragma_table_info('users') 
+                        WHERE name='first_name'
+                    """) as cursor:
+                        has_first_name = await cursor.fetchone() is not None
+
+                    # Add first_name column if it doesn't exist
+                    if not has_first_name:
+                        await db.execute("""
+                            ALTER TABLE users 
+                            ADD COLUMN first_name TEXT
+                        """)
+
+                    # Create or update users table
                     await db.execute("""
                         CREATE TABLE IF NOT EXISTS users (
                             user_id INTEGER PRIMARY KEY,
                             username TEXT,
+                            first_name TEXT,
                             current_provider TEXT,
                             settings TEXT,
                             last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -405,21 +420,21 @@ class Storage:
                 
                 await db.commit()
 
-    async def ensure_user_exists(self, user_id: int, username: str = None):
-        """Ensure user exists in database and update username"""
+    async def ensure_user_exists(self, user_id: int, username: str = None, first_name: str = None):
+        """Ensure user exists in database and update user info"""
         await self.ensure_initialized()
         async with self._lock:
             try:
                 async with self._db_connect() as db:
-                    # Only update username if it's not None
-                    if username:
+                    if username or first_name:
                         await db.execute("""
-                            INSERT INTO users (user_id, username) 
-                            VALUES (?, ?)
+                            INSERT INTO users (user_id, username, first_name) 
+                            VALUES (?, ?, ?)
                             ON CONFLICT(user_id) DO UPDATE SET 
-                                username = ?,
+                                username = COALESCE(?, users.username),
+                                first_name = COALESCE(?, users.first_name),
                                 updated_at = CURRENT_TIMESTAMP
-                        """, (user_id, username, username))
+                        """, (user_id, username, first_name, username, first_name))
                     else:
                         await db.execute("""
                             INSERT OR IGNORE INTO users (user_id) 

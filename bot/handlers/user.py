@@ -215,10 +215,11 @@ async def back_button(message: Message, state: FSMContext):
 @router.message(UserStates.chatting)
 async def handle_message(message: Message, state: FSMContext):
     user = message.from_user
-    if user and user.username:  # Only save if username exists
+    if user:
         await storage.ensure_user_exists(
             user_id=user.id,
-            username=user.username
+            username=user.username,
+            first_name=user.first_name
         )
     try:
         if not is_user_authorized(message.from_user.id):
