@@ -64,10 +64,22 @@ class Storage:
             await self.pool.release(db)
 
     async def get_chat_history(self, user_id: int, limit: int = 10) -> List[Dict[str, Any]]:
-        """Get chat history with caching"""
-        # Don't cache chat history with images at all for reliability
+        """Get chat history with caching including images"""
+        cache_key = f"chat_history:{user_id}:{limit}"
+        cached_result = self.cache.get(cache_key)
+        
+        if cached_result is not None:
+            logging.info(f"[DEBUG] Cache hit for user {user_id}")
+            has_images = any('image' in msg and msg['image'] is not None for msg in cached_result)
+            logging.info(f"[DEBUG] Cached result has images: {has_images}")
+            if has_images:
+                logging.info(f"[DEBUG] Found {sum(1 for msg in cached_result if 'image' in msg)} images in cache")
+            return cached_result
+
         try:
             async with self._db_connect() as db:
+                logging.info(f"[DEBUG] Database query for user {user_id}")
+                
                 async with db.execute("""
                     SELECT content, image_data, is_bot
                     FROM chat_history
@@ -77,17 +89,21 @@ class Storage:
                 """, (user_id, limit * 2)) as cursor:
                     rows = await cursor.fetchall()
                     
-                # Process rows in reverse order to maintain chronological order
                 result = []
                 for row in reversed(rows):
                     message = {
                         "content": row[0],
                         "is_bot": bool(row[2])
                     }
-                    # Only add image if it exists
                     if row[1] is not None:
                         message["image"] = row[1]
+                        logging.info(f"[DEBUG] Found image in database, size: {len(row[1])} bytes")
                     result.append(message)
+                
+                # Only cache if we have data
+                if result:
+                    self.cache.set(cache_key, result, ttl=30)
+                    logging.info(f"[DEBUG] Cached {len(result)} messages")
                 
                 return result
         except Exception as e:
@@ -101,52 +117,44 @@ class Storage:
         is_bot: bool,
         image_data: Optional[bytes] = None
     ) -> None:
-        """Add message to history"""
+        """Add message to history with cache management"""
         try:
             async with self._db_connect() as db:
-                # If adding a message with an image
+                # Debug image data
                 if image_data:
-                    # First, nullify image data in previous messages
+                    logging.info(f"[DEBUG] Received image data, size: {len(image_data)} bytes")
+                    
+                    # Clear previous images
                     await db.execute("""
                         UPDATE chat_history 
                         SET image_data = NULL 
                         WHERE user_id = ? AND image_data IS NOT NULL
                     """, (user_id,))
-                    
-                    # Then insert the new message with image
-                    await db.execute("""
-                        INSERT INTO chat_history (
-                            user_id, content, image_data, is_bot, timestamp
-                        ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-                    """, (user_id, content, image_data, is_bot))
-                else:
-                    # Check for duplicates only for text messages
-                    async with db.execute("""
-                        SELECT id FROM chat_history 
-                        WHERE user_id = ? 
-                        AND content = ? 
-                        AND is_bot = ?
-                        AND timestamp > datetime('now', '-1 minute')
-                        AND image_data IS NULL
-                    """, (user_id, content, is_bot)) as cursor:
-                        if await cursor.fetchone():
-                            return
-
-                    # Insert text-only message
-                    await db.execute("""
-                        INSERT INTO chat_history (
-                            user_id, content, is_bot, timestamp
-                        ) VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-                    """, (user_id, content, is_bot))
-
-                # Update user's last activity
-                await db.execute("""
-                    UPDATE users 
-                    SET last_activity = CURRENT_TIMESTAMP 
-                    WHERE user_id = ?
-                """, (user_id,))
+                    logging.info("[DEBUG] Cleared previous images")
                 
+                # Insert new message
+                await db.execute("""
+                    INSERT INTO chat_history (
+                        user_id, content, image_data, is_bot, timestamp
+                    ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """, (user_id, content, image_data, is_bot))
+                
+                # Verify storage
+                async with db.execute("""
+                    SELECT image_data FROM chat_history 
+                    WHERE user_id = ? 
+                    ORDER BY timestamp DESC 
+                    LIMIT 1
+                """, (user_id,)) as cursor:
+                    row = await cursor.fetchone()
+                    if row and row[0]:
+                        logging.info(f"[DEBUG] Image verified in database, size: {len(row[0])} bytes")
+                    else:
+                        logging.warning("[DEBUG] Image verification failed")
+
                 await db.commit()
+                self.cache.invalidate(f"chat_history:{user_id}*")
+                logging.info("[DEBUG] Cache invalidated")
                 
         except Exception as e:
             logging.error(f"Error adding to chat history: {e}")
