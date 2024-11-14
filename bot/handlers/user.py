@@ -208,12 +208,12 @@ async def back_button(message: Message, state: FSMContext):
 # Chat handler for normal messages (put this AFTER button handlers)
 @router.message(UserStates.chatting)
 async def handle_message(message: Message, state: FSMContext):
-    if not is_user_authorized(message.from_user.id):
-        return
-
-    settings = await storage.get_user_settings(message.from_user.id)
-    
     try:
+        if not is_user_authorized(message.from_user.id):
+            return
+
+        settings = await storage.get_user_settings(message.from_user.id)
+        
         # Ensure user exists in database with username
         username = message.from_user.username
         await storage.ensure_user_exists(message.from_user.id, username)
@@ -225,22 +225,16 @@ async def handle_message(message: Message, state: FSMContext):
             )
             await state.set_state(UserStates.choosing_provider)
             return
-            
+        
         provider_name = settings['current_provider']
         model_config = PROVIDER_MODELS[provider_name]
         
         # Initial typing indicator
         await message.bot.send_chat_action(message.chat.id, "typing")
         
-        # Handle image if present
+        # Process message and image
         image_data = None
-        message_text = ""
-        
-        # Get caption or text message
-        if message.caption:
-            message_text = message.caption
-        elif message.text:
-            message_text = message.text
+        message_text = message.caption if message.caption else message.text
 
         if message.photo:
             photo = message.photo[-1]
@@ -248,32 +242,33 @@ async def handle_message(message: Message, state: FSMContext):
             image_bytes = await message.bot.download_file(image_file.file_path)
             image_data = image_bytes.read()
             
-            # Only use default prompt if no caption provided
             if not message_text:
                 message_text = "Please analyze this image."
 
-        # After processing the image and text, add to history
+        # Get chat history ONCE before adding new message
+        history = await storage.get_chat_history(message.from_user.id)
+        
+        # Add user's message to history
         await storage.add_message(
             user_id=message.from_user.id,
             content=message_text,
             is_bot=False,
-            image_data=image_data  # Add the image data to storage
+            image_data=image_data
         )
         
-        # Get chat history and AI provider
-        history = await storage.get_chat_history(message.from_user.id)
+        # Get AI provider
         ai_provider = get_provider(provider_name, config)
         
-        # Send initial response message
-        bot_response = await message.answer("...")
+        # Initialize response handling
+        collected_response = ""
+        current_message = "..."  # Track current message content
         last_update_time = datetime.now()
         last_typing_time = datetime.now()
-        update_interval = timedelta(milliseconds=300)  # Increased from 200ms to 500ms
-        typing_interval = timedelta(seconds=1)  # Only send typing action every 4 seconds
-        buffer_size = 70  # Increased from 50 to 100 characters
+        update_interval = timedelta(milliseconds=300)
+        typing_interval = timedelta(seconds=1)
         
-        collected_response = ""
-        last_update_length = 0
+        # Send initial response message
+        bot_response = await message.answer(current_message)
         
         # Stream the response
         async for response_chunk in ai_provider.chat_completion_stream(
@@ -282,7 +277,7 @@ async def handle_message(message: Message, state: FSMContext):
             history=history,
             image=image_data
         ):
-            if response_chunk:
+            if response_chunk and response_chunk.strip():
                 collected_response += response_chunk
                 current_time = datetime.now()
                 
@@ -295,43 +290,50 @@ async def handle_message(message: Message, state: FSMContext):
                         logging.warning(f"Typing indicator error (non-critical): {e}")
                 
                 # Update message content with rate limiting
-                if (len(collected_response) - last_update_length >= buffer_size and 
-                    current_time - last_update_time >= update_interval):
+                sanitized_response = sanitize_html_tags(collected_response)
+                if (sanitized_response.strip() != current_message and 
+                    (len(sanitized_response) >= len(current_message) + 70 or 
+                     current_time - last_update_time >= update_interval)):
                     try:
-                        sanitized_response = sanitize_html_tags(collected_response)
-                        await bot_response.edit_text(sanitized_response)
-                        last_update_length = len(collected_response)
+                        await bot_response.edit_text(sanitized_response, parse_mode="HTML")
+                        current_message = sanitized_response
                         last_update_time = current_time
                     except Exception as e:
-                        logging.warning(f"Message update error (non-critical): {e}")
+                        if "message is not modified" not in str(e):
+                            logging.warning(f"Message update error (non-critical): {e}")
                         continue
 
-        # Final update with complete response
-        if collected_response and len(collected_response) > last_update_length:
-            try:
-                sanitized_response = sanitize_html_tags(collected_response)
-                await bot_response.edit_text(sanitized_response)
-                # Save to history
-                await storage.add_message(
-                    user_id=message.from_user.id,
-                    content=sanitized_response,
-                    is_bot=True
-                )
-            except Exception as e:
-                logging.error(f"Error saving final response: {e}")
-                
+        # Ensure final response is saved and displayed
+        if collected_response and collected_response.strip():
+            final_response = sanitize_html_tags(collected_response)
+            if final_response.strip() != current_message:
+                try:
+                    await bot_response.edit_text(final_response, parse_mode="HTML")
+                except Exception as e:
+                    if "message is not modified" not in str(e):
+                        logging.warning(f"Final message update error (non-critical): {e}")
+            
+            # Save to history only once at the end
+            await storage.add_message(
+                user_id=message.from_user.id,
+                content=final_response,
+                is_bot=True
+            )
+
         # Log usage
         await storage.log_usage(
             user_id=message.from_user.id,
             provider=provider_name,
-            tokens=len(collected_response.split()),  # Approximate token count
+            model=model_config['name'],
+            tokens=len(collected_response.split()),
             has_image=bool(image_data)
         )
+
     except Exception as e:
         logging.error(f"Error processing message: {e}")
         await message.answer(
-            f"❌ Error processing your message: {str(e)}\n"
-            "Please try again or choose a different AI model."
+            "❌ Error processing your message. Please try again.",
+            reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
         )
 
 # Unauthorized handler should be last

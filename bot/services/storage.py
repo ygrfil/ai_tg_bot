@@ -36,7 +36,7 @@ class Storage:
         async with self._lock:
             try:
                 async with self._db_connect() as db:
-                    # Create users table with all required columns
+                    # Create users table
                     await db.execute("""
                         CREATE TABLE IF NOT EXISTS users (
                             user_id INTEGER PRIMARY KEY,
@@ -63,25 +63,28 @@ class Storage:
                         )
                     """)
 
-                    # Check and add missing columns for users table
-                    async with db.execute("PRAGMA table_info(users)") as cursor:
-                        columns = await cursor.fetchall()
-                        column_names = [col[1] for col in columns]
-                        
-                        if 'username' not in column_names:
-                            await db.execute("ALTER TABLE users ADD COLUMN username TEXT")
-                        if 'current_provider' not in column_names:
-                            await db.execute("ALTER TABLE users ADD COLUMN current_provider TEXT DEFAULT 'claude'")
-                        if 'current_model' not in column_names:
-                            await db.execute("ALTER TABLE users ADD COLUMN current_model TEXT DEFAULT 'claude-3-sonnet'")
+                    # Create or update usage_stats table
+                    await db.execute("""
+                        CREATE TABLE IF NOT EXISTS usage_stats (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            user_id INTEGER,
+                            provider TEXT NOT NULL,
+                            model TEXT NOT NULL DEFAULT 'unknown',
+                            message_count INTEGER DEFAULT 1,
+                            token_count INTEGER DEFAULT 0,
+                            image_count INTEGER DEFAULT 0,
+                            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            FOREIGN KEY (user_id) REFERENCES users(user_id)
+                        )
+                    """)
 
-                    # Check and add missing columns for chat_history table
-                    async with db.execute("PRAGMA table_info(chat_history)") as cursor:
+                    # Check if model column exists in usage_stats
+                    async with db.execute("PRAGMA table_info(usage_stats)") as cursor:
                         columns = await cursor.fetchall()
                         column_names = [col[1] for col in columns]
                         
-                        if 'image_data' not in column_names:
-                            await db.execute("ALTER TABLE chat_history ADD COLUMN image_data BLOB")
+                        if 'model' not in column_names:
+                            await db.execute("ALTER TABLE usage_stats ADD COLUMN model TEXT NOT NULL DEFAULT 'unknown'")
 
                     await db.commit()
 
@@ -161,30 +164,41 @@ class Storage:
                 logging.error(f"Error adding message: {e}")
                 raise
 
-    async def get_chat_history(self, user_id: int, limit: int = 20) -> List[Dict[str, Any]]:
+    async def get_chat_history(self, user_id: int, limit: int = 10) -> List[Dict[str, Any]]:
         """Get chat history for a user"""
-        await self.ensure_initialized()
         try:
             async with self._db_connect() as db:
+                # Get the last N complete exchanges (pairs of user messages and bot responses)
                 async with db.execute("""
-                    SELECT content, image_data, is_bot, timestamp 
-                    FROM chat_history 
-                    WHERE user_id = ? 
-                    ORDER BY timestamp DESC 
-                    LIMIT ?
-                """, (user_id, limit)) as cursor:
+                    WITH numbered_messages AS (
+                        SELECT 
+                            content,
+                            image_data,
+                            is_bot,
+                            timestamp,
+                            ROW_NUMBER() OVER (ORDER BY timestamp DESC) as row_num
+                        FROM chat_history
+                        WHERE user_id = ?
+                        ORDER BY timestamp DESC
+                        LIMIT ?
+                    )
+                    SELECT content, image_data, is_bot, timestamp
+                    FROM numbered_messages
+                    ORDER BY timestamp ASC
+                """, (user_id, limit * 2)) as cursor:  # Multiply limit by 2 to get pairs
                     rows = await cursor.fetchall()
-                    history = []
-                    for row in rows:
-                        message = {
-                            "content": row[0],
-                            "is_bot": row[2],
-                            "timestamp": row[3]
-                        }
-                        if row[1]:  # image_data
-                            message["image"] = row[1]
-                        history.append(message)
-                    return list(reversed(history))  # Return in chronological order
+                    
+                history = [
+                    {
+                        "content": row[0],
+                        "image": row[1],
+                        "is_bot": bool(row[2]),
+                        "timestamp": row[3]
+                    }
+                    for row in rows
+                ]
+                return history
+                
         except Exception as e:
             logging.error(f"Error getting chat history: {e}")
             return []
@@ -269,19 +283,31 @@ class Storage:
                 logging.error(f"Error ensuring user exists: {e}")
                 raise
 
-    async def log_usage(self, user_id: int, provider: str, tokens: int = 0, has_image: bool = False):
-        """Log usage statistics for a user and provider"""
-        async with self._lock:
-            try:
-                async with self._db_connect() as db:
-                    await db.execute("""
-                        INSERT INTO usage_stats 
-                        (user_id, provider, message_count, token_count, image_count) 
-                        VALUES (?, ?, 1, ?, ?)
-                    """, (user_id, provider, tokens, 1 if has_image else 0))
-                    await db.commit()
-            except Exception as e:
-                logging.error(f"Error logging usage: {e}")
+    async def log_usage(
+        self,
+        user_id: int,
+        provider: str,
+        model: str,
+        tokens: int = 0,
+        has_image: bool = False
+    ) -> None:
+        """Log usage statistics for a user"""
+        try:
+            async with self._db_connect() as db:
+                await db.execute("""
+                    INSERT INTO usage_stats (
+                        user_id,
+                        provider,
+                        model,
+                        message_count,
+                        token_count,
+                        image_count,
+                        timestamp
+                    ) VALUES (?, ?, ?, 1, ?, ?, CURRENT_TIMESTAMP)
+                """, (user_id, provider, model, tokens, 1 if has_image else 0))
+                await db.commit()
+        except Exception as e:
+            logging.error(f"Error logging usage stats: {e}")
 
     async def get_usage_stats(self, period: str = 'month') -> Dict[str, Any]:
         """Get usage statistics for all users"""
@@ -337,3 +363,103 @@ class Storage:
             except Exception as e:
                 logging.error(f"Error getting usage stats: {e}")
                 return {}
+
+    async def add_to_history(
+        self,
+        user_id: int,
+        content: str,
+        is_bot: bool,
+        image_data: Optional[bytes] = None
+    ) -> None:
+        """Add a message to chat history"""
+        try:
+            async with self._db_connect() as db:
+                # Check for potential duplicate message
+                async with db.execute("""
+                    SELECT id FROM chat_history 
+                    WHERE user_id = ? 
+                    AND content = ? 
+                    AND is_bot = ?
+                    AND timestamp > datetime('now', '-1 minute')
+                """, (user_id, content, is_bot)) as cursor:
+                    if await cursor.fetchone():
+                        logging.warning(f"Duplicate message detected for user {user_id}")
+                        return
+
+                # Add new message
+                await db.execute("""
+                    INSERT INTO chat_history (
+                        user_id, content, image_data, is_bot, timestamp
+                    ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """, (user_id, content, image_data, is_bot))
+                
+                # Update user's last activity
+                await db.execute("""
+                    UPDATE users 
+                    SET last_activity = CURRENT_TIMESTAMP 
+                    WHERE user_id = ?
+                """, (user_id,))
+                
+                await db.commit()
+                
+        except Exception as e:
+            logging.error(f"Error adding to chat history: {e}")
+
+    async def get_user(self, user_id: int) -> Dict[str, Any]:
+        """Get user data from the database"""
+        try:
+            async with self._db_connect() as db:
+                async with db.execute("""
+                    SELECT 
+                        user_id,
+                        username,
+                        current_provider,
+                        current_model,
+                        settings,
+                        last_activity
+                    FROM users 
+                    WHERE user_id = ?
+                """, (user_id,)) as cursor:
+                    row = await cursor.fetchone()
+                    
+                    if row:
+                        return {
+                            "user_id": row[0],
+                            "username": row[1],
+                            "current_provider": row[2] or "claude",  # Default to claude if None
+                            "current_model": row[3] or "claude-3-sonnet",  # Default model
+                            "settings": row[4],
+                            "last_activity": row[5]
+                        }
+                    
+                    # If user doesn't exist, create new user with default settings
+                    await db.execute("""
+                        INSERT INTO users (
+                            user_id, 
+                            current_provider,
+                            current_model,
+                            settings
+                        ) VALUES (?, 'claude', 'claude-3-sonnet', '{}')
+                    """, (user_id,))
+                    await db.commit()
+                    
+                    return {
+                        "user_id": user_id,
+                        "username": None,
+                        "current_provider": "claude",
+                        "current_model": "claude-3-sonnet",
+                        "settings": "{}",
+                        "last_activity": None
+                    }
+                    
+        except Exception as e:
+            logging.error(f"Error getting user data: {e}")
+            # Return default values if there's an error
+            return {
+                "user_id": user_id,
+                "username": None,
+                "current_provider": "claude",
+                "current_model": "claude-3-sonnet",
+                "settings": "{}",
+                "last_activity": None
+            }

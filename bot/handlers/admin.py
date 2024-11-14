@@ -8,6 +8,7 @@ from ..keyboards import reply as kb
 from ..handlers.user import UserStates
 import aiosqlite
 import logging
+import traceback
 
 # Create router with name
 router = Router(name='admin_router')
@@ -49,47 +50,49 @@ async def stats_button(message: Message, state: FSMContext):
         
     try:
         async with aiosqlite.connect(storage.db_path) as db:
-            # Step 1: Just get total users
+            # Get total users
             async with db.execute("""
                 SELECT COUNT(*) as total 
                 FROM users
             """) as cursor:
                 total_users = (await cursor.fetchone())[0]
             
-            # Step 2: Get active users (last 24h)
+            # Get active users (last 24h)
             async with db.execute("""
-                SELECT COUNT(DISTINCT chat_history.user_id) as active_users
-                FROM chat_history
-                WHERE chat_history.timestamp > datetime('now', '-1 day')
+                SELECT COUNT(DISTINCT user_id) as active_users
+                FROM users 
+                WHERE datetime(last_activity) > datetime('now', '-1 day')
             """) as cursor:
                 active_users = (await cursor.fetchone())[0]
 
-            # Step 3: Get message counts by provider
+            # Get provider usage stats (30 days)
             async with db.execute("""
                 SELECT 
-                    users.settings->>'current_provider' as provider,
-                    COUNT(DISTINCT chat_history.user_id) as unique_users,
-                    COUNT(*) as total_messages
-                FROM chat_history
-                INNER JOIN users 
-                    ON chat_history.user_id = users.user_id
-                WHERE chat_history.timestamp > datetime('now', '-30 day')
-                GROUP BY users.settings->>'current_provider'
+                    provider,
+                    COUNT(DISTINCT user_id) as unique_users,
+                    SUM(message_count) as total_messages,
+                    SUM(token_count) as total_tokens,
+                    SUM(image_count) as total_images
+                FROM usage_stats 
+                WHERE datetime(timestamp) > datetime('now', '-30 day')
+                GROUP BY provider
             """) as cursor:
                 provider_stats = await cursor.fetchall()
 
-            # Step 4: Get top users
+            # Get top users (30 days)
             async with db.execute("""
                 SELECT 
-                    ch.user_id,
+                    u.user_id,
                     u.username,
-                    COUNT(*) as message_count,
-                    json_extract(u.settings, '$.current_provider') as current_provider
-                FROM chat_history ch
-                INNER JOIN users u ON ch.user_id = u.user_id
-                WHERE ch.timestamp > datetime('now', '-30 day')
-                GROUP BY ch.user_id
-                ORDER BY message_count DESC
+                    SUM(us.message_count) as total_messages,
+                    SUM(us.token_count) as total_tokens,
+                    SUM(us.image_count) as total_images,
+                    GROUP_CONCAT(DISTINCT us.provider) as providers
+                FROM users u
+                JOIN usage_stats us ON u.user_id = us.user_id
+                WHERE datetime(us.timestamp) > datetime('now', '-30 day')
+                GROUP BY u.user_id
+                ORDER BY total_messages DESC
                 LIMIT 5
             """) as cursor:
                 top_users = await cursor.fetchall()
@@ -104,12 +107,14 @@ async def stats_button(message: Message, state: FSMContext):
         # Add provider stats
         if provider_stats:
             response.append("\n<b>Provider Usage (30 days):</b>")
-            for provider, users, messages in provider_stats:
+            for provider, users, messages, tokens, images in provider_stats:
                 provider_name = provider.capitalize() if provider else 'Unknown'
                 response.append(
                     f"\n🤖 <b>{provider_name}</b>\n"
                     f"├ Users: {users}\n"
-                    f"└ Messages: {messages:,}"
+                    f"├ Messages: {messages:,}\n"
+                    f"├ Tokens: {tokens:,}\n"
+                    f"└ Images: {images:,}"
                 )
         else:
             response.append("\n<i>No provider usage data available</i>")
@@ -117,13 +122,15 @@ async def stats_button(message: Message, state: FSMContext):
         # Add top users
         if top_users:
             response.append("\n<b>Top Users (30 days):</b>")
-            for user_id, username, messages, provider in top_users:
-                provider_name = provider.capitalize() if provider else 'N/A'
+            for user_id, username, messages, tokens, images, providers in top_users:
                 username_display = f"@{username}" if username else f"ID: {user_id}"
+                providers_list = providers.split(',')
                 response.append(
                     f"\n👤 {username_display}\n"
                     f"├ Messages: {messages:,}\n"
-                    f"└ Provider: {provider_name}"
+                    f"├ Tokens: {tokens:,}\n"
+                    f"├ Images: {images:,}\n"
+                    f"└ Providers: {', '.join(p.capitalize() for p in providers_list)}"
                 )
 
         await message.answer(
@@ -134,8 +141,6 @@ async def stats_button(message: Message, state: FSMContext):
 
     except Exception as e:
         logging.error(f"Error in stats command: {str(e)}")
-        # Print full error traceback for debugging
-        import traceback
         logging.error(traceback.format_exc())
         await message.answer(
             "❌ Error fetching statistics",
