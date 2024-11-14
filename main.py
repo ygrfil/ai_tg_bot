@@ -44,11 +44,9 @@ async def main():
     # Register middlewares
     dp.message.middleware(ChatActionMiddleware())
     
-    # Register routers with debug print
-    print("[DEBUG] Registering admin router")
-    dp.include_router(admin.router)
-    print("[DEBUG] Registering user router")
-    dp.include_router(user.router)
+    # Register routers
+    dp.include_router(admin.router)  # Admin router first
+    dp.include_router(user.router)   # User router second
     
     # Start polling with debug info
     print("\n[INFO] Bot is starting...")
