@@ -25,6 +25,7 @@ class UserStates(StatesGroup):
     chatting = State()         # Default state for general chat
     choosing_provider = State() # State when user is selecting AI provider
     admin_menu = State()       # State for admin menu
+    broadcasting = State()     # New state for broadcasting messages
 
 # Helper functions
 def is_user_authorized(user_id: int) -> bool:

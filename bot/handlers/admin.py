@@ -1,5 +1,5 @@
 from aiogram import Router, F
-from aiogram.types import Message
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from ..services.storage import Storage
@@ -147,16 +147,94 @@ async def stats_button(message: Message, state: FSMContext):
             reply_markup=kb.get_admin_menu()
         )
 
-@router.message(F.text == "📢 Broadcast", F.from_user.id == config.admin_id)
-async def broadcast_button(message: Message):
+@router.message(F.text == "📢 Broadcast")
+async def broadcast_button(message: Message, state: FSMContext):
     """Handle broadcast button press"""
-    print("[DEBUG] Broadcast button pressed")
+    if str(message.from_user.id) != config.admin_id:
+        return
+        
+    await state.set_state(UserStates.broadcasting)
     await message.answer(
-        "To broadcast a message, use the command:\n"
-        "/broadcast <your message>\n\n"
-        "Example:\n"
-        "/broadcast Hello everyone! This is an important announcement."
+        "📢 <b>Broadcast Mode</b>\n\n"
+        "Send any message (text, photo, video) to broadcast to all users.\n"
+        "Use /cancel to exit broadcast mode.",
+        reply_markup=kb.get_back_menu(),
+        parse_mode="HTML"
     )
+
+@router.message(UserStates.broadcasting)
+async def handle_broadcast(message: Message, state: FSMContext):
+    """Handle messages in broadcast state"""
+    if str(message.from_user.id) != config.admin_id:
+        return
+
+    if message.text == "🔙 Back" or message.text == "/cancel":
+        await state.set_state(UserStates.admin_menu)
+        await message.answer(
+            "Broadcast cancelled.",
+            reply_markup=kb.get_admin_menu()
+        )
+        return
+
+    try:
+        # Get all allowed users
+        allowed_users = set([config.admin_id] + config.allowed_user_ids)
+        success_count = 0
+        fail_count = 0
+
+        # Send status message with inline keyboard
+        status_msg = await message.answer(
+            "📤 Broadcasting message...",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[])
+        )
+
+        for user_id in allowed_users:
+            try:
+                if message.photo:
+                    await message.bot.send_photo(
+                        chat_id=user_id,
+                        photo=message.photo[-1].file_id,
+                        caption=f"📢 <b>Broadcast from Admin:</b>\n\n{message.caption if message.caption else ''}",
+                        parse_mode="HTML"
+                    )
+                elif message.video:
+                    await message.bot.send_video(
+                        chat_id=user_id,
+                        video=message.video.file_id,
+                        caption=f"📢 <b>Broadcast from Admin:</b>\n\n{message.caption if message.caption else ''}",
+                        parse_mode="HTML"
+                    )
+                elif message.text:
+                    await message.bot.send_message(
+                        chat_id=user_id,
+                        text=f"📢 <b>Broadcast from Admin:</b>\n\n{message.text}",
+                        parse_mode="HTML"
+                    )
+                success_count += 1
+            except Exception as e:
+                logging.error(f"Failed to send broadcast to user {user_id}: {str(e)}")
+                fail_count += 1
+
+        # Update status message
+        await status_msg.delete()  # Delete the status message
+        await message.answer(
+            f"✅ Broadcast completed!\n\n"
+            f"📨 Sent successfully: {success_count}\n"
+            f"❌ Failed: {fail_count}",
+            reply_markup=kb.get_admin_menu()
+        )
+        
+        # Return to admin menu state
+        await state.set_state(UserStates.admin_menu)
+
+    except Exception as e:
+        logging.error(f"Broadcast error: {str(e)}")
+        logging.error(traceback.format_exc())  # Add full traceback
+        await message.answer(
+            "❌ Error during broadcast operation.",
+            reply_markup=kb.get_admin_menu()
+        )
+        await state.set_state(UserStates.admin_menu)
 
 @router.message(Command("admin"))
 async def admin_command(message: Message):
