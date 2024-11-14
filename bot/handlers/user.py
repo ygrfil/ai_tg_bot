@@ -214,8 +214,9 @@ async def handle_message(message: Message, state: FSMContext):
     settings = await storage.get_user_settings(message.from_user.id)
     
     try:
-        # Ensure user exists in database
-        await storage.ensure_user_exists(message.from_user.id)
+        # Ensure user exists in database with username
+        username = message.from_user.username
+        await storage.ensure_user_exists(message.from_user.id, username)
         
         if not settings or 'current_provider' not in settings:
             await message.answer(

@@ -81,14 +81,14 @@ async def stats_button(message: Message, state: FSMContext):
             # Step 4: Get top users
             async with db.execute("""
                 SELECT 
-                    chat_history.user_id,
+                    ch.user_id,
+                    u.username,
                     COUNT(*) as message_count,
-                    users.settings->>'current_provider' as current_provider
-                FROM chat_history
-                INNER JOIN users 
-                    ON chat_history.user_id = users.user_id
-                WHERE chat_history.timestamp > datetime('now', '-30 day')
-                GROUP BY chat_history.user_id
+                    json_extract(u.settings, '$.current_provider') as current_provider
+                FROM chat_history ch
+                INNER JOIN users u ON ch.user_id = u.user_id
+                WHERE ch.timestamp > datetime('now', '-30 day')
+                GROUP BY ch.user_id
                 ORDER BY message_count DESC
                 LIMIT 5
             """) as cursor:
@@ -117,10 +117,11 @@ async def stats_button(message: Message, state: FSMContext):
         # Add top users
         if top_users:
             response.append("\n<b>Top Users (30 days):</b>")
-            for user_id, messages, provider in top_users:
+            for user_id, username, messages, provider in top_users:
                 provider_name = provider.capitalize() if provider else 'N/A'
+                username_display = f"@{username}" if username else f"ID: {user_id}"
                 response.append(
-                    f"👤 User ID: {user_id}\n"
+                    f"\n👤 {username_display}\n"
                     f"├ Messages: {messages:,}\n"
                     f"└ Provider: {provider_name}"
                 )

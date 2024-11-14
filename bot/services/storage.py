@@ -5,6 +5,7 @@ import os
 import logging
 import asyncio
 from contextlib import asynccontextmanager
+import json
 
 class Storage:
     def __init__(self, db_path: str = "data/chat.db"):
@@ -31,104 +32,107 @@ class Storage:
                     raise
 
     async def ensure_initialized(self):
-        """Initialize database with all required tables and columns"""
-        if self._initialized:
-            return
-
+        """Initialize database tables if they don't exist"""
         async with self._lock:
             try:
                 async with self._db_connect() as db:
-                    # Create users table with all necessary columns
+                    # Create users table with all required columns
                     await db.execute("""
                         CREATE TABLE IF NOT EXISTS users (
                             user_id INTEGER PRIMARY KEY,
-                            current_provider TEXT DEFAULT 'anthropic',
-                            current_model TEXT DEFAULT 'claude-3-opus',
+                            username TEXT,
+                            current_provider TEXT DEFAULT 'claude',
+                            current_model TEXT DEFAULT 'claude-3-sonnet',
                             settings TEXT,
                             last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                         )
                     """)
-                    
+
                     # Create chat_history table
                     await db.execute("""
                         CREATE TABLE IF NOT EXISTS chat_history (
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            user_id INTEGER NOT NULL,
-                            content TEXT NOT NULL,
-                            is_bot BOOLEAN NOT NULL,
+                            user_id INTEGER,
+                            content TEXT,
                             image_data BLOB,
+                            is_bot BOOLEAN,
                             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                             FOREIGN KEY (user_id) REFERENCES users(user_id)
                         )
                     """)
-                    
-                    # Add usage_stats table
-                    await db.execute("""
-                        CREATE TABLE IF NOT EXISTS usage_stats (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            user_id INTEGER NOT NULL,
-                            provider TEXT NOT NULL,
-                            message_count INTEGER DEFAULT 0,
-                            token_count INTEGER DEFAULT 0,
-                            image_count INTEGER DEFAULT 0,
-                            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                            FOREIGN KEY (user_id) REFERENCES users(user_id)
-                        )
-                    """)
-                    
-                    # Add index for faster queries
-                    await db.execute("""
-                        CREATE INDEX IF NOT EXISTS idx_usage_stats_user_provider 
-                        ON usage_stats(user_id, provider, timestamp)
-                    """)
-                    
+
+                    # Check and add missing columns for users table
+                    async with db.execute("PRAGMA table_info(users)") as cursor:
+                        columns = await cursor.fetchall()
+                        column_names = [col[1] for col in columns]
+                        
+                        if 'username' not in column_names:
+                            await db.execute("ALTER TABLE users ADD COLUMN username TEXT")
+                        if 'current_provider' not in column_names:
+                            await db.execute("ALTER TABLE users ADD COLUMN current_provider TEXT DEFAULT 'claude'")
+                        if 'current_model' not in column_names:
+                            await db.execute("ALTER TABLE users ADD COLUMN current_model TEXT DEFAULT 'claude-3-sonnet'")
+
+                    # Check and add missing columns for chat_history table
+                    async with db.execute("PRAGMA table_info(chat_history)") as cursor:
+                        columns = await cursor.fetchall()
+                        column_names = [col[1] for col in columns]
+                        
+                        if 'image_data' not in column_names:
+                            await db.execute("ALTER TABLE chat_history ADD COLUMN image_data BLOB")
+
                     await db.commit()
-                    self._initialized = True
+
             except Exception as e:
                 logging.error(f"Database initialization error: {e}")
                 raise
 
-    async def get_user_settings(self, user_id: int) -> Optional[Dict[str, Any]]:
-        """Get user settings without defaults"""
+    async def get_user_settings(self, user_id: int) -> Optional[dict]:
+        """Get user settings from database"""
         await self.ensure_initialized()
-        async with self._lock:
-            try:
-                async with self._db_connect() as db:
-                    async with db.execute(
-                        """SELECT current_provider, current_model 
-                           FROM users 
-                           WHERE user_id = ?""",
-                        (user_id,)
-                    ) as cursor:
-                        row = await cursor.fetchone()
-                        if row and row[0] and row[1]:  # Only return if both provider and model are set
-                            return {
-                                "current_provider": row[0],
-                                "current_model": row[1]
-                            }
-                        return None
-            except Exception as e:
-                logging.error(f"Error getting user settings: {e}")
-                return None
+        try:
+            async with self._db_connect() as db:
+                async with db.execute("""
+                    SELECT settings, current_provider, current_model
+                    FROM users 
+                    WHERE user_id = ?
+                """, (user_id,)) as cursor:
+                    row = await cursor.fetchone()
+                    if row:
+                        settings = json.loads(row[0]) if row[0] else {}
+                        # Merge column values with JSON settings
+                        settings.update({
+                            'current_provider': row[1] or 'claude',
+                            'current_model': row[2] or 'claude-3-sonnet'
+                        })
+                        return settings
+                    return None
+        except Exception as e:
+            logging.error(f"Error getting user settings: {e}")
+            return None
 
-    async def save_user_settings(self, user_id: int, settings: Dict[str, Any]):
+    async def save_user_settings(self, user_id: int, settings: dict):
+        """Save user settings to database"""
         await self.ensure_initialized()
         async with self._lock:
             try:
                 async with self._db_connect() as db:
-                    await db.execute(
-                        """INSERT INTO users (user_id, current_provider, current_model, last_activity) 
-                           VALUES (?, ?, ?, datetime('now')) 
-                           ON CONFLICT(user_id) DO UPDATE 
-                           SET current_provider = ?, 
-                               current_model = ?, 
-                               last_activity = datetime('now'),
-                               updated_at = datetime('now')""",
-                        (user_id, settings["current_provider"], settings["current_model"],
-                         settings["current_provider"], settings["current_model"])
-                    )
+                    # Update both settings JSON and individual columns
+                    await db.execute("""
+                        UPDATE users 
+                        SET settings = ?,
+                            current_provider = ?,
+                            current_model = ?,
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE user_id = ?
+                    """, (
+                        json.dumps(settings),
+                        settings.get('current_provider'),
+                        settings.get('current_model'),
+                        user_id
+                    ))
                     await db.commit()
             except Exception as e:
                 logging.error(f"Error saving user settings: {e}")
@@ -158,33 +162,32 @@ class Storage:
                 raise
 
     async def get_chat_history(self, user_id: int, limit: int = 20) -> List[Dict[str, Any]]:
+        """Get chat history for a user"""
         await self.ensure_initialized()
-        async with self._lock:
-            try:
-                async with self._db_connect() as db:
-                    async with db.execute("""
-                        SELECT content, is_bot, image_data, timestamp
-                        FROM chat_history
-                        WHERE user_id = ?
-                        ORDER BY timestamp DESC
-                        LIMIT ?
-                    """, (user_id, limit)) as cursor:
-                        rows = await cursor.fetchall()
-                    
+        try:
+            async with self._db_connect() as db:
+                async with db.execute("""
+                    SELECT content, image_data, is_bot, timestamp 
+                    FROM chat_history 
+                    WHERE user_id = ? 
+                    ORDER BY timestamp DESC 
+                    LIMIT ?
+                """, (user_id, limit)) as cursor:
+                    rows = await cursor.fetchall()
                     history = []
-                    for row in reversed(rows):  # Maintain chronological order
-                        entry = {
+                    for row in rows:
+                        message = {
                             "content": row[0],
-                            "is_bot": row[1],
-                            "image": row[2],  # Include image data directly
+                            "is_bot": row[2],
                             "timestamp": row[3]
                         }
-                        history.append(entry)
-                    
-                    return history
-            except Exception as e:
-                logging.error(f"Error getting chat history: {e}")
-                return []
+                        if row[1]:  # image_data
+                            message["image"] = row[1]
+                        history.append(message)
+                    return list(reversed(history))  # Return in chronological order
+        except Exception as e:
+            logging.error(f"Error getting chat history: {e}")
+            return []
 
     async def clear_user_history(self, user_id: int):
         await self.ensure_initialized()
@@ -245,18 +248,22 @@ class Storage:
                 
                 await db.commit()
 
-    async def ensure_user_exists(self, user_id: int):
-        """Ensure user exists in database without any defaults"""
+    async def ensure_user_exists(self, user_id: int, username: str = None):
+        """Ensure user exists in database and update username if provided"""
         await self.ensure_initialized()
         async with self._lock:
             try:
                 async with self._db_connect() as db:
-                    await db.execute(
-                        """INSERT OR IGNORE INTO users 
-                           (user_id) 
-                           VALUES (?)""",
-                        (user_id,)
-                    )
+                    # First try to update existing user's username
+                    await db.execute("""
+                        INSERT INTO users (user_id, username) 
+                        VALUES (?, ?)
+                        ON CONFLICT(user_id) DO UPDATE SET 
+                            username = CASE 
+                                WHEN ? IS NOT NULL THEN ?
+                                ELSE users.username
+                            END
+                    """, (user_id, username, username, username))
                     await db.commit()
             except Exception as e:
                 logging.error(f"Error ensuring user exists: {e}")
