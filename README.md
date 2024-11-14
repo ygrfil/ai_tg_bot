@@ -5,8 +5,8 @@ A powerful and flexible Telegram bot that integrates multiple AI providers (Open
 ## ✨ Features
 
 - 🔄 **Multiple AI Providers Support**
-  - OpenAI (GPT-4 Vision)
-  - Claude 3 Sonnet
+  - OpenAI (GPT-4o)
+  - Claude 3.5 Sonnet
   - Groq (Llama 3.2)
   - Perplexity (Llama 3.1)
 
