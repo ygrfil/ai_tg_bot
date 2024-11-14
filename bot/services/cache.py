@@ -18,11 +18,8 @@ class CacheManager:
                     total_size += content_size
                     
                     if 'image' in item and item['image'] is not None:
-                        image_size = len(item['image'])
-                        total_size += image_size
-                        logging.info(f"[DEBUG] Image size in cache estimation: {image_size} bytes")
+                        total_size += len(item['image'])
                     
-                logging.info(f"[DEBUG] Total estimated size: {total_size} bytes")
                 return total_size
             return len(str(value).encode('utf-8'))
         except Exception as e:
@@ -50,18 +47,14 @@ class CacheManager:
     def set(self, key: str, value: Any, ttl: Optional[int] = None):
         try:
             size = self._estimate_size(value)
-            logging.info(f"Setting cache for key {key}, size: {size} bytes")
             
             if size > self.max_size_bytes:
-                logging.warning(f"Entry too large to cache: {size} bytes")
                 return
             
             if self.current_size + size > self.max_size_bytes:
-                logging.info("Cleaning up cache to make space")
                 self._cleanup_old_entries(size)
             
             if self.current_size + size > self.max_size_bytes:
-                logging.warning("Not enough space in cache after cleanup")
                 return
             
             if key in self.cache:
@@ -70,7 +63,6 @@ class CacheManager:
             
             self.cache[key] = (value, time.time(), size)
             self.current_size += size
-            logging.info(f"Successfully cached entry, current cache size: {self.current_size} bytes")
             
         except Exception as e:
             logging.error(f"Error setting cache: {e}")

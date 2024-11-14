@@ -69,17 +69,10 @@ class Storage:
         cached_result = self.cache.get(cache_key)
         
         if cached_result is not None:
-            logging.info(f"[DEBUG] Cache hit for user {user_id}")
-            has_images = any('image' in msg and msg['image'] is not None for msg in cached_result)
-            logging.info(f"[DEBUG] Cached result has images: {has_images}")
-            if has_images:
-                logging.info(f"[DEBUG] Found {sum(1 for msg in cached_result if 'image' in msg)} images in cache")
             return cached_result
 
         try:
             async with self._db_connect() as db:
-                logging.info(f"[DEBUG] Database query for user {user_id}")
-                
                 async with db.execute("""
                     SELECT content, image_data, is_bot
                     FROM chat_history
@@ -97,13 +90,10 @@ class Storage:
                     }
                     if row[1] is not None:
                         message["image"] = row[1]
-                        logging.info(f"[DEBUG] Found image in database, size: {len(row[1])} bytes")
                     result.append(message)
                 
-                # Only cache if we have data
                 if result:
                     self.cache.set(cache_key, result, ttl=30)
-                    logging.info(f"[DEBUG] Cached {len(result)} messages")
                 
                 return result
         except Exception as e:
@@ -120,41 +110,21 @@ class Storage:
         """Add message to history with cache management"""
         try:
             async with self._db_connect() as db:
-                # Debug image data
                 if image_data:
-                    logging.info(f"[DEBUG] Received image data, size: {len(image_data)} bytes")
-                    
-                    # Clear previous images
                     await db.execute("""
                         UPDATE chat_history 
                         SET image_data = NULL 
                         WHERE user_id = ? AND image_data IS NOT NULL
                     """, (user_id,))
-                    logging.info("[DEBUG] Cleared previous images")
                 
-                # Insert new message
                 await db.execute("""
                     INSERT INTO chat_history (
                         user_id, content, image_data, is_bot, timestamp
                     ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
                 """, (user_id, content, image_data, is_bot))
-                
-                # Verify storage
-                async with db.execute("""
-                    SELECT image_data FROM chat_history 
-                    WHERE user_id = ? 
-                    ORDER BY timestamp DESC 
-                    LIMIT 1
-                """, (user_id,)) as cursor:
-                    row = await cursor.fetchone()
-                    if row and row[0]:
-                        logging.info(f"[DEBUG] Image verified in database, size: {len(row[0])} bytes")
-                    else:
-                        logging.warning("[DEBUG] Image verification failed")
 
                 await db.commit()
                 self.cache.invalidate(f"chat_history:{user_id}*")
-                logging.info("[DEBUG] Cache invalidated")
                 
         except Exception as e:
             logging.error(f"Error adding to chat history: {e}")
