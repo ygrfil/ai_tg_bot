@@ -20,28 +20,29 @@ class GroqProvider(BaseAIProvider):
         try:
             messages = []
             
-            # Don't add system prompt when using vision
-            if not image:
+            # Don't add system prompt for vision models when image is present
+            if not image and not any(msg.get("image") for msg in (history or [])):
                 system_prompt = get_system_prompt(model_config['name'])
                 if system_prompt:
                     messages.append({"role": "system", "content": system_prompt})
 
-            # Process history (excluding images from history when new image is present)
+            # Process history - only include text messages if current request has image
             if history:
                 for msg in history:
+                    # Skip messages with images if we have a new image
+                    if image and msg.get("image"):
+                        continue
+                        
                     if msg.get("is_bot"):
                         messages.append({
                             "role": "assistant",
                             "content": msg["content"]
                         })
                     else:
-                        content = msg["content"]
-                        # Skip images from history if we have a new image
-                        if not image or not msg.get("image"):
-                            messages.append({
-                                "role": "user",
-                                "content": content
-                            })
+                        messages.append({
+                            "role": "user",
+                            "content": msg["content"]
+                        })
 
             # Add current message with image if present
             if image and model_config.get('vision'):
@@ -65,17 +66,15 @@ class GroqProvider(BaseAIProvider):
                     "content": message
                 })
 
-            # Create completion with exact parameters from documentation
+            # Create completion with specific parameters for Groq
             response = await self.client.chat.completions.create(
                 model=model_config['name'],
                 messages=messages,
                 temperature=0.7,
-                max_tokens=1024,
-                top_p=1,
+                max_tokens=self._get_max_tokens(model_config),
                 stream=True
             )
-
-            # Handle streaming response correctly
+            
             async for chunk in response:
                 if hasattr(chunk.choices[0].delta, 'content'):
                     if chunk.choices[0].delta.content:
