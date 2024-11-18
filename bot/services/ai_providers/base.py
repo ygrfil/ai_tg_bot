@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Optional, List, Dict, Any, AsyncGenerator
 import base64
 from bot.config import Config
+import re
 
 class BaseAIProvider(ABC):
     """Base class for AI providers implementing common interface."""
@@ -31,11 +32,19 @@ class BaseAIProvider(ABC):
             "content": self.system_prompt
         })
         
+        # Track conversation context
+        last_numbers = []
+        current_context = []
+        
         # Process history in chronological order
         if history:
-            current_context = []
             for msg in history:
                 if msg.get("is_bot"):
+                    # Extract numbers from bot responses
+                    numbers = [int(n) for n in re.findall(r'\b\d+\b', msg["content"])]
+                    if numbers:
+                        last_numbers = numbers
+                    
                     current_context.append({
                         "role": "assistant",
                         "content": msg["content"]
@@ -43,6 +52,10 @@ class BaseAIProvider(ABC):
                 else:
                     content = msg["content"]
                     image_data = msg.get("image")
+                    
+                    # Add context about previous numbers if relevant
+                    if last_numbers and any(word in content.lower() for word in ['add', 'plus', 'sum', 'next', 'last']):
+                        content = f"Previous number was {last_numbers[-1]}. User request: {content}"
                     
                     if image_data and self._supports_vision(model_config):
                         base64_image = base64.b64encode(image_data).decode('utf-8')
@@ -52,6 +65,7 @@ class BaseAIProvider(ABC):
                             "role": "user",
                             "content": content
                         })
+            
             formatted_messages.extend(current_context)
         
         return formatted_messages
@@ -61,7 +75,7 @@ class BaseAIProvider(ABC):
         return model_config.get('vision', False)
 
     def _format_image_message(self, text: str, base64_image: str) -> Dict[str, Any]:
-        """Default image message format - override in providers if needed."""
+        """Format image message based on provider requirements."""
         return {
             "role": "user",
             "content": [
@@ -73,14 +87,6 @@ class BaseAIProvider(ABC):
         }
 
     def _get_max_tokens(self, model_config: Dict[str, Any]) -> int:
-        """Get max tokens with priority:
-        1. Model-specific config
-        2. Global config
-        3. Default fallback
-        """
-        return (
-            model_config.get('max_tokens') or 
-            self.config.max_tokens or 
-            1024  # Default fallback
-        )
+        """Get max tokens for the model."""
+        return model_config.get('max_tokens', 4000)
 
