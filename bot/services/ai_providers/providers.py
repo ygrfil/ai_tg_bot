@@ -1,6 +1,6 @@
 PROVIDER_MODELS = {
     "openai": {
-        "name": "gpt-4o",
+        "name": "chatgpt-4o-latest",
         "vision": True
     },
     "groq": {

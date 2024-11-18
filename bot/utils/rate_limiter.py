@@ -6,9 +6,9 @@ from aiogram.types import Message
 
 class MessageRateLimiter:
     def __init__(self, 
-                 update_interval: int = 1,
-                 typing_interval: int = 2,
-                 min_chunk_size: int = 90):
+                 update_interval: int = 0.35,
+                 typing_interval: int = 1,
+                 min_chunk_size: int = 70):
         self.update_interval = timedelta(seconds=update_interval)
         self.typing_interval = timedelta(seconds=typing_interval)
         self.min_chunk_size = min_chunk_size
