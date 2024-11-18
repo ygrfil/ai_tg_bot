@@ -73,22 +73,42 @@ class Storage:
 
         try:
             async with self._db_connect() as db:
+                # First get the total count of messages
                 async with db.execute("""
-                    SELECT content, image_data, is_bot
-                    FROM chat_history
-                    WHERE user_id = ?
-                    ORDER BY timestamp DESC
-                    LIMIT ?
-                """, (user_id, limit * 2)) as cursor:
+                    SELECT COUNT(*) FROM chat_history WHERE user_id = ?
+                """, (user_id,)) as cursor:
+                    total_messages = (await cursor.fetchone())[0]
+                
+                # Calculate the offset to get the last 'limit' messages in chronological order
+                offset = max(0, total_messages - limit)
+                
+                # Get messages in chronological order with proper offset
+                async with db.execute("""
+                    WITH ordered_history AS (
+                        SELECT 
+                            content, 
+                            image_data, 
+                            is_bot, 
+                            timestamp,
+                            ROW_NUMBER() OVER (ORDER BY timestamp) as row_num
+                        FROM chat_history
+                        WHERE user_id = ?
+                    )
+                    SELECT content, image_data, is_bot, timestamp
+                    FROM ordered_history
+                    WHERE row_num > ?
+                    ORDER BY timestamp ASC
+                """, (user_id, offset)) as cursor:
                     rows = await cursor.fetchall()
                     
                 result = []
-                for row in reversed(rows):
+                for row in rows:
                     message = {
                         "content": row[0],
-                        "is_bot": bool(row[2])
+                        "is_bot": bool(row[2]),
+                        "timestamp": row[3]
                     }
-                    if row[1] is not None:
+                    if row[1] is not None:  # image_data
                         message["image"] = row[1]
                     result.append(message)
                 
@@ -96,6 +116,7 @@ class Storage:
                     self.cache.set(cache_key, result, ttl=30)
                 
                 return result
+                
         except Exception as e:
             logging.error(f"Error getting chat history: {e}")
             return []

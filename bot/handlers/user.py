@@ -21,6 +21,7 @@ from bot.utils.rate_limiter import MessageRateLimiter
 router = Router()
 storage = Storage("data/chat.db")
 config = Config.from_env()
+rate_limiter = MessageRateLimiter()
 
 class UserStates(StatesGroup):
     """States for user interaction with the bot."""
@@ -244,9 +245,6 @@ async def handle_message(message: Message, state: FSMContext):
         provider_name = settings['current_provider']
         model_config = PROVIDER_MODELS[provider_name]
         
-        # Initial typing indicator
-        await message.bot.send_chat_action(message.chat.id, "typing")
-        
         # Process message and image
         image_data = None
         message_text = message.caption if message.caption else message.text
@@ -260,24 +258,16 @@ async def handle_message(message: Message, state: FSMContext):
             if not message_text:
                 message_text = "Please analyze this image."
 
-        # Get chat history ONCE before adding new message
-        history = await storage.get_chat_history(message.from_user.id)
-        
-        # Add user's message to history
-        await storage.add_message(
-            user_id=message.from_user.id,
-            content=message_text,
-            is_bot=False,
-            image_data=image_data
-        )
-        
-        # Get AI provider
+        # Add user's message to history list before sending to AI
+        history.append({
+            "content": message_text,
+            "is_bot": False,
+            "image": image_data
+        })
+
+        # Get AI provider and prepare response
         ai_provider = get_provider(provider_name, config)
-        
-        # Initialize rate limiter
-        rate_limiter = MessageRateLimiter()
-        
-        # Send initial response message with placeholder
+        await message.bot.send_chat_action(message.chat.id, "typing")
         bot_response = await message.answer("Processing...")
         
         # Stream the response
@@ -285,33 +275,34 @@ async def handle_message(message: Message, state: FSMContext):
         async for response_chunk in ai_provider.chat_completion_stream(
             message=message_text,
             model_config=model_config,
-            history=history,
+            history=history[:-1],  # Send previous history without current message
             image=image_data
         ):
             if response_chunk and response_chunk.strip():
                 collected_response += response_chunk
-                
-                # Handle typing indicator
                 await rate_limiter.handle_typing(message)
                 
-                # Update message content with rate limiting
                 sanitized_response = sanitize_html_tags(collected_response)
                 if await rate_limiter.should_update_message(sanitized_response):
                     try:
                         await bot_response.edit_text(sanitized_response, parse_mode="HTML")
-                        await asyncio.sleep(0.5)  # Small delay between updates
+                        await asyncio.sleep(0.5)
                     except Exception as e:
-                        if "message is not modified" not in str(e).lower() and "flood control" not in str(e).lower():
-                            logging.warning(f"Message update error (non-critical): {e}")
+                        if "message is not modified" not in str(e).lower():
+                            logging.warning(f"Message update error: {e}")
                         continue
 
-        # Handle final message update
+        # Save both user message and AI response to storage after completion
+        await storage.add_to_history(message.from_user.id, message_text, False, image_data)
+        if collected_response:
+            await storage.add_to_history(message.from_user.id, collected_response, True)
+
+        # Handle final message update and logging
         if collected_response and collected_response.strip():
             final_response = sanitize_html_tags(collected_response)
             if final_response.strip() != rate_limiter.current_message:
                 await MessageRateLimiter.retry_final_update(bot_response, final_response)
 
-        # Log usage
         await storage.log_usage(
             user_id=message.from_user.id,
             provider=provider_name,
@@ -322,14 +313,7 @@ async def handle_message(message: Message, state: FSMContext):
 
     except Exception as e:
         logging.error(f"Error in handle_message: {str(e)}")
-        if str(e) == "None":  # Specific check for None provider
-            await message.answer(
-                "🤖 Please select an AI Model first:",
-                reply_markup=kb.get_provider_menu()
-            )
-            await state.set_state(UserStates.choosing_provider)
-        else:
-            await message.answer("❌ An error occurred. Please try again later.")
+        await message.answer("❌ An error occurred. Please try again later.")
 
 # Unauthorized handler should be last
 @router.message()
