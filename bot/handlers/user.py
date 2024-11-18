@@ -16,6 +16,7 @@ from bot.services.ai_providers import get_provider
 from bot.config import Config
 from bot.utils.message_sanitizer import sanitize_html_tags
 from bot.services.ai_providers.providers import PROVIDER_MODELS
+from bot.utils.rate_limiter import MessageRateLimiter
 
 router = Router()
 storage = Storage("data/chat.db")
@@ -273,18 +274,14 @@ async def handle_message(message: Message, state: FSMContext):
         # Get AI provider
         ai_provider = get_provider(provider_name, config)
         
-        # Initialize response handling
-        collected_response = ""
-        current_message = None  # Track current message content
-        last_update_time = datetime.now()
-        last_typing_time = datetime.now()
-        update_interval = timedelta(milliseconds=300)
-        typing_interval = timedelta(seconds=1)
+        # Initialize rate limiter
+        rate_limiter = MessageRateLimiter()
         
         # Send initial response message with placeholder
         bot_response = await message.answer("Processing...")
         
         # Stream the response
+        collected_response = ""
         async for response_chunk in ai_provider.chat_completion_stream(
             message=message_text,
             model_config=model_config,
@@ -293,47 +290,26 @@ async def handle_message(message: Message, state: FSMContext):
         ):
             if response_chunk and response_chunk.strip():
                 collected_response += response_chunk
-                current_time = datetime.now()
                 
-                # Update typing status with rate limiting
-                if current_time - last_typing_time >= typing_interval:
-                    try:
-                        await message.bot.send_chat_action(message.chat.id, "typing")
-                        last_typing_time = current_time
-                    except Exception as e:
-                        logging.warning(f"Typing indicator error (non-critical): {e}")
+                # Handle typing indicator
+                await rate_limiter.handle_typing(message)
                 
                 # Update message content with rate limiting
                 sanitized_response = sanitize_html_tags(collected_response)
-                if (sanitized_response.strip() and  # Ensure we have non-empty content
-                    (current_message is None or
-                     len(sanitized_response) >= len(current_message) + 70 or 
-                     current_time - last_update_time >= update_interval)):
+                if await rate_limiter.should_update_message(sanitized_response):
                     try:
                         await bot_response.edit_text(sanitized_response, parse_mode="HTML")
-                        current_message = sanitized_response
-                        last_update_time = current_time
+                        await asyncio.sleep(0.5)  # Small delay between updates
                     except Exception as e:
-                        if "message is not modified" not in str(e):
+                        if "message is not modified" not in str(e).lower() and "flood control" not in str(e).lower():
                             logging.warning(f"Message update error (non-critical): {e}")
                         continue
 
-        # Ensure final response is saved and displayed
+        # Handle final message update
         if collected_response and collected_response.strip():
             final_response = sanitize_html_tags(collected_response)
-            if final_response.strip() != current_message:
-                try:
-                    await bot_response.edit_text(final_response, parse_mode="HTML")
-                except Exception as e:
-                    if "message is not modified" not in str(e):
-                        logging.warning(f"Final message update error (non-critical): {e}")
-            
-            # Save to history only once at the end
-            await storage.add_message(
-                user_id=message.from_user.id,
-                content=final_response,
-                is_bot=True
-            )
+            if final_response.strip() != rate_limiter.current_message:
+                await MessageRateLimiter.retry_final_update(bot_response, final_response)
 
         # Log usage
         await storage.log_usage(
