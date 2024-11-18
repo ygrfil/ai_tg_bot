@@ -8,8 +8,3 @@ services:
       - .env
     restart: unless-stopped
     user: "1000:1000"
-    # healthcheck:
-    #   test: ["CMD", "ps", "aux", "|", "grep", "python"]
-    #   interval: 30s
-    #   timeout: 10s
-    #   retries: 3 
