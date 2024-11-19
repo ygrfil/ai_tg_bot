@@ -280,8 +280,7 @@ async def handle_message(message: Message, state: FSMContext):
         ):
             if response_chunk and response_chunk.strip():
                 collected_response += response_chunk
-                await rate_limiter.handle_typing(message)
-                
+                logging.debug(f"Received chunk: {response_chunk}")
                 sanitized_response = sanitize_html_tags(collected_response)
                 if await rate_limiter.should_update_message(sanitized_response):
                     try:
@@ -311,8 +310,11 @@ async def handle_message(message: Message, state: FSMContext):
             has_image=bool(image_data)
         )
 
+        # After streaming completes
+        rate_limiter.current_message = None  # Reset the rate limiter
+
     except Exception as e:
-        logging.error(f"Error in handle_message: {str(e)}")
+        logging.error(f"Error in handle_message: {e}")
         await message.answer("❌ An error occurred. Please try again later.")
 
 # Unauthorized handler should be last

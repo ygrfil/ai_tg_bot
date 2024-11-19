@@ -3,6 +3,8 @@ from typing import Optional, List, Dict, Any, AsyncGenerator
 import base64
 from bot.config import Config
 import re
+import logging
+from openai import AsyncOpenAI
 
 class BaseAIProvider(ABC):
     """Base class for AI providers implementing common interface."""
@@ -32,20 +34,11 @@ class BaseAIProvider(ABC):
             "content": self.system_prompt
         })
         
-        # Track conversation context
-        last_numbers = []
-        current_context = []
-        
         # Process history in chronological order
         if history:
             for msg in history:
                 if msg.get("is_bot"):
-                    # Extract numbers from bot responses
-                    numbers = [int(n) for n in re.findall(r'\b\d+\b', msg["content"])]
-                    if numbers:
-                        last_numbers = numbers
-                    
-                    current_context.append({
+                    formatted_messages.append({
                         "role": "assistant",
                         "content": msg["content"]
                     })
@@ -53,20 +46,33 @@ class BaseAIProvider(ABC):
                     content = msg["content"]
                     image_data = msg.get("image")
                     
-                    # Add context about previous numbers if relevant
-                    if last_numbers and any(word in content.lower() for word in ['add', 'plus', 'sum', 'next', 'last']):
-                        content = f"Previous number was {last_numbers[-1]}. User request: {content}"
-                    
                     if image_data and self._supports_vision(model_config):
                         base64_image = base64.b64encode(image_data).decode('utf-8')
-                        current_context.append(self._format_image_message(content, base64_image))
+                        # Depending on provider, format messages appropriately
+                        if model_config['name'].startswith("golq"):
+                            # Groq-specific formatting
+                            formatted_content = [
+                                {"type": "text", "text": content},
+                                {"type": "image_url", "image_url": {
+                                    "url": f"data:image/jpeg;base64,{base64_image}"
+                                }}
+                            ]
+                        else:
+                            # Default formatting
+                            formatted_content = [
+                                {"type": "text", "text": content},
+                                {"type": "image_url", "image_url": f"data:image/jpeg;base64,{base64_image}"}
+                            ]
+                        
+                        formatted_messages.append({
+                            "role": "user",
+                            "content": formatted_content
+                        })
                     else:
-                        current_context.append({
+                        formatted_messages.append({
                             "role": "user",
                             "content": content
                         })
-            
-            formatted_messages.extend(current_context)
         
         return formatted_messages
 
