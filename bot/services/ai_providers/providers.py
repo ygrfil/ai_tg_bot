@@ -4,7 +4,7 @@ PROVIDER_MODELS = {
         "vision": True
     },
     "groq": {
-        "name": "llama-3.2-90b-vision-preview",
+        "name": "llama-3.2-11b-vision-preview",
         "vision": True
     },
     "claude": {
