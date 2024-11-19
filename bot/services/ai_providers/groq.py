@@ -4,6 +4,8 @@ import base64
 from .base import BaseAIProvider
 from ...config.settings import Config
 from ...config.prompts import get_system_prompt
+import logging
+from openai import AsyncOpenAI
 
 class GroqProvider(BaseAIProvider):
     def __init__(self, api_key: str, config: Config = None):
@@ -17,6 +19,7 @@ class GroqProvider(BaseAIProvider):
         history: Optional[List[Dict[str, Any]]] = None,
         image: Optional[bytes] = None
     ) -> AsyncGenerator[str, None]:
+        logging.info("GroqProvider: Starting chat_completion_stream")
         try:
             messages = []
             
@@ -80,11 +83,7 @@ class GroqProvider(BaseAIProvider):
                     if chunk.choices[0].delta.content:
                         yield chunk.choices[0].delta.content
                     
+            logging.info("GroqProvider: Completed chat_completion_stream")
         except Exception as e:
-            error_msg = str(e)
-            if "413" in error_msg:
-                raise Exception("Image size exceeds Groq's 4MB limit")
-            elif "400" in error_msg:
-                raise Exception("Invalid request format or multiple images detected")
-            else:
-                raise Exception(f"Groq error: {error_msg}")
+            logging.error(f"GroqProvider Error: {e}")
+            raise
