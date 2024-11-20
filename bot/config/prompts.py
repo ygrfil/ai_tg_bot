@@ -33,12 +33,13 @@ Enhance your emotional expression with emojis:
 ...and other emojis as needed
 Remember to maintain a balance - use formatting and emojis to enhance readability and engagement, not to overwhelm."""
 
+SIMPLE_SYSTEM_PROMPT = """Please use ACTIVELY latest version of Telegram supported HTML formatting with appropriate emojis"""
 # Model-specific system prompts (optional overrides)
 MODEL_SPECIFIC_PROMPTS: Dict[str, str] = {
-    "gpt-4o": DEFAULT_SYSTEM_PROMPT,
+    "chatgpt-4o-latest": DEFAULT_SYSTEM_PROMPT,
     "llama-3.2-90b-vision-preview": DEFAULT_SYSTEM_PROMPT,
     "claude-3-5-sonnet-20241022": DEFAULT_SYSTEM_PROMPT,
-    "llama-3.1-sonar-huge-128k-online": DEFAULT_SYSTEM_PROMPT
+    "llama-3.1-sonar-huge-128k-online": SIMPLE_SYSTEM_PROMPT
 }
 
 def get_system_prompt(model_name: str) -> str:

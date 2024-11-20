@@ -3,6 +3,7 @@ from openai import AsyncOpenAI
 from .base import BaseAIProvider
 from ...config.prompts import get_system_prompt
 from ...config.settings import Config
+import logging
 
 class PerplexityProvider(BaseAIProvider):
     def __init__(self, api_key: str, config: Config = None):
@@ -19,28 +20,14 @@ class PerplexityProvider(BaseAIProvider):
         history: Optional[List[Dict[str, Any]]] = None,
         image: Optional[bytes] = None
     ) -> AsyncGenerator[str, None]:
-        formatted_messages = []
-        
-        system_prompt = get_system_prompt(model_config['name'])
-        if system_prompt:
-            formatted_messages.append({
-                "role": "system",
-                "content": system_prompt
-            })
-            
-        if history:
-            for msg in history:
-                formatted_messages.append({
-                    "role": "user" if not msg.get("is_bot") else "assistant",
-                    "content": msg["content"]
-                })
-
-        formatted_messages.append({
-            "role": "user",
-            "content": message
-        })
-
         try:
+            formatted_messages = self._format_history(history or [], model_config)
+            
+            formatted_messages.append({
+                "role": "user",
+                "content": message
+            })
+
             stream = await self.client.chat.completions.create(
                 model=model_config['name'],
                 messages=formatted_messages,
@@ -54,4 +41,5 @@ class PerplexityProvider(BaseAIProvider):
                     yield chunk.choices[0].delta.content
                     
         except Exception as e:
+            logging.error(f"Perplexity error: {str(e)}")
             raise Exception(f"Perplexity error: {str(e)}")
