@@ -29,26 +29,11 @@ class PerplexityProvider(BaseAIProvider):
             })
             
         if history:
-            current_role = "user"
             for msg in history:
-                if msg.get("is_bot") and current_role == "assistant":
-                    formatted_messages.append({
-                        "role": "assistant",
-                        "content": msg["content"]
-                    })
-                    current_role = "user"
-                elif not msg.get("is_bot") and current_role == "user":
-                    formatted_messages.append({
-                        "role": "user",
-                        "content": msg["content"]
-                    })
-                    current_role = "assistant"
-
-        if formatted_messages and formatted_messages[-1]["role"] == "user":
-            formatted_messages.append({
-                "role": "assistant",
-                "content": "I understand."
-            })
+                formatted_messages.append({
+                    "role": "user" if not msg.get("is_bot") else "assistant",
+                    "content": msg["content"]
+                })
 
         formatted_messages.append({
             "role": "user",

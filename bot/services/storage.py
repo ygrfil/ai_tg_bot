@@ -312,7 +312,6 @@ class Storage:
             except Exception as e:
                 logging.error(f"Error adding message: {e}")
                 raise
-
     async def get_user(self, user_id: int) -> Dict[str, Any]:
         """Get user data from the database"""
         try:
@@ -522,3 +521,4 @@ class Storage:
             except Exception as e:
                 logging.error(f"Error getting usage stats: {e}")
                 return {}
+

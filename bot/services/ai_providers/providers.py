@@ -4,7 +4,7 @@ PROVIDER_MODELS = {
         "vision": True
     },
     "groq": {
-        "name": "llama-3.2-11b-vision-preview",
+        "name": "llama-3.2-90b-vision-preview",
         "vision": True
     },
     "claude": {
@@ -12,7 +12,7 @@ PROVIDER_MODELS = {
         "vision": True
     },
     "perplexity": {
-        "name": "llama-3.1-sonar-huge-128k-online",
+        "name": "llama-3.1-sonar-large-128k-online",
         "vision": False
     }
 } 

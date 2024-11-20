@@ -22,17 +22,55 @@ class OpenAIProvider(BaseAIProvider):
         logging.info("OpenAIProvider: Starting chat_completion_stream")
         try:
             async with AsyncOpenAI(api_key=self.api_key, base_url=self.base_url) as client:
-                messages = self._format_history(history, model_config)
+                messages = []
                 
+                # Add system prompt first
+                system_prompt = get_system_prompt(model_config['name'])
+                messages.append({
+                    "role": "system",
+                    "content": system_prompt
+                })
+                
+                # Add history
+                if history:
+                    for msg in history:
+                        if msg.get("is_bot"):
+                            messages.append({
+                                "role": "assistant",
+                                "content": msg["content"]
+                            })
+                        else:
+                            if msg.get("image"):
+                                messages.append({
+                                    "role": "user",
+                                    "content": [
+                                        {"type": "text", "text": msg["content"]},
+                                        {
+                                            "type": "image_url",
+                                            "image_url": {
+                                                "url": f"data:image/jpeg;base64,{base64.b64encode(msg['image']).decode('utf-8')}"
+                                            }
+                                        }
+                                    ]
+                                })
+                            else:
+                                messages.append({
+                                    "role": "user",
+                                    "content": msg["content"]
+                                })
+
+                # Add current message with image if present
                 if image and model_config.get('vision'):
-                    if len(image) > 4 * 1024 * 1024:
-                        raise Exception("Image size exceeds 4MB limit")
-                    base64_image = base64.b64encode(image).decode('utf-8')
                     messages.append({
                         "role": "user",
                         "content": [
                             {"type": "text", "text": message or "What's in this image?"},
-                            {"type": "image_url", "image_url": f"data:image/jpeg;base64,{base64_image}"}
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{base64.b64encode(image).decode('utf-8')}"
+                                }
+                            }
                         ]
                     })
                 else:
@@ -40,19 +78,15 @@ class OpenAIProvider(BaseAIProvider):
                         "role": "user",
                         "content": message
                     })
-                
-                response = await client.chat.completions.create(
+
+                async for chunk in await client.chat.completions.create(
                     model=model_config['name'],
                     messages=messages,
-                    temperature=0.7,
-                    max_tokens=self._get_max_tokens(model_config),
-                    stream=True
-                )
-                
-                async for chunk in response:
-                    if hasattr(chunk.choices[0].delta, 'content'):
-                        if chunk.choices[0].delta.content:
-                            yield chunk.choices[0].delta.content
+                    stream=True,
+                    max_tokens=self.config.max_tokens
+                ):
+                    if chunk.choices[0].delta.content:
+                        yield chunk.choices[0].delta.content
             logging.info("OpenAIProvider: Completed chat_completion_stream")
         except Exception as e:
             logging.error(f"OpenAIProvider Error: {e}")

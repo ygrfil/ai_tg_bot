@@ -301,6 +301,8 @@ async def handle_message(message: Message, state: FSMContext):
             final_response = sanitize_html_tags(collected_response)
             if final_response.strip() != rate_limiter.current_message:
                 await MessageRateLimiter.retry_final_update(bot_response, final_response)
+            rate_limiter.current_message = None  # Reset rate limiter
+            logging.info(f"Completed processing message for user {user.id}")
 
         await storage.log_usage(
             user_id=message.from_user.id,
