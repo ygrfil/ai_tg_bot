@@ -28,15 +28,13 @@ class BaseAIProvider(ABC):
         """Format chat history into provider-specific format."""
         formatted_messages = []
         
-        # Always start with system prompt
-        formatted_messages.append({
-            "role": "system",
-            "content": self.system_prompt
-        })
-        
         # Process history in chronological order
         if history:
             for msg in history:
+                # Skip any system messages in history
+                if msg.get("role") == "system":
+                    continue
+                
                 if msg.get("is_bot"):
                     formatted_messages.append({
                         "role": "assistant",
