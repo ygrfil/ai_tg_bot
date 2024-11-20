@@ -5,12 +5,16 @@ from .base import BaseAIProvider
 from ...config.settings import Config
 from ...config.prompts import get_system_prompt
 import logging
+from openai import AsyncOpenAI
 
 class GroqProvider(BaseAIProvider):
-    def __init__(self, api_key: str, config: Config):
+    def __init__(self, api_key: str, config: Config = None):
         super().__init__(config)
-        self.client = AsyncGroq(api_key=api_key)
-        
+        self.client = AsyncOpenAI(
+            api_key=api_key,
+            base_url="https://api.groq.com/openai/v1"
+        )
+
     async def chat_completion_stream(
         self, 
         message: str, 
@@ -20,70 +24,58 @@ class GroqProvider(BaseAIProvider):
     ) -> AsyncGenerator[str, None]:
         logging.info("GroqProvider: Starting chat_completion_stream")
         try:
-            messages = []
+            messages = [{
+                "role": "system",
+                "content": get_system_prompt(model_config['name'])
+            }]
             
-            # For image requests, skip system prompt entirely
-            if image is not None and model_config.get('vision', False):
-                base64_image = base64.b64encode(image).decode('utf-8')
-                messages.append({
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": message or "What's in this image?"
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{base64_image}"
-                            }
-                        }
-                    ]
-                })
-            else:
-                # For text-only requests, include system prompt
-                system_prompt = get_system_prompt(model_config['name'])
-                if system_prompt:
-                    messages.append({
-                        "role": "system",
-                        "content": system_prompt
-                    })
-                
-                # Add history for text-only conversations
-                if history:
-                    for msg in history:
-                        if msg.get("is_bot"):
+            # Add history
+            if history:
+                for msg in history:
+                    if msg.get("is_bot"):
+                        messages.append({
+                            "role": "assistant",
+                            "content": msg["content"]
+                        })
+                    else:
+                        if msg.get("image") and model_config.get('vision', False):
+                            base64_image = base64.b64encode(msg["image"]).decode('utf-8')
                             messages.append({
-                                "role": "assistant",
-                                "content": msg["content"]
+                                "role": "user",
+                                "content": [
+                                    {"type": "text", "text": msg["content"]},
+                                    {
+                                        "type": "image_url",
+                                        "image_url": {
+                                            "url": f"data:image/jpeg;base64,{base64_image}"
+                                        }
+                                    }
+                                ]
                             })
                         else:
                             messages.append({
                                 "role": "user",
                                 "content": msg["content"]
                             })
-                
-                messages.append({
-                    "role": "user",
-                    "content": message
-                })
+            
+            # Add current message
+            messages.append({
+                "role": "user",
+                "content": message
+            })
 
-            # Create chat completion
             stream = await self.client.chat.completions.create(
                 model=model_config['name'],
                 messages=messages,
                 stream=True,
-                max_tokens=self.config.max_tokens,
+                max_tokens=self._get_max_tokens(model_config),
                 temperature=0.7
             )
-
+            
             async for chunk in stream:
-                if hasattr(chunk, 'choices') and len(chunk.choices) > 0:
-                    choice = chunk.choices[0]
-                    if hasattr(choice, 'delta') and hasattr(choice.delta, 'content'):
-                        if choice.delta.content:
-                            yield choice.delta.content
-
+                if chunk.choices[0].delta.content:
+                    yield chunk.choices[0].delta.content
+                    
         except Exception as e:
-            logging.error(f"GroqProvider error: {str(e)}")
+            logging.error(f"Groq error: {str(e)}")
             raise Exception(f"Groq error: {str(e)}")

@@ -7,10 +7,10 @@ from ...config.settings import Config
 import logging
 
 class OpenAIProvider(BaseAIProvider):
-    def __init__(self, api_key: str, base_url: Optional[str] = None, config: Config = None):
+    def __init__(self, api_key: str, config: Config = None):
         super().__init__(config)
         self.api_key = api_key
-        self.base_url = base_url
+        self.base_url = "https://api.openai.com/v1"
 
     async def chat_completion_stream(
         self, 
@@ -22,14 +22,10 @@ class OpenAIProvider(BaseAIProvider):
         logging.info("OpenAIProvider: Starting chat_completion_stream")
         try:
             async with AsyncOpenAI(api_key=self.api_key, base_url=self.base_url) as client:
-                messages = []
-                
-                # Add system prompt first
-                system_prompt = get_system_prompt(model_config['name'])
-                messages.append({
+                messages = [{
                     "role": "system",
-                    "content": system_prompt
-                })
+                    "content": get_system_prompt(model_config['name'])
+                }]
                 
                 # Add history
                 if history:
@@ -58,13 +54,13 @@ class OpenAIProvider(BaseAIProvider):
                                     "role": "user",
                                     "content": msg["content"]
                                 })
-
-                # Add current message with image if present
+                
+                # Add current message
                 if image and model_config.get('vision'):
                     messages.append({
                         "role": "user",
                         "content": [
-                            {"type": "text", "text": message or "What's in this image?"},
+                            {"type": "text", "text": message},
                             {
                                 "type": "image_url",
                                 "image_url": {
@@ -79,15 +75,18 @@ class OpenAIProvider(BaseAIProvider):
                         "content": message
                     })
 
-                async for chunk in await client.chat.completions.create(
+                stream = await client.chat.completions.create(
                     model=model_config['name'],
                     messages=messages,
                     stream=True,
-                    max_tokens=self.config.max_tokens
-                ):
+                    max_tokens=self._get_max_tokens(model_config),
+                    temperature=0.7
+                )
+                
+                async for chunk in stream:
                     if chunk.choices[0].delta.content:
                         yield chunk.choices[0].delta.content
-            logging.info("OpenAIProvider: Completed chat_completion_stream")
+                        
         except Exception as e:
-            logging.error(f"OpenAIProvider Error: {e}")
-            raise
+            logging.error(f"OpenAI error: {str(e)}")
+            raise Exception(f"OpenAI error: {str(e)}")
