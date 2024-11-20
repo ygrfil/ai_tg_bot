@@ -22,7 +22,7 @@ class GroqProvider(BaseAIProvider):
         try:
             messages = []
             
-            # Handle image input
+            # For image requests, skip system prompt entirely
             if image is not None and model_config.get('vision', False):
                 base64_image = base64.b64encode(image).decode('utf-8')
                 messages.append({
@@ -41,7 +41,15 @@ class GroqProvider(BaseAIProvider):
                     ]
                 })
             else:
-                # Handle text-only input
+                # For text-only requests, include system prompt
+                system_prompt = get_system_prompt(model_config['name'])
+                if system_prompt:
+                    messages.append({
+                        "role": "system",
+                        "content": system_prompt
+                    })
+                
+                # Add history for text-only conversations
                 if history:
                     for msg in history:
                         if msg.get("is_bot"):
