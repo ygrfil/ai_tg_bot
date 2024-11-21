@@ -19,7 +19,7 @@ class OpenAIProvider(BaseAIProvider):
         history: Optional[List[Dict[str, Any]]] = None,
         image: Optional[bytes] = None
     ) -> AsyncGenerator[str, None]:
-        logging.info("OpenAIProvider: Starting chat_completion_stream")
+        logging.info(f"OpenAIProvider: Starting chat_completion_stream with model {model_config['name']}")
         try:
             async with AsyncOpenAI(api_key=self.api_key, base_url=self.base_url) as client:
                 messages = [{
