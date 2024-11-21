@@ -218,14 +218,7 @@ async def back_button(message: Message, state: FSMContext):
 async def handle_message(message: Message, state: FSMContext):
     try:
         user = message.from_user
-        if user:
-            await storage.ensure_user_exists(
-                user_id=user.id,
-                username=user.username,
-                first_name=user.first_name
-            )
-        
-        if not is_user_authorized(message.from_user.id):
+        if str(user.id) not in config.allowed_user_ids:
             return
 
         # Get settings and history concurrently

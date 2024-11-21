@@ -56,15 +56,5 @@ async def main():
     
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 
-async def cleanup_task(storage: Storage):
-    """Periodic task to clean up chat history for inactive users"""
-    while True:
-        try:
-            await storage.cleanup_inactive_users()
-            await asyncio.sleep(15 * 60)  # Run every 15 minutes instead of 5
-        except Exception as e:
-            logging.error(f"Cleanup task error: {e}")
-            await asyncio.sleep(60)
-
 if __name__ == "__main__":
     asyncio.run(main())

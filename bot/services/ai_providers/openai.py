@@ -27,7 +27,7 @@ class OpenAIProvider(BaseAIProvider):
                     "content": get_system_prompt(model_config['name'])
                 }]
                 
-                # Add history
+                # Add history using the same format as Groq
                 if history:
                     for msg in history:
                         if msg.get("is_bot"):
@@ -36,7 +36,8 @@ class OpenAIProvider(BaseAIProvider):
                                 "content": msg["content"]
                             })
                         else:
-                            if msg.get("image"):
+                            if msg.get("image") and model_config.get('vision', False):
+                                base64_image = base64.b64encode(msg["image"]).decode('utf-8')
                                 messages.append({
                                     "role": "user",
                                     "content": [
@@ -44,7 +45,7 @@ class OpenAIProvider(BaseAIProvider):
                                         {
                                             "type": "image_url",
                                             "image_url": {
-                                                "url": f"data:image/jpeg;base64,{base64.b64encode(msg['image']).decode('utf-8')}"
+                                                "url": f"data:image/jpeg;base64,{base64_image}"
                                             }
                                         }
                                     ]
@@ -55,7 +56,7 @@ class OpenAIProvider(BaseAIProvider):
                                     "content": msg["content"]
                                 })
                 
-                # Add current message
+                # Add current message with same format as Groq
                 if image and model_config.get('vision'):
                     messages.append({
                         "role": "user",

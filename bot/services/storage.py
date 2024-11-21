@@ -130,6 +130,9 @@ class Storage:
     ) -> None:
         """Add message to history with cache management"""
         try:
+            # Ensure content is properly converted to string
+            content_str = str(content).strip() if content else ""
+            
             async with self._db_connect() as db:
                 if image_data:
                     await db.execute("""
@@ -142,7 +145,7 @@ class Storage:
                     INSERT INTO chat_history (
                         user_id, content, image_data, is_bot, timestamp
                     ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-                """, (user_id, content, image_data, is_bot))
+                """, (user_id, content_str, image_data, 1 if is_bot else 0))
 
                 await db.commit()
                 self.cache.invalidate(f"chat_history:{user_id}*")
@@ -370,51 +373,6 @@ class Storage:
                 "settings": "{}",
                 "last_activity": None
             }
-
-    async def cleanup_old_history(self):
-        """Clear chat history older than 2 hours"""
-        await self.ensure_initialized()
-        async with self._lock:
-            async with self._db_connect() as db:
-                # First, get the image data that needs to be cleaned up
-                await db.execute("""
-                    DELETE FROM chat_history 
-                    WHERE datetime(timestamp) < datetime('now', '-2 hours')
-                """)
-                await db.commit()
-
-    async def update_last_activity(self, user_id: int):
-        """Update user's last activity timestamp"""
-        await self.ensure_initialized()
-        async with self._lock:
-            async with self._db_connect() as db:
-                await db.execute(
-                    "UPDATE users SET last_activity = datetime('now') WHERE user_id = ?",
-                    (user_id,)
-                )
-                await db.commit()
-
-    async def cleanup_inactive_users(self):
-        """Clear chat history for users inactive for 2 hours"""
-        await self.ensure_initialized()
-        async with self._lock:
-            async with self._db_connect() as db:
-                # Get users who have been inactive for 2 hours
-                async with db.execute("""
-                    SELECT user_id FROM users 
-                    WHERE datetime(last_activity) < datetime('now', '-2 hours')
-                """) as cursor:
-                    inactive_users = await cursor.fetchall()
-                
-                # Clear history for each inactive user
-                for (user_id,) in inactive_users:
-                    await db.execute(
-                        "DELETE FROM chat_history WHERE user_id = ?",
-                        (user_id,)
-                    )
-                    logging.info(f"Cleared chat history for inactive user {user_id}")
-                
-                await db.commit()
 
     async def ensure_user_exists(self, user_id: int, username: str = None, first_name: str = None):
         """Ensure user exists in database and update user info"""
