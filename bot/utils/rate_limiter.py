@@ -6,7 +6,7 @@ from aiogram.types import Message
 import re
 
 class MessageRateLimiter:
-    def __init__(self, update_interval: float = 0.3, min_chunk_size: int = 60):
+    def __init__(self, update_interval: float = 0.3, min_chunk_size: int = 150):
         self.update_interval = timedelta(seconds=update_interval)
         self.min_chunk_size = min_chunk_size
         self.last_update_time = datetime.min
@@ -27,7 +27,7 @@ class MessageRateLimiter:
 
     @staticmethod
     async def retry_final_update(message: Message, content: str, 
-                               max_retries: int = 3, initial_delay: float = 1.0) -> None:
+                               max_retries: int = 3, initial_delay: float = 0.3) -> None:
         """Handle final message update with retry logic"""
         # Validate content
         if not content or not content.strip():
