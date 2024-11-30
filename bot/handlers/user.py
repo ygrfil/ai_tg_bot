@@ -251,13 +251,6 @@ async def handle_message(message: Message, state: FSMContext):
             if not message_text:
                 message_text = "Please analyze this image."
 
-        # Add user's message to history list before sending to AI
-        history.append({
-            "content": message_text,
-            "is_bot": False,
-            "image": image_data
-        })
-
         # Get AI provider and prepare response
         ai_provider = get_provider(provider_name, config)
         await message.bot.send_chat_action(message.chat.id, "typing")
@@ -268,7 +261,7 @@ async def handle_message(message: Message, state: FSMContext):
         async for response_chunk in ai_provider.chat_completion_stream(
             message=message_text,
             model_config=model_config,
-            history=history[:-1],  # Send previous history without current message
+            history=history,  # Now history only contains previous messages
             image=image_data
         ):
             if response_chunk and response_chunk.strip():

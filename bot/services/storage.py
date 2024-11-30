@@ -73,16 +73,7 @@ class Storage:
 
         try:
             async with self._db_connect() as db:
-                # First get the total count of messages
-                async with db.execute("""
-                    SELECT COUNT(*) FROM chat_history WHERE user_id = ?
-                """, (user_id,)) as cursor:
-                    total_messages = (await cursor.fetchone())[0]
-                
-                # Calculate the offset to get the last 'limit' messages in chronological order
-                offset = max(0, total_messages - limit)
-                
-                # Get messages in chronological order with proper offset
+                # Get messages in chronological order, excluding the last exchange (2 messages)
                 async with db.execute("""
                     WITH ordered_history AS (
                         SELECT 
@@ -90,15 +81,16 @@ class Storage:
                             image_data, 
                             is_bot, 
                             timestamp,
-                            ROW_NUMBER() OVER (ORDER BY timestamp) as row_num
+                            ROW_NUMBER() OVER (ORDER BY timestamp DESC) as row_num
                         FROM chat_history
                         WHERE user_id = ?
                     )
                     SELECT content, image_data, is_bot, timestamp
                     FROM ordered_history
-                    WHERE row_num > ?
+                    WHERE row_num > 2  -- Skip last exchange (user + bot message)
                     ORDER BY timestamp ASC
-                """, (user_id, offset)) as cursor:
+                    LIMIT ?
+                """, (user_id, limit)) as cursor:
                     rows = await cursor.fetchall()
                     
                 result = []

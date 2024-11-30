@@ -27,7 +27,7 @@ class OpenAIProvider(BaseAIProvider):
                     "content": get_system_prompt(model_config['name'])
                 }]
                 
-                # Add history using the same format as Groq
+                # Add history
                 if history:
                     for msg in history:
                         if msg.get("is_bot"):
