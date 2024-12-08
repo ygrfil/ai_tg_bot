@@ -4,8 +4,8 @@ PROVIDER_MODELS = {
         "vision": True
     },
     "groq": {
-        "name": "llama-3.2-90b-vision-preview",
-        "vision": True
+        "name": "llama-3.3-70b-versatile",
+        "vision": False
     },
     "claude": {
         "name": "claude-3-5-sonnet-20241022",
