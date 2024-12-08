@@ -24,7 +24,7 @@ class OpenAIProvider(BaseAIProvider):
             async with AsyncOpenAI(api_key=self.api_key, base_url=self.base_url) as client:
                 messages = [{
                     "role": "system",
-                    "content": get_system_prompt(model_config['name'])
+                    "content": self._get_system_prompt(model_config['name'])
                 }]
                 
                 # Add history
@@ -56,7 +56,7 @@ class OpenAIProvider(BaseAIProvider):
                                     "content": msg["content"]
                                 })
                 
-                # Add current message with same format as Groq
+                # Add current message
                 if image and model_config.get('vision'):
                     messages.append({
                         "role": "user",
@@ -89,5 +89,5 @@ class OpenAIProvider(BaseAIProvider):
                         yield chunk.choices[0].delta.content
                         
         except Exception as e:
-            logging.error(f"OpenAI error: {str(e)}")
+            logging.error(f"OpenAI error: {str(e)}", exc_info=True)
             raise Exception(f"OpenAI error: {str(e)}")

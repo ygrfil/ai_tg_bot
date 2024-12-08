@@ -17,7 +17,7 @@ class PerplexityProvider(BaseAIProvider):
         """Format message history ensuring strict user/assistant alternation."""
         messages = [{
             "role": "system",
-            "content": get_system_prompt(model_config['name'])
+            "content": self._get_system_prompt(model_config['name'])
         }]
 
         # Process history to ensure alternating pattern
@@ -60,11 +60,30 @@ class PerplexityProvider(BaseAIProvider):
         image: Optional[bytes] = None
     ) -> AsyncGenerator[str, None]:
         try:
-            messages = self._format_messages(
-                history or [], 
-                message, 
-                model_config
-            )
+            messages = [{
+                "role": "system",
+                "content": self._get_system_prompt(model_config['name'])
+            }]
+
+            # Add history
+            if history:
+                for msg in history:
+                    if msg.get("is_bot"):
+                        messages.append({
+                            "role": "assistant",
+                            "content": msg["content"]
+                        })
+                    else:
+                        messages.append({
+                            "role": "user",
+                            "content": msg["content"]
+                        })
+
+            # Add current message
+            messages.append({
+                "role": "user",
+                "content": message
+            })
 
             logging.debug(f"Formatted messages for Perplexity: {messages}")
 
@@ -82,5 +101,5 @@ class PerplexityProvider(BaseAIProvider):
 
         except Exception as e:
             error_msg = f"Perplexity error: {str(e)}"
-            logging.error(error_msg)
+            logging.error(error_msg, exc_info=True)
             raise Exception(error_msg)

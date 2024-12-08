@@ -1,6 +1,7 @@
 from typing import Optional, List, Dict, Any, AsyncGenerator
 from anthropic import AsyncAnthropic
 import base64
+import logging
 from .base import BaseAIProvider
 from ...config.prompts import get_system_prompt
 from ...config.settings import Config
@@ -70,7 +71,7 @@ class ClaudeProvider(BaseAIProvider):
             })
 
         try:
-            system_prompt = get_system_prompt(model_config['name'])
+            system_prompt = self._get_system_prompt(model_config['name'])
             
             stream = await self.client.messages.create(
                 model=model_config['name'],
@@ -96,4 +97,5 @@ class ClaudeProvider(BaseAIProvider):
                     yield chunk.content
                     
         except Exception as e:
+            logging.error(f"Claude error: {str(e)}", exc_info=True)
             raise Exception(f"Claude error: {str(e)}")
