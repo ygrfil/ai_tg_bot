@@ -223,7 +223,7 @@ async def handle_message(message: Message, state: FSMContext):
 
         # Get settings and history concurrently
         settings_task = storage.get_user_settings(message.from_user.id)
-        history_task = storage.get_chat_history(message.from_user.id)
+        history_task = storage.get_chat_history(message.from_user.id, limit=20)  # Increased history limit
         
         settings, history = await asyncio.gather(settings_task, history_task)
         
@@ -251,6 +251,9 @@ async def handle_message(message: Message, state: FSMContext):
             if not message_text:
                 message_text = "Please analyze this image."
 
+        # Add user message to history first
+        await storage.add_to_history(message.from_user.id, message_text, False, image_data)
+
         # Get AI provider and prepare response
         ai_provider = get_provider(provider_name, config)
         await message.bot.send_chat_action(message.chat.id, "typing")
@@ -261,7 +264,7 @@ async def handle_message(message: Message, state: FSMContext):
         async for response_chunk in ai_provider.chat_completion_stream(
             message=message_text,
             model_config=model_config,
-            history=history,  # Now history only contains previous messages
+            history=history,
             image=image_data
         ):
             if response_chunk and response_chunk.strip():
@@ -277,19 +280,19 @@ async def handle_message(message: Message, state: FSMContext):
                             logging.warning(f"Message update error: {e}")
                         continue
 
-        # Save both user message and AI response to storage after completion
-        await storage.add_to_history(message.from_user.id, message_text, False, image_data)
+        # Save AI response to history
         if collected_response:
             await storage.add_to_history(message.from_user.id, collected_response, True)
 
-        # Handle final message update and logging
+        # Handle final message update
         if collected_response and collected_response.strip():
             final_response = sanitize_html_tags(collected_response)
             if final_response.strip() != rate_limiter.current_message:
                 await MessageRateLimiter.retry_final_update(bot_response, final_response)
-            rate_limiter.current_message = None  # Reset rate limiter
+            rate_limiter.current_message = None
             logging.info(f"Completed processing message for user {user.id}")
 
+        # Log usage statistics
         await storage.log_usage(
             user_id=message.from_user.id,
             provider=provider_name,
@@ -298,11 +301,8 @@ async def handle_message(message: Message, state: FSMContext):
             has_image=bool(image_data)
         )
 
-        # After streaming completes
-        rate_limiter.current_message = None  # Reset the rate limiter
-
     except Exception as e:
-        logging.error(f"Error in handle_message: {e}")
+        logging.error(f"Error in handle_message: {e}", exc_info=True)
         await message.answer("❌ An error occurred. Please try again later.")
 
 # Unauthorized handler should be last

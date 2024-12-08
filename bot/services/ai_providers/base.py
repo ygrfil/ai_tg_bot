@@ -11,7 +11,16 @@ class BaseAIProvider(ABC):
     
     def __init__(self, config: Config):
         self.config = config
-        self.system_prompt = """You are a helpful AI assistant. Maintain context of the entire conversation and provide accurate, consistent responses. Format responses using HTML tags and emojis appropriately."""
+
+    def _get_system_prompt(self, model_name: str) -> str:
+        """Get the system prompt with context maintenance instructions"""
+        base_prompt = """You are a helpful AI assistant."""
+        context_instructions = """
+        Maintain full context of the conversation and provide accurate, consistent responses. 
+        When dealing with calculations or sequential operations, always consider the entire conversation history.
+        Format responses using HTML tags and emojis appropriately.
+        """
+        return f"{base_prompt}\n{context_instructions}"
 
     @abstractmethod
     async def chat_completion_stream(
@@ -93,4 +102,3 @@ class BaseAIProvider(ABC):
     def _get_max_tokens(self, model_config: Dict[str, Any]) -> int:
         """Get max tokens for the model."""
         return model_config.get('max_tokens', 4000)
-

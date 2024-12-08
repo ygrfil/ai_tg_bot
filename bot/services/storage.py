@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 import json
 from collections import deque
 from .cache import CacheManager  # Assuming cache.py is created
+import hashlib
 
 class DatabasePool:
     def __init__(self, db_path: str, max_connections: int = 5):
@@ -52,7 +53,6 @@ class Storage:
         self.db_path = db_path
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
         self.pool = DatabasePool(db_path)
-        self.cache = CacheManager()
         self._lock = asyncio.Lock()
 
     @asynccontextmanager
@@ -64,53 +64,43 @@ class Storage:
             await self.pool.release(db)
 
     async def get_chat_history(self, user_id: int, limit: int = 10) -> List[Dict[str, Any]]:
-        """Get chat history with caching including images"""
-        cache_key = f"chat_history:{user_id}:{limit}"
-        cached_result = self.cache.get(cache_key)
-        
-        if cached_result is not None:
-            return cached_result
-
+        """Get chat history with optimized retrieval"""
         try:
             async with self._db_connect() as db:
-                # Get messages in chronological order, excluding the last exchange (2 messages)
+                # Get all recent messages in chronological order
                 async with db.execute("""
-                    WITH ordered_history AS (
+                    WITH LastMessages AS (
                         SELECT 
-                            content, 
-                            image_data, 
-                            is_bot, 
+                            content,
+                            is_bot,
                             timestamp,
-                            ROW_NUMBER() OVER (ORDER BY timestamp DESC) as row_num
+                            ROW_NUMBER() OVER (ORDER BY timestamp DESC) as rn
                         FROM chat_history
                         WHERE user_id = ?
                     )
-                    SELECT content, image_data, is_bot, timestamp
-                    FROM ordered_history
-                    WHERE row_num > 2  -- Skip last exchange (user + bot message)
+                    SELECT 
+                        content,
+                        is_bot,
+                        timestamp
+                    FROM LastMessages
+                    WHERE rn <= ?  -- Take last N messages
                     ORDER BY timestamp ASC
-                    LIMIT ?
-                """, (user_id, limit)) as cursor:
+                """, (user_id, limit * 2)) as cursor:  # Double limit to include both user and bot messages
                     rows = await cursor.fetchall()
-                    
+            
                 result = []
                 for row in rows:
                     message = {
                         "content": row[0],
-                        "is_bot": bool(row[2]),
-                        "timestamp": row[3]
+                        "is_bot": bool(row[1]),
+                        "timestamp": row[2]
                     }
-                    if row[1] is not None:  # image_data
-                        message["image"] = row[1]
                     result.append(message)
-                
-                if result:
-                    self.cache.set(cache_key, result, ttl=30)
-                
+            
                 return result
-                
+            
         except Exception as e:
-            logging.error(f"Error getting chat history: {e}")
+            logging.error(f"Error getting chat history: {e}", exc_info=True)
             return []
 
     async def add_to_history(
@@ -120,34 +110,48 @@ class Storage:
         is_bot: bool,
         image_data: Optional[bytes] = None
     ) -> None:
-        """Add message to history with cache management"""
+        """Add message to history with optimized storage"""
         try:
-            # Ensure content is properly converted to string
             content_str = str(content).strip() if content else ""
-            
+        
             async with self._db_connect() as db:
                 if image_data:
+                    # Only store latest image
                     await db.execute("""
                         UPDATE chat_history 
-                        SET image_data = NULL 
-                        WHERE user_id = ? AND image_data IS NOT NULL
+                        SET content = REPLACE(content, '[Image:', '[Old Image:')
+                        WHERE user_id = ? AND content LIKE '%[Image:%'
                     """, (user_id,))
                 
+                    # Store image reference instead of full data
+                    image_hash = hashlib.md5(image_data).hexdigest()
+                    image_path = f"data/images/{image_hash}.jpg"
+                    os.makedirs(os.path.dirname(image_path), exist_ok=True)
+                    with open(image_path, "wb") as f:
+                        f.write(image_data)
+                    content_str = f"{content_str}\n[Image: {image_hash}]"
+            
+                # Add message with precise timestamp
                 await db.execute("""
                     INSERT INTO chat_history (
-                        user_id, content, image_data, is_bot, timestamp
-                    ) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-                """, (user_id, content_str, image_data, 1 if is_bot else 0))
+                        user_id, 
+                        content, 
+                        is_bot, 
+                        timestamp
+                    ) VALUES (
+                        ?, ?, ?, 
+                        strftime('%Y-%m-%d %H:%M:%f', 'now')
+                    )
+                """, (user_id, content_str, 1 if is_bot else 0))
 
                 await db.commit()
-                self.cache.invalidate(f"chat_history:{user_id}*")
-                
+            
         except Exception as e:
-            logging.error(f"Error adding to chat history: {e}")
+            logging.error(f"Error adding to chat history: {e}", exc_info=True)
             raise
 
     async def clear_user_history(self, user_id: int):
-        """Clear user history and invalidate cache"""
+        """Clear user history"""
         try:
             async with self._db_connect() as db:
                 await db.execute(
@@ -156,21 +160,12 @@ class Storage:
                 )
                 await db.commit()
                 
-                # Invalidate all user-related caches
-                self.cache.invalidate(f"chat_history:{user_id}*")
-                self.cache.invalidate(f"user_settings:{user_id}")
-                
         except Exception as e:
             logging.error(f"Error clearing user history: {e}")
             raise
 
     async def get_user_settings(self, user_id: int) -> Optional[dict]:
-        """Get user settings with caching"""
-        cache_key = f"user_settings:{user_id}"
-        cached_result = self.cache.get(cache_key)
-        if cached_result is not None:
-            return cached_result
-
+        """Get user settings"""
         try:
             async with self._db_connect() as db:
                 async with db.execute("""
@@ -185,7 +180,6 @@ class Storage:
                             'current_provider': row[1],
                             'current_model': row[2]
                         })
-                        self.cache.set(cache_key, settings, ttl=300)  # Cache for 5 minutes
                         return settings
                     return None
         except Exception as e:
@@ -218,7 +212,6 @@ class Storage:
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
                             user_id INTEGER,
                             content TEXT,
-                            image_data BLOB,
                             is_bot BOOLEAN,
                             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                             FOREIGN KEY (user_id) REFERENCES users(user_id)
@@ -254,10 +247,13 @@ class Storage:
                         ON users(user_id, current_provider, current_model)
                     """)
 
+                    # Create images directory
+                    os.makedirs("data/images", exist_ok=True)
+
                     await db.commit()
 
             except Exception as e:
-                logging.error(f"Database initialization error: {e}")
+                logging.error(f"Database initialization error: {e}", exc_info=True)
                 raise
 
     async def save_user_settings(self, user_id: int, settings: dict):
@@ -299,9 +295,9 @@ class Storage:
                         """, (user_id,))
                     
                     await db.execute(
-                        """INSERT INTO chat_history (user_id, content, is_bot, image_data) 
-                           VALUES (?, ?, ?, ?)""",
-                        (user_id, content, is_bot, image_data)
+                        """INSERT INTO chat_history (user_id, content, is_bot) 
+                           VALUES (?, ?, ?)""",
+                        (user_id, content, is_bot)
                     )
                     await db.commit()
             except Exception as e:
@@ -471,4 +467,3 @@ class Storage:
             except Exception as e:
                 logging.error(f"Error getting usage stats: {e}")
                 return {}
-

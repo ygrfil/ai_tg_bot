@@ -26,7 +26,7 @@ class GroqProvider(BaseAIProvider):
         try:
             messages = [{
                 "role": "system",
-                "content": get_system_prompt(model_config['name'])
+                "content": self._get_system_prompt(model_config['name'])
             }]
             
             # Add history
@@ -38,25 +38,10 @@ class GroqProvider(BaseAIProvider):
                             "content": msg["content"]
                         })
                     else:
-                        if msg.get("image") and model_config.get('vision', False):
-                            base64_image = base64.b64encode(msg["image"]).decode('utf-8')
-                            messages.append({
-                                "role": "user",
-                                "content": [
-                                    {"type": "text", "text": msg["content"]},
-                                    {
-                                        "type": "image_url",
-                                        "image_url": {
-                                            "url": f"data:image/jpeg;base64,{base64_image}"
-                                        }
-                                    }
-                                ]
-                            })
-                        else:
-                            messages.append({
-                                "role": "user",
-                                "content": msg["content"]
-                            })
+                        messages.append({
+                            "role": "user",
+                            "content": msg["content"]
+                        })
             
             # Add current message
             messages.append({
@@ -77,5 +62,5 @@ class GroqProvider(BaseAIProvider):
                     yield chunk.choices[0].delta.content
                     
         except Exception as e:
-            logging.error(f"Groq error: {str(e)}")
+            logging.error(f"Groq error: {str(e)}", exc_info=True)
             raise Exception(f"Groq error: {str(e)}")
