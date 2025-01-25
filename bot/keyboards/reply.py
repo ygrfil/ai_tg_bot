@@ -10,10 +10,9 @@ def get_main_menu(is_admin: bool = False) -> ReplyKeyboardMarkup:
     )
     builder.row(
         KeyboardButton(text="🗑 Clear History"),
-        KeyboardButton(text="₿")
+        KeyboardButton(text="₿"),
+        *([KeyboardButton(text="👑 Admin")] if is_admin else [])
     )
-    if is_admin:
-        builder.row(KeyboardButton(text="👑 Admin"))
     return builder.as_markup(resize_keyboard=True)
 
 def get_admin_menu() -> ReplyKeyboardMarkup:
@@ -28,14 +27,21 @@ def get_admin_menu() -> ReplyKeyboardMarkup:
 def get_provider_menu() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
     
-    # Create pairs of providers
     providers = list(PROVIDER_MODELS.keys())
-    for i in range(0, len(providers), 2):
-        row_buttons = [providers[i].capitalize()]
-        if i + 1 < len(providers):
-            row_buttons.append(providers[i + 1].capitalize())
-        builder.row(*[KeyboardButton(text=btn) for btn in row_buttons])
-    
+    # Split providers into two rows with special emoji for Deepseek
+    mid = (len(providers) + 1) // 2
+    builder.row(*[
+        KeyboardButton(text=f"🏆 {providers[i].capitalize()}" if providers[i] == "deepseek"
+                      else f"🌐 {providers[i].capitalize()}" if providers[i] == "perplexity"
+                      else providers[i].capitalize())
+        for i in range(mid)
+    ])
+    builder.row(*[
+        KeyboardButton(text=f"🏆 {providers[i].capitalize()}" if providers[i] == "deepseek"
+                      else f"🌐 {providers[i].capitalize()}" if providers[i] == "perplexity"
+                      else providers[i].capitalize())
+        for i in range(mid, len(providers))
+    ])
     builder.row(KeyboardButton(text="🔙 Back"))
     return builder.as_markup(resize_keyboard=True)
 

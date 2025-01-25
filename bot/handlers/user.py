@@ -96,9 +96,32 @@ async def handle_provider_choice(message: Message, state: FSMContext):
         await state.set_state(UserStates.chatting)
     else:
         # Show available providers from PROVIDER_MODELS
-        providers_list = ", ".join(PROVIDER_MODELS.keys())
+        # Clean input and validate
+        clean_provider = message.text.lower().strip("🏆🌐 ").strip()
+        
+        if clean_provider in PROVIDER_MODELS:
+            # Save settings to persistent storage
+            settings = await get_or_create_settings(message.from_user.id)
+            settings.update({
+                'current_provider': clean_provider,
+                'current_model': PROVIDER_MODELS[clean_provider]['name']
+            })
+            await storage.save_user_settings(message.from_user.id, settings)
+            
+            await message.answer(
+                f"Provider changed to {clean_provider.capitalize()}",
+                reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
+            )
+            await state.set_state(UserStates.chatting)
+            return
+        
+        # Show error with decorated names
+        decorated_providers = [
+            f"{'🏆 ' if p == 'deepseek' else '🌐 ' if p == 'perplexity' else ''}{p.capitalize()}"
+            for p in PROVIDER_MODELS.keys()
+        ]
         await message.answer(
-            f"Please select a provider from the menu: {providers_list}",
+            f"Please select a provider from the menu: {', '.join(decorated_providers)}",
             reply_markup=kb.get_provider_menu()
         )
 
