@@ -16,7 +16,7 @@ PROVIDER_MODELS = {
         "vision": False
     },
     "deepseek": {
-        "name": "deepseek-chat",
+        "name": "deepseek-reasoner",
         "vision": False,
         "base_url": "https://api.deepseek.com/v1",
         "env_var": "DEEPSEEK_API"
