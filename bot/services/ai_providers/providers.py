@@ -12,7 +12,7 @@ PROVIDER_MODELS = {
         "vision": True
     },
     "perplexity": {
-        "name": "llama-3.1-sonar-large-128k-online",
+        "name": "sonar-pro",
         "vision": False
     },
     "deepseek": {
