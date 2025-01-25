@@ -2,7 +2,7 @@ from environs import Env
 from typing import List
 
 class Config:
-    def __init__(self, 
+    def __init__(self,
                  bot_token: str,
                  allowed_user_ids: List[str],
                  admin_id: str,
@@ -10,6 +10,7 @@ class Config:
                  groq_api_key: str,
                  anthropic_api_key: str,
                  perplexity_api_key: str,
+                 deepseek_api_key: str = "",
                  max_tokens: int = 1024):
         self.bot_token = bot_token
         self.allowed_user_ids = allowed_user_ids
@@ -19,6 +20,7 @@ class Config:
         self.anthropic_api_key = anthropic_api_key
         self.perplexity_api_key = perplexity_api_key
         self.max_tokens = max_tokens
+        self.DEEPSEEK_API = deepseek_api_key
 
     @classmethod
     def from_env(cls):
@@ -35,5 +37,6 @@ class Config:
             groq_api_key=env.str("GROQ_API_KEY"),
             anthropic_api_key=env.str("ANTHROPIC_API_KEY"),
             perplexity_api_key=env.str("PERPLEXITY_API_KEY"),
+            deepseek_api_key=env.str("DEEPSEEK_API", ""),
             max_tokens=env.int("MAX_TOKENS", 4096)
         ) 

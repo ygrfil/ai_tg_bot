@@ -8,11 +8,17 @@ PROVIDER_MODELS = {
         "vision": False
     },
     "claude": {
-        "name": "claude-3-5-sonnet-20241022",
+        "name": "claude-3-5-sonnet-latest",
         "vision": True
     },
     "perplexity": {
         "name": "llama-3.1-sonar-large-128k-online",
         "vision": False
+    },
+    "deepseek": {
+        "name": "deepseek-chat",
+        "vision": False,
+        "base_url": "https://api.deepseek.com/v1",
+        "env_var": "DEEPSEEK_API"
     }
-} 
+}
