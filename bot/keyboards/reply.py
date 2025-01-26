@@ -42,7 +42,6 @@ def get_provider_menu() -> ReplyKeyboardMarkup:
                       else providers[i].capitalize())
         for i in range(mid, len(providers))
     ])
-    builder.row(KeyboardButton(text="🔙 Back"))
     return builder.as_markup(resize_keyboard=True)
 
 def get_back_menu() -> ReplyKeyboardMarkup:
