@@ -9,7 +9,9 @@ from openai import AsyncOpenAI
 class BaseAIProvider(ABC):
     """Base class for AI providers implementing common interface."""
     
-    def __init__(self, config: Config):
+    def __init__(self, api_key: str, config: Config = None):
+        self.api_key = api_key
+        self.config = config
         self.config = config
 
     def _get_system_prompt(self, model_name: str) -> str:

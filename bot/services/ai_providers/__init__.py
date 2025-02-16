@@ -1,24 +1,30 @@
 from typing import Dict
 from .base import BaseAIProvider
-from .openai import OpenAIProvider
-from .claude import ClaudeProvider
-from .groq import GroqProvider
-from .perplexity import PerplexityProvider
-from .deepseek import DeepSeekProvider
+from .openrouter import OpenRouterProvider
 from ...config import Config
+from .providers import PROVIDER_MODELS
 
 def get_provider(provider_name: str, config: Config) -> BaseAIProvider:
-    """Get AI provider instance by name."""
-    providers = {
-        'openai': lambda: OpenAIProvider(config.openai_api_key, config=config),
-        'claude': lambda: ClaudeProvider(config.anthropic_api_key, config=config),
-        'groq': lambda: GroqProvider(config.groq_api_key, config=config),
-        'perplexity': lambda: PerplexityProvider(config.perplexity_api_key, config=config),
-        'deepseek': lambda: DeepSeekProvider(config.DEEPSEEK_API, config=config)
-    }
+    """Get AI provider instance by name.
     
-    provider_factory = providers.get(provider_name)
-    if not provider_factory:
-        raise ValueError(f"Unknown provider: {provider_name}")
+    Args:
+        provider_name: The provider name (e.g., 'sonnet', 'gpt4', etc.)
+        config: The configuration object containing API keys
+        
+    Returns:
+        An instance of OpenRouterProvider configured for the requested model
+        
+    Raises:
+        ValueError: If provider_name is not found in PROVIDER_MODELS
+    """
+    if provider_name.lower() not in PROVIDER_MODELS:
+        valid_providers = ", ".join(PROVIDER_MODELS.keys())
+        raise ValueError(f"Unknown provider: {provider_name}. Valid providers are: {valid_providers}")
     
-    return provider_factory()
+    # Get model config and create provider instance
+    model_config = PROVIDER_MODELS[provider_name.lower()]
+    provider = OpenRouterProvider(config.OPENROUTER_API, config=config)
+    provider.model_name = model_config['name']  # Set the specific OpenRouter model name
+    provider.vision = model_config['vision']  # Set vision capability
+    
+    return provider

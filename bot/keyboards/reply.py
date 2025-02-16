@@ -27,21 +27,14 @@ def get_admin_menu() -> ReplyKeyboardMarkup:
 def get_provider_menu() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
     
-    providers = list(PROVIDER_MODELS.keys())
-    # Split providers into two rows with special emoji for Deepseek
-    mid = (len(providers) + 1) // 2
-    builder.row(*[
-        KeyboardButton(text=f"🏆 {providers[i].capitalize()}" if providers[i] == "deepseek"
-                      else f"🌐 {providers[i].capitalize()}" if providers[i] == "perplexity"
-                      else providers[i].capitalize())
-        for i in range(mid)
-    ])
-    builder.row(*[
-        KeyboardButton(text=f"🏆 {providers[i].capitalize()}" if providers[i] == "deepseek"
-                      else f"🌐 {providers[i].capitalize()}" if providers[i] == "perplexity"
-                      else providers[i].capitalize())
-        for i in range(mid, len(providers))
-    ])
+    model_buttons = [
+        ["Sonnet", "o3-mini🌐"],
+        ["o3-mini", "🏆 Deepseek"]
+    ]
+    
+    for row in model_buttons:
+        builder.row(*[KeyboardButton(text=text) for text in row])
+    
     return builder.as_markup(resize_keyboard=True)
 
 def get_back_menu() -> ReplyKeyboardMarkup:

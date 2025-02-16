@@ -6,21 +6,13 @@ class Config:
                  bot_token: str,
                  allowed_user_ids: List[str],
                  admin_id: str,
-                 openai_api_key: str,
-                 groq_api_key: str,
-                 anthropic_api_key: str,
-                 perplexity_api_key: str,
-                 deepseek_api_key: str = "",
+                 openrouter_api_key: str,
                  max_tokens: int = 1024):
         self.bot_token = bot_token
         self.allowed_user_ids = allowed_user_ids
         self.admin_id = admin_id
-        self.openai_api_key = openai_api_key
-        self.groq_api_key = groq_api_key
-        self.anthropic_api_key = anthropic_api_key
-        self.perplexity_api_key = perplexity_api_key
+        self.OPENROUTER_API = openrouter_api_key
         self.max_tokens = max_tokens
-        self.DEEPSEEK_API = deepseek_api_key
 
     @classmethod
     def from_env(cls):
@@ -33,10 +25,6 @@ class Config:
             bot_token=env.str("BOT_TOKEN"),
             allowed_user_ids=allowed_ids,
             admin_id=env.str("ADMIN_ID"),
-            openai_api_key=env.str("OPENAI_API_KEY"),
-            groq_api_key=env.str("GROQ_API_KEY"),
-            anthropic_api_key=env.str("ANTHROPIC_API_KEY"),
-            perplexity_api_key=env.str("PERPLEXITY_API_KEY"),
-            deepseek_api_key=env.str("DEEPSEEK_API", ""),
+            openrouter_api_key=env.str("OPENROUTER_API"),
             max_tokens=env.int("MAX_TOKENS", 4096)
-        ) 
+        )

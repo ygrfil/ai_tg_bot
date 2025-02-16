@@ -1,24 +1,18 @@
 PROVIDER_MODELS = {
-    "openai": {
-        "name": "chatgpt-4o-latest",
+    "sonnet": {
+        "name": "anthropic/claude-3.5-sonnet",
         "vision": True
     },
-    "groq": {
-        "name": "llama-3.3-70b-versatile",
+    "o3-mini-online": {
+        "name": "openai/o3-mini:online",
         "vision": False
     },
-    "claude": {
-        "name": "claude-3-5-sonnet-latest",
+    "o3-mini": {
+        "name": "openai/o3-mini",
         "vision": True
-    },
-    "perplexity": {
-        "name": "sonar-pro",
-        "vision": False
     },
     "deepseek": {
-        "name": "deepseek-reasoner",
-        "vision": False,
-        "base_url": "https://api.deepseek.com/v1",
-        "env_var": "DEEPSEEK_API"
+        "name": "deepseek/deepseek-r1",
+        "vision": False
     }
 }

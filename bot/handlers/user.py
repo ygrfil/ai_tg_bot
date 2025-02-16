@@ -1,11 +1,12 @@
+import re
 from aiogram import Router, F, types
-from aiogram.types import Message
+from aiogram.types import Message, ReplyKeyboardMarkup
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.markdown import hbold
 import aiohttp
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
 from typing import Optional
 import asyncio
@@ -45,6 +46,31 @@ async def get_or_create_settings(user_id: int, message: Optional[Message] = None
         )
     return await storage.get_user_settings(user_id)
 
+async def update_keyboard(bot, user_id: int, keyboard: ReplyKeyboardMarkup):
+    """Update keyboard by editing the last bot message"""
+    try:
+        messages = [msg async for msg in bot.get_chat_history(user_id, limit=10)]
+        for msg in messages:
+            if msg.from_user.is_bot and msg.reply_markup:
+                try:
+                    await msg.edit_reply_markup(reply_markup=keyboard)
+                    return True
+                except Exception:
+                    continue
+    except Exception as e:
+        logging.debug(f"Could not update keyboard for user {user_id}: {e}")
+    return False
+
+async def send_minimal_message(message: Message, text: str = ".", keyboard: ReplyKeyboardMarkup = None):
+    """Send a message with minimal visible content"""
+    try:
+        await message.answer(text, reply_markup=keyboard)
+    except Exception as e:
+        logging.debug(f"Failed to send minimal message: {e}")
+        # Try with a single dot if empty string fails
+        if text == "":
+            await message.answer(".", reply_markup=keyboard)
+
 # Command handlers first
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
@@ -76,52 +102,42 @@ async def cmd_start(message: Message, state: FSMContext):
 # Button handlers (put these BEFORE the general message handler)
 @router.message(UserStates.choosing_provider)
 async def handle_provider_choice(message: Message, state: FSMContext):
-    provider = message.text.lower()
-    if provider in PROVIDER_MODELS:  # Use PROVIDER_MODELS directly for validation
+    # Clean up user input and map to provider
+    clean_text = message.text.strip().lower()
+    provider = None
+    
+    # Try exact match first
+    if clean_text in PROVIDER_MODELS:
+        provider = clean_text
+    else:
+        # Try without emojis/special characters
+        clean_text = re.sub(r'[🌐🏆\(\)]\s*', '', clean_text).strip()
+        for model_name in PROVIDER_MODELS.keys():
+            if clean_text in model_name.lower():
+                provider = model_name
+                break
+    
+    if provider and provider in PROVIDER_MODELS:
         settings = await get_or_create_settings(message.from_user.id)
         if not settings:
             settings = {}
+            
         settings['current_provider'] = provider
         settings['current_model'] = PROVIDER_MODELS[provider]['name']
         
         await storage.save_user_settings(
-            message.from_user.id, 
+            message.from_user.id,
             settings
         )
         
         await message.answer(
-            f"Provider changed to {message.text}. Ready to chat!",
+            f"AI Model changed to {PROVIDER_MODELS[provider]['name']}. Ready to chat!",
             reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
         )
         await state.set_state(UserStates.chatting)
     else:
-        # Show available providers from PROVIDER_MODELS
-        # Clean input and validate
-        clean_provider = message.text.lower().strip("🏆🌐 ").strip()
-        
-        if clean_provider in PROVIDER_MODELS:
-            # Save settings to persistent storage
-            settings = await get_or_create_settings(message.from_user.id)
-            settings.update({
-                'current_provider': clean_provider,
-                'current_model': PROVIDER_MODELS[clean_provider]['name']
-            })
-            await storage.save_user_settings(message.from_user.id, settings)
-            
-            await message.answer(
-                f"Provider changed to {clean_provider.capitalize()}",
-                reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
-            )
-            await state.set_state(UserStates.chatting)
-            return
-        
-        # Show error with decorated names
-        decorated_providers = [
-            f"{'🏆 ' if p == 'deepseek' else '🌐 ' if p == 'perplexity' else ''}{p.capitalize()}"
-            for p in PROVIDER_MODELS.keys()
-        ]
         await message.answer(
-            f"Please select a provider from the menu: {', '.join(decorated_providers)}",
+            "Please select a model from the menu.",
             reply_markup=kb.get_provider_menu()
         )
 
@@ -210,9 +226,9 @@ async def btc_price(message: Message):
                 
                 await message.answer(
                     f"<b>Bitcoin Price:</b>\n\n"
-                    f"🔼 <b>24h:</b> ${high_24h:,.0f}\n"  # Minimalistic green arrow for high
-                    f"💰 <b>Now:</b> <code>${current_price:,.0f}</code>\n"  # Highlighted current price
-                    f"🔽 <b>24h:</b> ${low_24h:,.0f}\n"  # Minimalistic red arrow for low
+                    f"🔼 <b>24h:</b> ${high_24h:,.0f}\n"
+                    f"💰 <b>Now:</b> <code>${current_price:,.0f}</code>\n"
+                    f"🔽 <b>24h:</b> ${low_24h:,.0f}\n"
                     f"📊 <b>24h Volume:</b> {volume:,.2f} BTC\n\n"
                     f"🕒 <b>Time:</b> {time}",
                     reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id),
@@ -236,7 +252,7 @@ async def back_button(message: Message, state: FSMContext):
     )
     await state.set_state(UserStates.chatting)
 
-# Chat handler for normal messages (put this AFTER button handlers)
+# Chat handler for normal messages
 @router.message(UserStates.chatting)
 async def handle_message(message: Message, state: FSMContext):
     try:
@@ -246,7 +262,7 @@ async def handle_message(message: Message, state: FSMContext):
 
         # Get settings and history concurrently
         settings_task = storage.get_user_settings(message.from_user.id)
-        history_task = storage.get_chat_history(message.from_user.id, limit=20)  # Increased history limit
+        history_task = storage.get_chat_history(message.from_user.id, limit=20)
         
         settings, history = await asyncio.gather(settings_task, history_task)
         
@@ -257,8 +273,24 @@ async def handle_message(message: Message, state: FSMContext):
             )
             await state.set_state(UserStates.choosing_provider)
             return
+
+        # Map legacy provider names to new ones
+        legacy_to_new = {
+            'openai': 'gpt4',
+            'claude': 'sonnet',
+            'openrouter_deepseek': 'deepseek',
+            'groq': 'gpt4'  # Default to GPT-4 for Groq users
+        }
             
-        provider_name = settings['current_provider']
+        provider_name = legacy_to_new.get(settings['current_provider'], settings['current_provider'])
+        if provider_name not in PROVIDER_MODELS:
+            await message.answer(
+                "🔄 Your selected AI model is no longer available. Please choose a new one:",
+                reply_markup=kb.get_provider_menu()
+            )
+            await state.set_state(UserStates.choosing_provider)
+            return
+            
         model_config = PROVIDER_MODELS[provider_name]
         
         # Process message and image
@@ -292,7 +324,6 @@ async def handle_message(message: Message, state: FSMContext):
         ):
             if response_chunk and response_chunk.strip():
                 collected_response += response_chunk
-                logging.debug(f"Received chunk: {response_chunk}")
                 sanitized_response = sanitize_html_tags(collected_response)
                 if await rate_limiter.should_update_message(sanitized_response):
                     try:
@@ -300,35 +331,24 @@ async def handle_message(message: Message, state: FSMContext):
                         await asyncio.sleep(0.5)
                     except Exception as e:
                         if "message is not modified" not in str(e).lower():
-                            logging.warning(f"Message update error: {e}")
-                        continue
+                            logging.debug(f"Message update error: {e}")
 
-        # Save AI response to history
+        # Save final response
         if collected_response:
             await storage.add_to_history(message.from_user.id, collected_response, True)
-
-        # Handle final message update
-        if collected_response and collected_response.strip():
             final_response = sanitize_html_tags(collected_response)
-            if final_response.strip() != rate_limiter.current_message:
-                await MessageRateLimiter.retry_final_update(bot_response, final_response)
-            rate_limiter.current_message = None
-            logging.info(f"Completed processing message for user {user.id}")
-
-        # Log usage statistics
-        await storage.log_usage(
-            user_id=message.from_user.id,
-            provider=provider_name,
-            model=model_config['name'],
-            tokens=len(collected_response.split()),
-            has_image=bool(image_data)
-        )
+            try:
+                await bot_response.edit_text(final_response, parse_mode="HTML")
+            except Exception as e:
+                logging.debug(f"Final message update error: {e}")
 
     except Exception as e:
         logging.error(f"Error in handle_message: {e}", exc_info=True)
-        await message.answer("❌ An error occurred. Please try again later.")
+        await message.answer(
+            "❌ An error occurred. Please try again later.",
+            reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
+        )
 
-# Unauthorized handler should be last
 @router.message()
 async def handle_unauthorized(message: Message, state: FSMContext):
     """Handle unauthorized users and unhandled messages"""
@@ -341,15 +361,20 @@ async def handle_unauthorized(message: Message, state: FSMContext):
         )
         return
     
-    # For authorized users, check if we're in a state
     current_state = await state.get_state()
     if not current_state:
-        # If no state, set to chatting and process as a chat message
-        await state.set_state(UserStates.chatting)
-        await handle_message(message, state)
-    else:
-        # If in a state but message not handled by other handlers
-        await message.answer(
-            "Please use the menu buttons or send a message to chat.",
-            reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
-        )
+        settings = await storage.get_user_settings(message.from_user.id)
+        is_admin = str(message.from_user.id) == config.admin_id
+        keyboard = kb.get_main_menu(is_admin) if settings and settings.get('current_provider') else kb.get_provider_menu()
+        
+        # Update keyboard silently
+        try:
+            updated = await update_keyboard(message.bot, message.from_user.id, keyboard)
+            if not updated:
+                await message.answer("\u200b", reply_markup=keyboard)  # Zero-width space
+        except Exception as e:
+            logging.debug(f"Keyboard update error: {e}")
+            await message.answer("\u200b", reply_markup=keyboard)
+        
+        # Set state based on settings
+        await state.set_state(UserStates.chatting if settings and settings.get('current_provider') else UserStates.choosing_provider)

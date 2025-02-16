@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 import aiosqlite
 import os
@@ -7,7 +7,7 @@ import asyncio
 from contextlib import asynccontextmanager
 import json
 from collections import deque
-from .cache import CacheManager  # Assuming cache.py is created
+from .cache import CacheManager
 import hashlib
 
 class DatabasePool:
@@ -43,8 +43,8 @@ class DatabasePool:
     async def _optimize_db_settings(db):
         await db.execute("PRAGMA journal_mode=WAL")
         await db.execute("PRAGMA synchronous=NORMAL")
-        await db.execute("PRAGMA cache_size=-64000")  # 64MB cache
-        await db.execute("PRAGMA mmap_size=268435456")  # 256MB mmap
+        await db.execute("PRAGMA cache_size=-64000")
+        await db.execute("PRAGMA mmap_size=268435456")
         await db.execute("PRAGMA page_size=4096")
         await db.execute("PRAGMA temp_store=MEMORY")
 
@@ -67,7 +67,6 @@ class Storage:
         """Get chat history with optimized retrieval"""
         try:
             async with self._db_connect() as db:
-                # Get all recent messages in chronological order
                 async with db.execute("""
                     WITH LastMessages AS (
                         SELECT 
@@ -83,9 +82,9 @@ class Storage:
                         is_bot,
                         timestamp
                     FROM LastMessages
-                    WHERE rn <= ?  -- Take last N messages
+                    WHERE rn <= ?
                     ORDER BY timestamp ASC
-                """, (user_id, limit * 2)) as cursor:  # Double limit to include both user and bot messages
+                """, (user_id, limit * 2)) as cursor:
                     rows = await cursor.fetchall()
             
                 result = []
@@ -116,14 +115,12 @@ class Storage:
         
             async with self._db_connect() as db:
                 if image_data:
-                    # Only store latest image
                     await db.execute("""
                         UPDATE chat_history 
                         SET content = REPLACE(content, '[Image:', '[Old Image:')
                         WHERE user_id = ? AND content LIKE '%[Image:%'
                     """, (user_id,))
-                
-                    # Store image reference instead of full data
+                    
                     image_hash = hashlib.md5(image_data).hexdigest()
                     image_path = f"data/images/{image_hash}.jpg"
                     os.makedirs(os.path.dirname(image_path), exist_ok=True)
@@ -131,7 +128,6 @@ class Storage:
                         f.write(image_data)
                     content_str = f"{content_str}\n[Image: {image_hash}]"
             
-                # Add message with precise timestamp
                 await db.execute("""
                     INSERT INTO chat_history (
                         user_id, 
@@ -191,7 +187,6 @@ class Storage:
         async with self._lock:
             try:
                 async with self._db_connect() as db:
-                    # Create users table first
                     await db.execute("""
                         CREATE TABLE IF NOT EXISTS users (
                             user_id INTEGER PRIMARY KEY,
@@ -206,7 +201,6 @@ class Storage:
                         )
                     """)
 
-                    # Create chat_history table
                     await db.execute("""
                         CREATE TABLE IF NOT EXISTS chat_history (
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -218,7 +212,6 @@ class Storage:
                         )
                     """)
 
-                    # Create usage_stats table
                     await db.execute("""
                         CREATE TABLE IF NOT EXISTS usage_stats (
                             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -233,7 +226,6 @@ class Storage:
                         )
                     """)
 
-                    # Create indices
                     await db.execute("""
                         CREATE INDEX IF NOT EXISTS idx_chat_history_user_id_timestamp 
                         ON chat_history(user_id, timestamp DESC)
@@ -247,7 +239,6 @@ class Storage:
                         ON users(user_id, current_provider, current_model)
                     """)
 
-                    # Create images directory
                     os.makedirs("data/images", exist_ok=True)
 
                     await db.commit()
@@ -262,7 +253,6 @@ class Storage:
         async with self._lock:
             try:
                 async with self._db_connect() as db:
-                    # Update both settings JSON and individual columns
                     await db.execute("""
                         UPDATE users 
                         SET settings = ?,
@@ -280,87 +270,6 @@ class Storage:
             except Exception as e:
                 logging.error(f"Error saving user settings: {e}")
                 raise
-
-    async def add_message(self, user_id: int, content: str, is_bot: bool, image_data: Optional[bytes] = None):
-        await self.ensure_initialized()
-        async with self._lock:
-            try:
-                async with self._db_connect() as db:
-                    # If this is a new message with an image, remove previous image messages
-                    if image_data:
-                        await db.execute("""
-                            UPDATE chat_history 
-                            SET image_data = NULL 
-                            WHERE user_id = ? AND image_data IS NOT NULL
-                        """, (user_id,))
-                    
-                    await db.execute(
-                        """INSERT INTO chat_history (user_id, content, is_bot) 
-                           VALUES (?, ?, ?)""",
-                        (user_id, content, is_bot)
-                    )
-                    await db.commit()
-            except Exception as e:
-                logging.error(f"Error adding message: {e}")
-                raise
-    async def get_user(self, user_id: int) -> Dict[str, Any]:
-        """Get user data from the database"""
-        try:
-            async with self._db_connect() as db:
-                async with db.execute("""
-                    SELECT 
-                        user_id,
-                        username,
-                        current_provider,
-                        current_model,
-                        settings,
-                        last_activity
-                    FROM users 
-                    WHERE user_id = ?
-                """, (user_id,)) as cursor:
-                    row = await cursor.fetchone()
-                    
-                    if row:
-                        return {
-                            "user_id": row[0],
-                            "username": row[1],
-                            "current_provider": row[2],  # Default to claude if None
-                            "current_model": row[3],  # Default model
-                            "settings": row[4],
-                            "last_activity": row[5]
-                        }
-                    
-                    # If user doesn't exist, create new user with default settings
-                    await db.execute("""
-                        INSERT INTO users (
-                            user_id, 
-                            current_provider,
-                            current_model,
-                            settings
-                        ) VALUES (?, '{}')
-                    """, (user_id,))
-                    await db.commit()
-                    
-                    return {
-                        "user_id": user_id,
-                        "username": None,
-                        "current_provider": None,  # Default provider with no value
-                        "current_model": None,      # Default model with no value
-                        "settings": "{}",
-                        "last_activity": None
-                    }
-                    
-        except Exception as e:
-            logging.error(f"Error getting user data: {e}")
-            # Return default values if there's an error
-            return {
-                "user_id": user_id,
-                "username": None,
-                "current_provider": None,
-                "current_model": None,
-                "settings": "{}",
-                "last_activity": None
-            }
 
     async def ensure_user_exists(self, user_id: int, username: str = None, first_name: str = None):
         """Ensure user exists in database and update user info"""
@@ -415,55 +324,63 @@ class Storage:
 
     async def get_usage_stats(self, period: str = 'month') -> Dict[str, Any]:
         """Get usage statistics for all users"""
-        async with self._lock:
-            try:
-                async with self._db_connect() as db:
-                    # Get total users
-                    async with db.execute("SELECT COUNT(DISTINCT user_id) FROM users") as cursor:
-                        total_users = (await cursor.fetchone())[0]
+        try:
+            async with self._db_connect() as db:
+                async with db.execute("SELECT COUNT(DISTINCT user_id) FROM users") as cursor:
+                    total_users = (await cursor.fetchone())[0]
 
-                    # Get active users in the last 24 hours
-                    async with db.execute("""
-                        SELECT COUNT(DISTINCT user_id) FROM users 
-                        WHERE datetime(last_activity) > datetime('now', '-1 day')
-                    """) as cursor:
-                        active_users_24h = (await cursor.fetchone())[0]
+                async with db.execute("""
+                    SELECT COUNT(DISTINCT user_id) FROM users 
+                    WHERE datetime(last_activity) > datetime('now', '-1 day')
+                """) as cursor:
+                    active_users_24h = (await cursor.fetchone())[0]
 
-                    # Get monthly usage per provider
-                    async with db.execute("""
-                        SELECT 
-                            provider,
-                            COUNT(DISTINCT user_id) as unique_users,
-                            SUM(message_count) as total_messages,
-                            SUM(token_count) as total_tokens,
-                            SUM(image_count) as total_images
-                        FROM usage_stats 
-                        WHERE datetime(timestamp) > datetime('now', '-30 day')
-                        GROUP BY provider
-                    """) as cursor:
-                        provider_stats = await cursor.fetchall()
+                async with db.execute("""
+                    SELECT 
+                        provider,
+                        COUNT(DISTINCT user_id) as unique_users,
+                        SUM(message_count) as total_messages,
+                        SUM(token_count) as total_tokens,
+                        SUM(image_count) as total_images
+                    FROM usage_stats 
+                    WHERE datetime(timestamp) > datetime('now', '-30 day')
+                    GROUP BY provider
+                """) as cursor:
+                    provider_stats = await cursor.fetchall()
 
-                    # Get top users
-                    async with db.execute("""
-                        SELECT 
-                            u.user_id,
-                            SUM(us.message_count) as total_messages,
-                            COUNT(DISTINCT us.provider) as providers_used
-                        FROM users u
-                        JOIN usage_stats us ON u.user_id = us.user_id
-                        WHERE datetime(us.timestamp) > datetime('now', '-30 day')
-                        GROUP BY u.user_id
-                        ORDER BY total_messages DESC
-                        LIMIT 5
-                    """) as cursor:
-                        top_users = await cursor.fetchall()
+                async with db.execute("""
+                    SELECT 
+                        u.user_id,
+                        SUM(us.message_count) as total_messages,
+                        COUNT(DISTINCT us.provider) as providers_used
+                    FROM users u
+                    JOIN usage_stats us ON u.user_id = us.user_id
+                    WHERE datetime(us.timestamp) > datetime('now', '-30 day')
+                    GROUP BY u.user_id
+                    ORDER BY total_messages DESC
+                    LIMIT 5
+                """) as cursor:
+                    top_users = await cursor.fetchall()
 
-                    return {
-                        "total_users": total_users,
-                        "active_users_24h": active_users_24h,
-                        "provider_stats": provider_stats,
-                        "top_users": top_users
-                    }
-            except Exception as e:
-                logging.error(f"Error getting usage stats: {e}")
-                return {}
+                return {
+                    "total_users": total_users,
+                    "active_users_24h": active_users_24h,
+                    "provider_stats": provider_stats,
+                    "top_users": top_users
+                }
+        except Exception as e:
+            logging.error(f"Error getting usage stats: {e}")
+            return {}
+
+    async def get_all_users(self) -> List[Tuple[int, str]]:
+        """Get all user IDs and usernames from the database."""
+        try:
+            async with self._db_connect() as db:
+                async with db.execute("""
+                    SELECT user_id, username 
+                    FROM users
+                """) as cursor:
+                    return await cursor.fetchall()
+        except Exception as e:
+            logging.error(f"Error getting all users: {e}")
+            return []
