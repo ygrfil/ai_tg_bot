@@ -2,6 +2,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 import aiosqlite
 import os
+from functools import wraps
 import logging
 import asyncio
 from contextlib import asynccontextmanager
@@ -11,49 +12,135 @@ from .cache import CacheManager
 import hashlib
 
 class DatabasePool:
-    def __init__(self, db_path: str, max_connections: int = 5):
+    def __init__(self, db_path: str, max_connections: int = 10, min_connections: int = 2):
         self.db_path = db_path
         self.max_connections = max_connections
+        self.min_connections = min_connections
         self.pool = deque()
         self.lock = asyncio.Lock()
         self._creating = 0
+        self._active = 0
+        self._last_cleanup = 0
+        self.stats = {"hits": 0, "misses": 0, "timeouts": 0}
 
-    async def acquire(self):
-        async with self.lock:
-            while True:
+    async def initialize(self):
+        """Pre-initialize minimum connections"""
+        for _ in range(self.min_connections):
+            db = await self._create_connection()
+            self.pool.append(db)
+
+    async def acquire(self, timeout: float = 5.0):
+        start_time = asyncio.get_event_loop().time()
+        while True:
+            async with self.lock:
                 if self.pool:
-                    return self.pool.popleft()
-                if self._creating < self.max_connections:
+                    self.stats["hits"] += 1
+                    conn = self.pool.popleft()
+                    self._active += 1
+                    return conn
+                
+                if self._creating + self._active < self.max_connections:
                     self._creating += 1
+                    self.stats["misses"] += 1
                     break
-                await asyncio.sleep(0.1)
+                
+                if asyncio.get_event_loop().time() - start_time > timeout:
+                    self.stats["timeouts"] += 1
+                    raise TimeoutError("Connection pool timeout")
+                
+            await asyncio.sleep(0.1)
 
         try:
-            db = await aiosqlite.connect(self.db_path)
-            await self._optimize_db_settings(db)
+            db = await self._create_connection()
             return db
         finally:
             self._creating -= 1
+            self._active += 1
 
     async def release(self, db):
         async with self.lock:
+            self._active -= 1
+            current_time = asyncio.get_event_loop().time()
+            
+            # Periodic cleanup of idle connections
+            if current_time - self._last_cleanup > 60:  # Every minute
+                while len(self.pool) > self.min_connections:
+                    idle_conn = self.pool.pop()
+                    await idle_conn.close()
+                self._last_cleanup = current_time
+            
             self.pool.append(db)
+
+    async def _create_connection(self):
+        db = await aiosqlite.connect(self.db_path)
+        await self._optimize_db_settings(db)
+        return db
 
     @staticmethod
     async def _optimize_db_settings(db):
         await db.execute("PRAGMA journal_mode=WAL")
         await db.execute("PRAGMA synchronous=NORMAL")
-        await db.execute("PRAGMA cache_size=-64000")
-        await db.execute("PRAGMA mmap_size=268435456")
+        await db.execute("PRAGMA cache_size=-64000")  # 64MB cache
+        await db.execute("PRAGMA mmap_size=268435456")  # 256MB mmap
         await db.execute("PRAGMA page_size=4096")
         await db.execute("PRAGMA temp_store=MEMORY")
+        await db.execute("PRAGMA busy_timeout=5000")  # 5 second timeout
+
+def with_retries(max_retries=3, base_delay=0.1):
+    """Decorator for automatic retry with exponential backoff"""
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            last_error = None
+            for attempt in range(max_retries):
+                try:
+                    return await func(*args, **kwargs)
+                except Exception as e:
+                    last_error = e
+                    if attempt < max_retries - 1:
+                        delay = base_delay * (2 ** attempt)
+                        logging.warning(f"Retry {attempt + 1}/{max_retries} after error: {e}")
+                        await asyncio.sleep(delay)
+            raise last_error
+        return wrapper
+    return decorator
 
 class Storage:
     def __init__(self, db_path: str = "data/chat.db"):
         self.db_path = db_path
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
-        self.pool = DatabasePool(db_path)
+        self.pool = DatabasePool(db_path, max_connections=10)
         self._lock = asyncio.Lock()
+        self.cache = CacheManager(default_ttl=300, max_size_mb=100)
+        self._batch_size = 50
+        self._initialize_cache()
+        self._initialized = False
+
+    async def _ensure_pool_initialized(self):
+        """Ensure database pool is initialized"""
+        if not hasattr(self.pool, '_initialized'):
+            await self.pool.initialize()
+            self.pool._initialized = True
+
+    def _initialize_cache(self):
+        """Initialize cache regions with specific TTLs"""
+        self.cache.create_region('user_settings', ttl=300)   # 5 minutes for user settings
+        self.cache.create_region('chat_history', ttl=60)     # 1 minute for chat history
+        self.cache.create_region('usage_stats', ttl=600)     # 10 minutes for stats
+        self.cache.create_region('images', ttl=1800)         # 30 minutes for images
+
+    async def process_users_batch(self, users: List[int], processor_func, batch_size: int = None) -> List[Any]:
+        """Process users in batches to avoid overwhelming the database"""
+        batch_size = batch_size or self._batch_size
+        results = []
+        for i in range(0, len(users), batch_size):
+            batch = users[i:i + batch_size]
+            batch_results = await asyncio.gather(
+                *[processor_func(user_id) for user_id in batch],
+                return_exceptions=True
+            )
+            results.extend([r for r in batch_results if not isinstance(r, Exception)])
+        return results
 
     @asynccontextmanager
     async def _db_connect(self):
@@ -63,26 +150,36 @@ class Storage:
         finally:
             await self.pool.release(db)
 
+    @with_retries(max_retries=3)
     async def get_chat_history(self, user_id: int, limit: int = 10) -> List[Dict[str, Any]]:
-        """Get chat history with optimized retrieval"""
+        """Get chat history with caching and optimized retrieval"""
+        await self.ensure_initialized()
+        cache_key = f"history_{user_id}_{limit}"
+        
+        # Try to get from cache first
+        cached_result = await self.cache.get('chat_history', cache_key)
+        if cached_result:
+            return cached_result
+
         try:
             async with self._db_connect() as db:
                 async with db.execute("""
                     WITH LastMessages AS (
-                        SELECT 
+                        SELECT
                             content,
                             is_bot,
                             timestamp,
-                            ROW_NUMBER() OVER (ORDER BY timestamp DESC) as rn
+                            ROW_NUMBER() OVER (ORDER BY timestamp DESC) as time_rank
                         FROM chat_history
                         WHERE user_id = ?
                     )
-                    SELECT 
+                    SELECT
                         content,
                         is_bot,
+                        timestamp,
                         timestamp
                     FROM LastMessages
-                    WHERE rn <= ?
+                    WHERE time_rank <= ?
                     ORDER BY timestamp ASC
                 """, (user_id, limit * 2)) as cursor:
                     rows = await cursor.fetchall()
@@ -92,10 +189,13 @@ class Storage:
                     message = {
                         "content": row[0],
                         "is_bot": bool(row[1]),
+                        "timestamp": row[2],
                         "timestamp": row[2]
                     }
                     result.append(message)
-            
+
+                # Cache the result
+                await self.cache.set('chat_history', cache_key, result)
                 return result
             
         except Exception as e:
@@ -162,20 +262,22 @@ class Storage:
 
     async def get_user_settings(self, user_id: int) -> Optional[dict]:
         """Get user settings"""
+        await self.ensure_initialized()
         try:
             async with self._db_connect() as db:
                 async with db.execute("""
                     SELECT settings, current_provider, current_model
-                    FROM users 
+                    FROM users
                     WHERE user_id = ?
                 """, (user_id,)) as cursor:
                     row = await cursor.fetchone()
                     if row:
+                        import json
                         settings = json.loads(row[0]) if row[0] else {}
-                        settings.update({
-                            'current_provider': row[1],
-                            'current_model': row[2]
-                        })
+                        if row[1]:
+                            settings['current_provider'] = row[1]
+                        if row[2]:
+                            settings['current_model'] = row[2]
                         return settings
                     return None
         except Exception as e:
@@ -184,8 +286,12 @@ class Storage:
 
     async def ensure_initialized(self):
         """Initialize the database with all required tables"""
+        if self._initialized:
+            return
+
         async with self._lock:
             try:
+                await self._ensure_pool_initialized()
                 async with self._db_connect() as db:
                     await db.execute("""
                         CREATE TABLE IF NOT EXISTS users (
@@ -194,7 +300,7 @@ class Storage:
                             first_name TEXT,
                             current_provider TEXT,
                             current_model TEXT,
-                            settings TEXT,
+                            settings TEXT DEFAULT '{}',
                             last_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -242,6 +348,7 @@ class Storage:
                     os.makedirs("data/images", exist_ok=True)
 
                     await db.commit()
+                    self._initialized = True
 
             except Exception as e:
                 logging.error(f"Database initialization error: {e}", exc_info=True)
@@ -254,17 +361,18 @@ class Storage:
             try:
                 async with self._db_connect() as db:
                     await db.execute("""
-                        UPDATE users 
-                        SET settings = ?,
-                            current_provider = ?,
-                            current_model = ?,
+                        INSERT INTO users (user_id, settings, current_provider, current_model, updated_at)
+                        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+                        ON CONFLICT(user_id) DO UPDATE SET
+                            settings = excluded.settings,
+                            current_provider = excluded.current_provider,
+                            current_model = excluded.current_model,
                             updated_at = CURRENT_TIMESTAMP
-                        WHERE user_id = ?
                     """, (
+                        user_id,
                         json.dumps(settings),
                         settings.get('current_provider'),
-                        settings.get('current_model'),
-                        user_id
+                        settings.get('current_model')
                     ))
                     await db.commit()
             except Exception as e:

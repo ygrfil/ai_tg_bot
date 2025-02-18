@@ -24,6 +24,14 @@ storage = Storage("data/chat.db")
 config = Config.from_env()
 rate_limiter = MessageRateLimiter()
 
+# Initialize database on startup
+async def init_storage():
+    await storage.ensure_initialized()
+
+# Create event loop and run initialization
+loop = asyncio.get_event_loop()
+loop.run_until_complete(init_storage())
+
 class UserStates(StatesGroup):
     """States for user interaction with the bot."""
     chatting = State()         # Default state for general chat
@@ -371,10 +379,10 @@ async def handle_unauthorized(message: Message, state: FSMContext):
         try:
             updated = await update_keyboard(message.bot, message.from_user.id, keyboard)
             if not updated:
-                await message.answer("\u200b", reply_markup=keyboard)  # Zero-width space
+                await message.answer("Please select an option:", reply_markup=keyboard)
         except Exception as e:
             logging.debug(f"Keyboard update error: {e}")
-            await message.answer("\u200b", reply_markup=keyboard)
+            await message.answer("Please select an option:", reply_markup=keyboard)
         
         # Set state based on settings
         await state.set_state(UserStates.chatting if settings and settings.get('current_provider') else UserStates.choosing_provider)
