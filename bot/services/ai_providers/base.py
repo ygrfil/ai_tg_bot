@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional, List, Dict, Any, AsyncGenerator
 import base64
-from bot.config import Config
+from bot.config import Config, DEFAULT_SYSTEM_PROMPT
 import re
 import logging
 from openai import AsyncOpenAI
@@ -12,17 +12,10 @@ class BaseAIProvider(ABC):
     def __init__(self, api_key: str, config: Config = None):
         self.api_key = api_key
         self.config = config
-        self.config = config
 
     def _get_system_prompt(self, model_name: str) -> str:
         """Get the system prompt with context maintenance instructions"""
-        base_prompt = """You are a helpful AI assistant."""
-        context_instructions = """
-        Maintain full context of the conversation and provide accurate, consistent responses. 
-        When dealing with calculations or sequential operations, always consider the entire conversation history.
-        Format responses using HTML tags and emojis appropriately.
-        """
-        return f"{base_prompt}\n{context_instructions}"
+        return DEFAULT_SYSTEM_PROMPT
 
     @abstractmethod
     async def chat_completion_stream(
