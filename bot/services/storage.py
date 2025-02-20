@@ -1,5 +1,5 @@
 from typing import Dict, Any, List, Optional, Tuple
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 import aiosqlite
 import os
 from functools import wraps
@@ -151,52 +151,57 @@ class Storage:
             await self.pool.release(db)
 
     @with_retries(max_retries=3)
-    async def get_chat_history(self, user_id: int, limit: int = 10) -> List[Dict[str, Any]]:
-        """Get chat history with caching and optimized retrieval"""
+    async def get_chat_history(self, user_id: int, limit: int = 5) -> List[Dict[str, Any]]:
+        """Get recent chat history for context"""
         await self.ensure_initialized()
-        cache_key = f"history_{user_id}_{limit}"
+        cache_key = f"history_{user_id}"
         
-        # Try to get from cache first
-        cached_result = await self.cache.get('chat_history', cache_key)
-        if cached_result:
-            return cached_result
-
         try:
             async with self._db_connect() as db:
+                # First check if we need to clear old history
                 async with db.execute("""
-                    WITH LastMessages AS (
-                        SELECT
-                            content,
-                            is_bot,
-                            timestamp,
-                            ROW_NUMBER() OVER (ORDER BY timestamp DESC) as time_rank
+                    SELECT timestamp
+                    FROM chat_history
+                    WHERE user_id = ?
+                    ORDER BY timestamp DESC
+                    LIMIT 1
+                """, (user_id,)) as cursor:
+                    last_msg = await cursor.fetchone()
+                    if last_msg:
+                        last_ts = datetime.fromisoformat(last_msg[0])
+                        if last_ts.tzinfo is None:
+                            last_ts = last_ts.replace(tzinfo=timezone.utc)
+                        if datetime.now(timezone.utc) - last_ts > timedelta(hours=2):
+                            await self.clear_user_history(user_id)
+                            return []
+
+                # Get recent messages
+                async with db.execute("""
+                    SELECT content, is_bot, timestamp
+                    FROM (
+                        SELECT content, is_bot, timestamp
                         FROM chat_history
                         WHERE user_id = ?
-                    )
-                    SELECT
-                        content,
-                        is_bot,
-                        timestamp,
-                        timestamp
-                    FROM LastMessages
-                    WHERE time_rank <= ?
+                        ORDER BY timestamp DESC
+                        LIMIT ?
+                    ) sub
                     ORDER BY timestamp ASC
-                """, (user_id, limit * 2)) as cursor:
+                """, (user_id, limit)) as cursor:
                     rows = await cursor.fetchall()
-            
-                result = []
-                for row in rows:
-                    message = {
-                        "content": row[0],
-                        "is_bot": bool(row[1]),
-                        "timestamp": row[2],
-                        "timestamp": row[2]
-                    }
-                    result.append(message)
+                    
+                    if not rows:
+                        return []
 
-                # Cache the result
-                await self.cache.set('chat_history', cache_key, result)
-                return result
+                    # Convert to list of messages (already in chronological order)
+                    result = [
+                        {
+                            "content": row[0],
+                            "is_bot": bool(row[1]),
+                            "timestamp": row[2]
+                        }
+                        for row in rows
+                    ]
+                    return result
             
         except Exception as e:
             logging.error(f"Error getting chat history: {e}", exc_info=True)
@@ -230,32 +235,38 @@ class Storage:
             
                 await db.execute("""
                     INSERT INTO chat_history (
-                        user_id, 
-                        content, 
-                        is_bot, 
+                        user_id,
+                        content,
+                        is_bot,
                         timestamp
                     ) VALUES (
-                        ?, ?, ?, 
-                        strftime('%Y-%m-%d %H:%M:%f', 'now')
+                        ?, ?, ?,
+                        datetime('now')
                     )
                 """, (user_id, content_str, 1 if is_bot else 0))
-
                 await db.commit()
-            
+
+                # Invalidate the chat history cache for this user
+                cache_key = f"history_{user_id}"
+                await self.cache.set('chat_history', cache_key, None)
         except Exception as e:
             logging.error(f"Error adding to chat history: {e}", exc_info=True)
             raise
 
-    async def clear_user_history(self, user_id: int):
-        """Clear user history"""
+    async def clear_user_history(self, user_id: int) -> None:
+        """Clear user history and invalidate cache"""
         try:
+            # Delete messages from DB
             async with self._db_connect() as db:
                 await db.execute(
                     "DELETE FROM chat_history WHERE user_id = ?",
                     (user_id,)
                 )
                 await db.commit()
-                
+
+            # Invalidate cache for this user
+            cache_key = f"history_{user_id}"
+            await self.cache.set('chat_history', cache_key, None)
         except Exception as e:
             logging.error(f"Error clearing user history: {e}")
             raise
