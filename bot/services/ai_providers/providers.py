@@ -3,7 +3,7 @@ PROVIDER_MODELS = {
         "name": "anthropic/claude-3.5-sonnet",
         "vision": True
     },
-    "sonar-online": {
+    "online": {
         "name": "perplexity/sonar:online",
         "vision": False
     },

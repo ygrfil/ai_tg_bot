@@ -28,7 +28,7 @@ def get_provider_menu() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
     
     model_buttons = [
-        ["Sonnet", "Sonar🌐"],
+        ["Sonnet", "Online🌐"],
         ["o3-mini", "R1-1776"]
     ]
     
