@@ -28,8 +28,8 @@ def get_provider_menu() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
     
     model_buttons = [
-        ["Sonnet", "o3-mini🌐"],
-        ["o3-mini", "🏆 Deepseek"]
+        ["Sonnet", "Sonar🌐"],
+        ["o3-mini", "R1-1776"]
     ]
     
     for row in model_buttons:

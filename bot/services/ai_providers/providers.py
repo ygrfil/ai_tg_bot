@@ -3,16 +3,16 @@ PROVIDER_MODELS = {
         "name": "anthropic/claude-3.5-sonnet",
         "vision": True
     },
-    "o3-mini-online": {
-        "name": "openai/o3-mini:online",
+    "sonar-online": {
+        "name": "perplexity/sonar:online",
         "vision": False
     },
     "o3-mini": {
-        "name": "openai/o3-mini",
+        "name": "openai/o3-mini-high",
         "vision": True
     },
-    "deepseek": {
-        "name": "deepseek/deepseek-r1",
+    "r1-1776": {
+        "name": "perplexity/r1-1776",
         "vision": False
     }
 }
