@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Optional, List, Dict, Any, AsyncGenerator
 import base64
-from bot.config import Config, DEFAULT_SYSTEM_PROMPT
+from bot.config import Config
+from bot.config.prompts import get_system_prompt
 import re
 import logging
 from openai import AsyncOpenAI
@@ -15,7 +16,7 @@ class BaseAIProvider(ABC):
 
     def _get_system_prompt(self, model_name: str) -> str:
         """Get the system prompt with context maintenance instructions"""
-        return DEFAULT_SYSTEM_PROMPT
+        return get_system_prompt(model_name)
 
     @abstractmethod
     async def chat_completion_stream(

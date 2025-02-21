@@ -10,6 +10,7 @@ from bot.config import Config
 from bot.handlers import admin, user
 from bot.services.storage import Storage
 from bot.keyboards import reply as kb
+from bot.utils.polling import PollingMiddleware
 
 async def on_startup(bot: Bot, storage: Storage):
     """Initialize bot on startup"""
@@ -71,6 +72,9 @@ async def main():
     # Register middlewares
     dp.message.middleware(ChatActionMiddleware())
     
+    # Add polling middleware for rate limit handling
+    dp.update.outer_middleware(PollingMiddleware(config.polling_settings))
+    
     # Register routers
     dp.include_router(admin.router)  # Admin router first
     dp.include_router(user.router)   # User router second
@@ -80,12 +84,21 @@ async def main():
     print("[INFO] Access Control:")
     print(f"- Admin ID: {config.admin_id}")
     print(f"- Allowed Users: {len(config.allowed_user_ids)} users")
+    print("\n[INFO] Polling Configuration:")
+    print(f"- Timeout: {config.polling_settings['timeout']} seconds")
+    print(f"- Interval: {config.polling_settings['poll_interval']} seconds")
+    print(f"- Max Backoff: {config.polling_settings['backoff']['max_delay']} seconds")
     
     # Initialize bot on startup
     await on_startup(bot, settings_storage)
     
-    # Start polling
-    await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+    # Start polling with configured settings
+    await dp.start_polling(
+        bot,
+        allowed_updates=dp.resolve_used_update_types(),
+        polling_timeout=config.polling_settings["timeout"],
+        polling_interval=config.polling_settings["poll_interval"]
+    )
 
 if __name__ == "__main__":
     asyncio.run(main())
