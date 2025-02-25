@@ -1,6 +1,6 @@
 PROVIDER_MODELS = {
     "sonnet": {
-        "name": "anthropic/claude-3.5-sonnet",
+        "name": "anthropic/claude-3.7-sonnet",
         "vision": True
     },
     "online": {
