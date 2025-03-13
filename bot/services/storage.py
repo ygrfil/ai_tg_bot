@@ -10,6 +10,7 @@ import json
 from collections import deque
 from .cache import CacheManager
 import hashlib
+import re
 
 class DatabasePool:
     def __init__(self, db_path: str, max_connections: int = 10, min_connections: int = 2):
@@ -214,7 +215,7 @@ class Storage:
         is_bot: bool,
         image_data: Optional[bytes] = None
     ) -> None:
-        """Add message to history with optimized storage"""
+        """Add message to history with optimized storage and try to extract user name"""
         try:
             content_str = str(content).strip() if content else ""
         
@@ -245,6 +246,54 @@ class Storage:
                     )
                 """, (user_id, content_str, 1 if is_bot else 0))
                 await db.commit()
+                
+                # Try to extract user name if it's a bot response or user message
+                if is_bot:
+                    # Check if this bot message might contain a name reference
+                    name_patterns = [
+                        r"(?:Hello|Hi|Hey|Thanks|Thank you),? ([A-Z][a-z]+)",
+                        r"(?:Hello|Hi|Hey|Thanks|Thank you) ([A-Z][a-z]+)",
+                        r"(?:Nice to meet you|Good to see you),? ([A-Z][a-z]+)",
+                        r"(?:Welcome back|Welcome),? ([A-Z][a-z]+)",
+                        r"(?:I understand|I see|I agree|I hear you),? ([A-Z][a-z]+)"
+                    ]
+                    
+                    for pattern in name_patterns:
+                        match = re.search(pattern, content_str)
+                        if match:
+                            possible_name = match.group(1)
+                            # Update the user's first_name in the database
+                            await db.execute("""
+                                UPDATE users
+                                SET first_name = ?
+                                WHERE user_id = ? AND (first_name IS NULL OR first_name = '')
+                            """, (possible_name, user_id))
+                            await db.commit()
+                            break
+                else:
+                    # Check if user's message contains a self-introduction
+                    user_patterns = [
+                        r"(?:I am|I'm|my name is|call me|this is) ([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)",
+                        r"(?:Hello|Hi|Hey)(?:,|!) (?:I am|I'm|my name is|this is) ([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)",
+                        r"(?:Hello|Hi|Hey)(?:,|!) ([A-Z][a-z]+(?:\s[A-Z][a-z]+)?) (?:here|speaking)",
+                        r"(?:Regards|Best|Sincerely|Thanks),?\s+([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)"
+                    ]
+                    
+                    for pattern in user_patterns:
+                        match = re.search(pattern, content_str)
+                        if match:
+                            possible_name = match.group(1).strip()
+                            
+                            # Validate the name (basic check)
+                            if len(possible_name) > 2 and len(possible_name) < 30:
+                                # Update the user's name in the database
+                                await db.execute("""
+                                    UPDATE users
+                                    SET first_name = ?
+                                    WHERE user_id = ? AND (first_name IS NULL OR first_name = '')
+                                """, (possible_name, user_id))
+                                await db.commit()
+                                break
 
                 # Invalidate the chat history cache for this user
                 cache_key = f"history_{user_id}"
@@ -503,3 +552,33 @@ class Storage:
         except Exception as e:
             logging.error(f"Error getting all users: {e}")
             return []
+
+    async def get_user_display_name(self, user_id: int) -> str:
+        """Get a user's display name from the database"""
+        try:
+            async with self._db_connect() as db:
+                async with db.execute("""
+                    SELECT username, first_name
+                    FROM users
+                    WHERE user_id = ?
+                """, (user_id,)) as cursor:
+                    user_info = await cursor.fetchone()
+                    
+                    if user_info:
+                        username, first_name = user_info
+                        display_parts = []
+                        
+                        if username:
+                            display_parts.append(f"@{username}")
+                        if first_name:
+                            display_parts.append(first_name)
+                            
+                        if display_parts:
+                            return " | ".join(display_parts)
+                        else:
+                            return f"User {user_id}"
+                    else:
+                        return f"User {user_id}"
+        except Exception as e:
+            logging.error(f"Error getting user display name: {e}")
+            return f"User {user_id}"

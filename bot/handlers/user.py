@@ -37,7 +37,9 @@ class UserStates(StatesGroup):
     chatting = State()         # Default state for general chat
     choosing_provider = State() # State when user is selecting AI provider
     admin_menu = State()       # State for admin menu
-    broadcasting = State()     # New state for broadcasting messages
+    broadcasting = State()     # State for broadcasting messages
+    user_management = State()  # State for user management
+    settings_menu = State()    # State for bot settings
 
 # Helper functions
 def is_user_authorized(user_id: int) -> bool:
@@ -50,7 +52,8 @@ async def get_or_create_settings(user_id: int, message: Optional[Message] = None
     if message and message.from_user:
         await storage.ensure_user_exists(
             user_id=user_id,
-            username=message.from_user.username
+            username=message.from_user.username,
+            first_name=message.from_user.first_name
         )
     return await storage.get_user_settings(user_id)
 
@@ -91,21 +94,31 @@ async def cmd_start(message: Message, state: FSMContext):
     await state.clear()  # Clear any existing state
     await state.set_state(UserStates.chatting)  # Set initial state
     
-    if settings and settings.get('current_provider'):
-        await message.answer(
-            f"Welcome, {hbold(message.from_user.full_name)}!\n"
-            f"Current AI: {settings['current_provider']} "
-            f"({settings['current_model']})\n\n"
-            "You can start chatting now or use the menu buttons below.",
-            reply_markup=kb.get_main_menu(is_admin=is_admin)
+    # Set default model if no provider is selected
+    if not settings or 'current_provider' not in settings:
+        # Use o3-mini as the default model
+        default_provider = "o3-mini"
+        settings = settings or {}
+        settings['current_provider'] = default_provider
+        settings['current_model'] = PROVIDER_MODELS[default_provider]['name']
+        await storage.save_user_settings(message.from_user.id, settings)
+        
+        # Log model selection as usage
+        await storage.log_usage(
+            user_id=message.from_user.id,
+            provider=default_provider,
+            model=PROVIDER_MODELS[default_provider]['name'],
+            tokens=0,
+            has_image=False
         )
-    else:
-        await message.answer(
-            f"Welcome, {hbold(message.from_user.full_name)}!\n"
-            "Please select an AI provider to start chatting:",
-            reply_markup=kb.get_provider_menu()
-        )
-        await state.set_state(UserStates.choosing_provider)
+        
+    await message.answer(
+        f"Welcome, {hbold(message.from_user.full_name)}!\n"
+        f"Current AI: {settings['current_provider']} "
+        f"({settings['current_model']})\n\n"
+        "You can start chatting now or use the menu buttons below.",
+        reply_markup=kb.get_main_menu(is_admin=is_admin)
+    )
 
 # Button handlers (put these BEFORE the general message handler)
 @router.message(UserStates.choosing_provider)
@@ -136,6 +149,15 @@ async def handle_provider_choice(message: Message, state: FSMContext):
         await storage.save_user_settings(
             message.from_user.id,
             settings
+        )
+        
+        # Log model selection as usage
+        await storage.log_usage(
+            user_id=message.from_user.id,
+            provider=provider,
+            model=PROVIDER_MODELS[provider]['name'],
+            tokens=0,
+            has_image=False
         )
         
         await message.answer(
@@ -180,20 +202,37 @@ async def info_button(message: Message, state: FSMContext):
     
     settings = await storage.get_user_settings(message.from_user.id)
     
-    if settings:
+    if not settings or 'current_provider' not in settings:
+        # Set default model if no provider is selected
+        default_provider = "o3-mini"
+        settings = settings or {}
+        settings['current_provider'] = default_provider
+        settings['current_model'] = PROVIDER_MODELS[default_provider]['name']
+        await storage.save_user_settings(message.from_user.id, settings)
+        
+        # Log model selection as usage
+        await storage.log_usage(
+            user_id=message.from_user.id,
+            provider=default_provider,
+            model=PROVIDER_MODELS[default_provider]['name'],
+            tokens=0,
+            has_image=False
+        )
+        
+        await message.answer(
+            f"ℹ️ Using default AI configuration:\n\n"
+            f"Provider: {settings['current_provider']}\n"
+            f"Model: {settings['current_model']}\n\n"
+            f"You can change it using the '🤖 Choose AI Model' button.",
+            reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
+        )
+    else:
         await message.answer(
             f"ℹ️ Current Configuration:\n\n"
             f"Provider: {settings['current_provider']}\n"
             f"Model: {settings['current_model']}",
             reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
         )
-    else:
-        await message.answer(
-            "ℹ️ No AI provider selected yet.\n"
-            "Please choose your provider:",
-            reply_markup=kb.get_provider_menu()
-        )
-        await state.set_state(UserStates.choosing_provider)
 
 @router.message(F.text == "🗑 Clear History")
 async def clear_history(message: Message):
@@ -268,6 +307,13 @@ async def handle_message(message: Message, state: FSMContext):
         if str(user.id) not in config.allowed_user_ids:
             return
 
+        # Update user information with each message
+        await storage.ensure_user_exists(
+            user_id=user.id,
+            username=user.username,
+            first_name=user.first_name
+        )
+
         # Get settings and history concurrently
         settings_task = storage.get_user_settings(message.from_user.id)
         history_task = storage.get_chat_history(message.from_user.id, limit=20)
@@ -275,12 +321,26 @@ async def handle_message(message: Message, state: FSMContext):
         settings, history = await asyncio.gather(settings_task, history_task)
         
         if not settings or 'current_provider' not in settings:
-            await message.answer(
-                "🤖 Please select an AI Model first:",
-                reply_markup=kb.get_provider_menu()
+            # Set default model if no provider is selected
+            default_provider = "o3-mini"
+            settings = settings or {}
+            settings['current_provider'] = default_provider
+            settings['current_model'] = PROVIDER_MODELS[default_provider]['name']
+            await storage.save_user_settings(message.from_user.id, settings)
+            
+            # Log model selection as usage
+            await storage.log_usage(
+                user_id=message.from_user.id,
+                provider=default_provider,
+                model=PROVIDER_MODELS[default_provider]['name'],
+                tokens=0,
+                has_image=False
             )
-            await state.set_state(UserStates.choosing_provider)
-            return
+            
+            # Notify user about default model
+            await message.answer(
+                f"Using default model: {settings['current_model']}. You can change it using the '🤖 Choose AI Model' button."
+            )
 
         # Map legacy provider names to new ones
         legacy_to_new = {
@@ -324,6 +384,7 @@ async def handle_message(message: Message, state: FSMContext):
         
         # Stream the response
         collected_response = ""
+        token_count = 0
         async for response_chunk in ai_provider.chat_completion_stream(
             message=message_text,
             model_config=model_config,
@@ -332,6 +393,7 @@ async def handle_message(message: Message, state: FSMContext):
         ):
             if response_chunk and response_chunk.strip():
                 collected_response += response_chunk
+                token_count += len(response_chunk.split())  # Rough token count estimation
                 sanitized_response = sanitize_html_tags(collected_response)
                 if await rate_limiter.should_update_message(sanitized_response):
                     try:
@@ -344,6 +406,16 @@ async def handle_message(message: Message, state: FSMContext):
         # Save final response
         if collected_response:
             await storage.add_to_history(message.from_user.id, collected_response, True)
+            
+            # Log usage statistics
+            await storage.log_usage(
+                user_id=message.from_user.id,
+                provider=provider_name,
+                model=model_config['name'],
+                tokens=token_count,
+                has_image=bool(image_data)
+            )
+            
             final_response = sanitize_html_tags(collected_response)
             try:
                 await bot_response.edit_text(final_response, parse_mode="HTML")
@@ -372,8 +444,27 @@ async def handle_unauthorized(message: Message, state: FSMContext):
     current_state = await state.get_state()
     if not current_state:
         settings = await storage.get_user_settings(message.from_user.id)
+        
+        # Set default model if needed
+        if not settings or 'current_provider' not in settings:
+            # Set default model
+            default_provider = "o3-mini"
+            settings = settings or {}
+            settings['current_provider'] = default_provider
+            settings['current_model'] = PROVIDER_MODELS[default_provider]['name']
+            await storage.save_user_settings(message.from_user.id, settings)
+            
+            # Log model selection
+            await storage.log_usage(
+                user_id=message.from_user.id,
+                provider=default_provider,
+                model=PROVIDER_MODELS[default_provider]['name'],
+                tokens=0,
+                has_image=False
+            )
+        
         is_admin = str(message.from_user.id) == config.admin_id
-        keyboard = kb.get_main_menu(is_admin) if settings and settings.get('current_provider') else kb.get_provider_menu()
+        keyboard = kb.get_main_menu(is_admin)
         
         # Update keyboard silently
         try:
@@ -384,5 +475,5 @@ async def handle_unauthorized(message: Message, state: FSMContext):
             logging.debug(f"Keyboard update error: {e}")
             await message.answer("Please select an option:", reply_markup=keyboard)
         
-        # Set state based on settings
-        await state.set_state(UserStates.chatting if settings and settings.get('current_provider') else UserStates.choosing_provider)
+        # Set state to chatting since we always have a default model now
+        await state.set_state(UserStates.chatting)
