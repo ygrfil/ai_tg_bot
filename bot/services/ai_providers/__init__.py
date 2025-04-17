@@ -1,24 +1,43 @@
-from typing import Dict
+from typing import Dict, Optional, Type
 from .base import BaseAIProvider
-from .openai import OpenAIProvider
-from .claude import ClaudeProvider
-from .groq import GroqProvider
-from .perplexity import PerplexityProvider
-from .deepseek import DeepSeekProvider
+from .openrouter import OpenRouterProvider
+from .fal import FalProvider
 from ...config import Config
+from .providers import PROVIDER_MODELS
+
+__all__ = ['get_provider']
 
 def get_provider(provider_name: str, config: Config) -> BaseAIProvider:
-    """Get AI provider instance by name."""
-    providers = {
-        'openai': lambda: OpenAIProvider(config.openai_api_key, config=config),
-        'claude': lambda: ClaudeProvider(config.anthropic_api_key, config=config),
-        'groq': lambda: GroqProvider(config.groq_api_key, config=config),
-        'perplexity': lambda: PerplexityProvider(config.perplexity_api_key, config=config),
-        'deepseek': lambda: DeepSeekProvider(config.DEEPSEEK_API, config=config)
-    }
+    """
+    Get an AI provider instance based on the provider name.
     
-    provider_factory = providers.get(provider_name)
-    if not provider_factory:
-        raise ValueError(f"Unknown provider: {provider_name}")
+    Args:
+        provider_name: Name of the provider to get
+        config: Config instance containing API keys and settings
+        
+    Returns:
+        An instance of BaseAIProvider
+        
+    Raises:
+        ValueError: If provider is not found
+    """
+    # First check if the provider exists in our models
+    if provider_name not in PROVIDER_MODELS:
+        raise ValueError(f"Provider {provider_name} not found in PROVIDER_MODELS")
     
-    return provider_factory()
+    # Get the actual provider name from the model config
+    model_config = PROVIDER_MODELS[provider_name]
+    provider_type = model_config['name'].split('/')[0]  # e.g., 'openai' from 'openai/gpt-4'
+    
+    provider: Optional[BaseAIProvider] = None
+    
+    # Map provider types to their implementations
+    if provider_type == "fal-ai" or provider_name == "fal":
+        provider = FalProvider(config.fal_api_key, config=config)
+    elif provider_type in ["openai", "anthropic", "google", "perplexity"] or provider_name == "openrouter":
+        provider = OpenRouterProvider(config.openrouter_api_key, config=config)
+    
+    if provider is None:
+        raise ValueError(f"No implementation found for provider {provider_name} (type: {provider_type})")
+    
+    return provider
