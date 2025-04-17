@@ -3,6 +3,18 @@ PROVIDER_MODELS = {
         "name": "anthropic/claude-3.7-sonnet",
         "vision": True
     },
+    "gpt-4.1": {
+        "name": "openai/gpt-4.1",
+        "vision": True
+    },
+    "gpt-4.1-mini": {
+        "name": "openai/gpt-4.1-mini",
+        "vision": True
+    },
+    "gpt-4.1-nano": {
+        "name": "openai/gpt-4.1-nano",
+        "vision": True
+    },
     "online": {
         "name": "perplexity/sonar:online",
         "vision": False

@@ -96,8 +96,8 @@ async def cmd_start(message: Message, state: FSMContext):
     
     # Set default model if no provider is selected
     if not settings or 'current_provider' not in settings:
-        # Use o3-mini as the default model
-        default_provider = "o3-mini"
+        # Use gpt-4.1-nano as the default model
+        default_provider = "gpt-4.1-nano"
         settings = settings or {}
         settings['current_provider'] = default_provider
         settings['current_model'] = PROVIDER_MODELS[default_provider]['name']
@@ -204,7 +204,7 @@ async def info_button(message: Message, state: FSMContext):
     
     if not settings or 'current_provider' not in settings:
         # Set default model if no provider is selected
-        default_provider = "o3-mini"
+        default_provider = "gpt-4.1-nano"
         settings = settings or {}
         settings['current_provider'] = default_provider
         settings['current_model'] = PROVIDER_MODELS[default_provider]['name']
@@ -322,7 +322,7 @@ async def handle_message(message: Message, state: FSMContext):
         
         if not settings or 'current_provider' not in settings:
             # Set default model if no provider is selected
-            default_provider = "o3-mini"
+            default_provider = "gpt-4.1-nano"
             settings = settings or {}
             settings['current_provider'] = default_provider
             settings['current_model'] = PROVIDER_MODELS[default_provider]['name']
@@ -344,10 +344,11 @@ async def handle_message(message: Message, state: FSMContext):
 
         # Map legacy provider names to new ones
         legacy_to_new = {
-            'openai': 'gpt4',
+            'openai': 'gpt-4.1',
             'claude': 'sonnet',
             'openrouter_deepseek': 'deepseek',
-            'groq': 'gpt4'  # Default to GPT-4 for Groq users
+            'groq': 'gpt-4.1',  # Default to GPT-4.1 for Groq users
+            'o3-mini': 'gpt-4.1-nano'  # Map o3-mini to GPT-4.1-nano
         }
             
         provider_name = legacy_to_new.get(settings['current_provider'], settings['current_provider'])
@@ -448,7 +449,7 @@ async def handle_unauthorized(message: Message, state: FSMContext):
         # Set default model if needed
         if not settings or 'current_provider' not in settings:
             # Set default model
-            default_provider = "o3-mini"
+            default_provider = "gpt-4.1-nano"
             settings = settings or {}
             settings['current_provider'] = default_provider
             settings['current_model'] = PROVIDER_MODELS[default_provider]['name']

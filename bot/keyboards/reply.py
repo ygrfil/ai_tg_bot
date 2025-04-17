@@ -32,13 +32,15 @@ def get_provider_menu() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
     
     model_buttons = [
-        ["Sonnet", "Online🌐"],
-        ["o3-mini", "R1-1776"]
+        ["GPT-4.1", "GPT-4.1-mini"],
+        ["GPT-4.1-nano", "Sonnet"],
+        ["Online🌐", "R1-1776"]
     ]
     
     for row in model_buttons:
         builder.row(*[KeyboardButton(text=text) for text in row])
     
+    builder.row(KeyboardButton(text="🔙 Back"))
     return builder.as_markup(resize_keyboard=True)
 
 def get_back_menu() -> ReplyKeyboardMarkup:
