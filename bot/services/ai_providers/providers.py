@@ -9,10 +9,11 @@ PROVIDER_MODELS = {
     },
     "online": {
         "name": "perplexity/sonar:online",
-        "vision": False
+        "vision": True,
+        "online": True
     },
-    "r1-1776": {
-        "name": "perplexity/r1-1776",
-        "vision": False
+    "gemini": {
+        "name": "google/gemini-2.5-pro-preview-03-25",
+        "vision": True
     }
 }

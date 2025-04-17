@@ -127,16 +127,28 @@ async def handle_provider_choice(message: Message, state: FSMContext):
     clean_text = message.text.strip().lower()
     provider = None
     
+    # Map display names to provider keys
+    display_to_provider = {
+        'online🌐': 'online',
+        'gemini 2.5': 'gemini',
+        'gpt-4.1': 'gpt-4.1',
+        'sonnet': 'sonnet'
+    }
+    
     # Try exact match first
     if clean_text in PROVIDER_MODELS:
         provider = clean_text
     else:
         # Try without emojis/special characters
         clean_text = re.sub(r'[🌐🏆\(\)]\s*', '', clean_text).strip()
-        for model_name in PROVIDER_MODELS.keys():
-            if clean_text in model_name.lower():
-                provider = model_name
-                break
+        # Try to match with display names
+        provider = display_to_provider.get(clean_text)
+        if not provider:
+            # Try partial match with provider names
+            for model_name in PROVIDER_MODELS.keys():
+                if clean_text in model_name.lower():
+                    provider = model_name
+                    break
     
     if provider and provider in PROVIDER_MODELS:
         settings = await get_or_create_settings(message.from_user.id)
@@ -346,9 +358,11 @@ async def handle_message(message: Message, state: FSMContext):
         legacy_to_new = {
             'openai': 'gpt-4.1',
             'claude': 'sonnet',
-            'openrouter_deepseek': 'deepseek',
-            'groq': 'gpt-4.1',  # Default to GPT-4.1 for Groq users
-            'o3-mini': 'gpt-4.1-nano'  # Map o3-mini to GPT-4.1-nano
+            'openrouter_deepseek': 'gemini',
+            'groq': 'gpt-4.1',
+            'o3-mini': 'online',  # Map o3-mini to online
+            'r1-1776': 'gemini',
+            'online': 'online'  # Ensure online maps to itself
         }
             
         provider_name = legacy_to_new.get(settings['current_provider'], settings['current_provider'])
