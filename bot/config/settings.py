@@ -7,12 +7,14 @@ class Config:
                  allowed_user_ids: List[str],
                  admin_id: str,
                  openrouter_api_key: str,
+                 fal_api_key: str,
                  max_tokens: int = 1024,
                  polling_settings: Dict[str, Any] = None):
         self.bot_token = bot_token
         self.allowed_user_ids = allowed_user_ids
         self.admin_id = admin_id
-        self.OPENROUTER_API = openrouter_api_key
+        self.openrouter_api_key = openrouter_api_key
+        self.fal_api_key = fal_api_key
         self.max_tokens = max_tokens
         
         # Default polling settings
@@ -50,7 +52,8 @@ class Config:
             bot_token=env.str("BOT_TOKEN"),
             allowed_user_ids=allowed_ids,
             admin_id=env.str("ADMIN_ID"),
-            openrouter_api_key=env.str("OPENROUTER_API"),
+            openrouter_api_key=env.str("OPENROUTER_API_KEY"),
+            fal_api_key=env.str("FAL_API_KEY"),
             max_tokens=env.int("MAX_TOKENS", 4096),
             polling_settings=polling_settings
         )

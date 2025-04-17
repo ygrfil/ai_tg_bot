@@ -15,5 +15,10 @@ PROVIDER_MODELS = {
     "gemini": {
         "name": "google/gemini-2.5-pro-preview-03-25",
         "vision": True
+    },
+    "fal": {
+        "name": "fal-ai/flux",
+        "vision": False,
+        "image_generation": True
     }
 }

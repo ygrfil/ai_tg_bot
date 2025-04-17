@@ -9,7 +9,7 @@ class FalProvider(BaseAIProvider):
     
     def __init__(self, api_key: str, config: Config = None):
         super().__init__(api_key, config)
-        self.base_url = "https://fal.run/fal-ai/fast-sdxl"
+        self.base_url = "https://fal.run/fal-ai/flux"  # Changed to flux model
         
     async def generate_image(
         self,
@@ -19,10 +19,11 @@ class FalProvider(BaseAIProvider):
         height: int = 1024,
         num_inference_steps: int = 30,
         guidance_scale: float = 7.5,
-        seed: Optional[int] = None
+        seed: Optional[int] = None,
+        style_preset: Optional[str] = None
     ) -> Optional[str]:
         """
-        Generate an image using fal.ai's fast-sdxl model.
+        Generate an image using fal.ai's flux model.
         Returns the URL of the generated image or None if generation failed.
         """
         
@@ -40,6 +41,8 @@ class FalProvider(BaseAIProvider):
             },
             "num_inference_steps": num_inference_steps,
             "guidance_scale": guidance_scale,
+            "scheduler": "dpmpp_2m",  # Best scheduler for Flux
+            "enable_safety_checks": True  # Enable safety filters
         }
         
         # Add optional fields only if they are provided
@@ -47,6 +50,8 @@ class FalProvider(BaseAIProvider):
             data["negative_prompt"] = negative_prompt
         if seed is not None:
             data["seed"] = seed
+        if style_preset:
+            data["style_preset"] = style_preset
         
         try:
             async with aiohttp.ClientSession() as session:
@@ -54,7 +59,7 @@ class FalProvider(BaseAIProvider):
                     self.base_url,
                     headers=headers,
                     json=data,
-                    timeout=60  # 60 second timeout for image generation
+                    timeout=30  # Reduced timeout since Flux is faster
                 ) as response:
                     if response.status != 200:
                         error_text = await response.text()
@@ -87,4 +92,4 @@ class FalProvider(BaseAIProvider):
         image: Optional[bytes] = None
     ) -> AsyncGenerator[str, None]:
         """Not implemented for FalProvider as it's only for image generation."""
-        yield "❌ This provider only supports image generation. Please use /generate command."
+        yield "❌ This provider only supports image generation. Please use the '🎨 Generate Image' button."

@@ -9,7 +9,10 @@ def get_main_menu(is_admin: bool = False) -> ReplyKeyboardMarkup:
         KeyboardButton(text="ℹ️ Info")
     )
     builder.row(
-        KeyboardButton(text="🗑 Clear History"),
+        KeyboardButton(text="🎨 Generate Image"),
+        KeyboardButton(text="🗑 Clear History")
+    )
+    builder.row(
         KeyboardButton(text="₿"),
         *([KeyboardButton(text="👑 Admin")] if is_admin else [])
     )

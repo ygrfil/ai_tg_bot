@@ -18,6 +18,8 @@ from bot.config import Config
 from bot.utils.message_sanitizer import sanitize_html_tags
 from bot.services.ai_providers.providers import PROVIDER_MODELS
 from bot.utils.rate_limiter import MessageRateLimiter
+from bot.services.ai_providers.fal import FalProvider
+from bot.states import UserStates
 
 router = Router()
 storage = Storage("data/chat.db")
@@ -40,6 +42,7 @@ class UserStates(StatesGroup):
     broadcasting = State()     # State for broadcasting messages
     user_management = State()  # State for user management
     settings_menu = State()    # State for bot settings
+    waiting_for_image_prompt = State()  # State for waiting for image prompt
 
 # Helper functions
 def is_user_authorized(user_id: int) -> bool:
@@ -310,6 +313,86 @@ async def back_button(message: Message, state: FSMContext):
         reply_markup=kb.get_main_menu(is_admin=is_admin)
     )
     await state.set_state(UserStates.chatting)
+
+@router.message(F.text == "🎨 Generate Image")
+async def handle_generate_image_button(message: Message, state: FSMContext):
+    """Handle the generate image button click."""
+    await state.set_state(UserStates.waiting_for_image_prompt)
+    await message.answer(
+        "Please enter a prompt describing the image you want to generate.\n"
+        "For example: 'A serene mountain landscape at sunset with snow-capped peaks'"
+    )
+
+@router.message(UserStates.waiting_for_image_prompt)
+async def handle_image_prompt(message: Message, state: FSMContext):
+    """Handle the image generation prompt."""
+    try:
+        # Initialize Fal provider
+        provider = get_provider("fal", config)
+        if not isinstance(provider, FalProvider):
+            await message.answer(
+                "❌ Error: Image generation provider not available.",
+                reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
+            )
+            await state.set_state(UserStates.chatting)
+            return
+
+        # Send a processing message
+        processing_msg = await message.answer("🎨 Generating your image...")
+        
+        try:
+            # Generate the image
+            image_url = await provider.generate_image(
+                prompt=message.text,
+                width=1024,
+                height=1024,
+                num_inference_steps=50,
+                guidance_scale=7.5
+            )
+            
+            if image_url:
+                # Send the generated image
+                await message.answer_photo(
+                    photo=image_url,
+                    caption=f"Generated image based on prompt:\n{message.text}",
+                    reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
+                )
+                
+                # Log usage
+                await storage.log_usage(
+                    user_id=message.from_user.id,
+                    provider="fal",
+                    model="fal-stable-diffusion",
+                    tokens=0,
+                    has_image=True
+                )
+            else:
+                await message.answer(
+                    "Sorry, I couldn't generate the image. Please try again with a different prompt.",
+                    reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
+                )
+        finally:
+            # Always try to delete the processing message
+            try:
+                await processing_msg.delete()
+            except:
+                pass
+        
+        # Reset state back to chatting
+        await state.set_state(UserStates.chatting)
+        
+    except Exception as e:
+        error_message = str(e)
+        if "API key" in error_message.lower():
+            error_message = "Missing or invalid API key for image generation."
+        elif "quota" in error_message.lower():
+            error_message = "Image generation quota exceeded. Please try again later."
+            
+        await message.answer(
+            f"❌ {error_message}",
+            reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
+        )
+        await state.set_state(UserStates.chatting)
 
 # Chat handler for normal messages
 @router.message(UserStates.chatting)
