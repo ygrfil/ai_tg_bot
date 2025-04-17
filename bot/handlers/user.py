@@ -96,8 +96,8 @@ async def cmd_start(message: Message, state: FSMContext):
     
     # Set default model if no provider is selected
     if not settings or 'current_provider' not in settings:
-        # Use gpt-4.1-nano as the default model
-        default_provider = "gpt-4.1-nano"
+        # Use gpt-4.1 as the default model
+        default_provider = "gpt-4.1"
         settings = settings or {}
         settings['current_provider'] = default_provider
         settings['current_model'] = PROVIDER_MODELS[default_provider]['name']
@@ -204,7 +204,7 @@ async def info_button(message: Message, state: FSMContext):
     
     if not settings or 'current_provider' not in settings:
         # Set default model if no provider is selected
-        default_provider = "gpt-4.1-nano"
+        default_provider = "gpt-4.1"
         settings = settings or {}
         settings['current_provider'] = default_provider
         settings['current_model'] = PROVIDER_MODELS[default_provider]['name']
@@ -322,7 +322,7 @@ async def handle_message(message: Message, state: FSMContext):
         
         if not settings or 'current_provider' not in settings:
             # Set default model if no provider is selected
-            default_provider = "gpt-4.1-nano"
+            default_provider = "gpt-4.1"
             settings = settings or {}
             settings['current_provider'] = default_provider
             settings['current_model'] = PROVIDER_MODELS[default_provider]['name']
@@ -449,7 +449,7 @@ async def handle_unauthorized(message: Message, state: FSMContext):
         # Set default model if needed
         if not settings or 'current_provider' not in settings:
             # Set default model
-            default_provider = "gpt-4.1-nano"
+            default_provider = "gpt-4.1"
             settings = settings or {}
             settings['current_provider'] = default_provider
             settings['current_model'] = PROVIDER_MODELS[default_provider]['name']
