@@ -1,7 +1,7 @@
 import re
 from aiogram import Router, F, types
-from aiogram.types import Message, ReplyKeyboardMarkup
-from aiogram.filters import Command
+from aiogram.types import Message, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.markdown import hbold
@@ -316,83 +316,98 @@ async def back_button(message: Message, state: FSMContext):
 
 @router.message(F.text == "🎨 Generate Image")
 async def handle_generate_image_button(message: Message, state: FSMContext):
-    """Handle the generate image button click."""
-    await state.set_state(UserStates.waiting_for_image_prompt)
+    """Handle the image generation button press"""
     await message.answer(
-        "Please enter a prompt describing the image you want to generate.\n"
-        "For example: 'A serene mountain landscape at sunset with snow-capped peaks'"
+        "Please provide a detailed prompt describing the image you want to generate.\n\n"
+        "Tips for better results:\n"
+        "• Be specific about what you want to see\n"
+        "• Describe the style (e.g., photorealistic, anime, oil painting)\n"
+        "• Mention lighting, camera angle, or mood if relevant\n"
+        "• Use 'negative prompt' after -- to specify what to avoid\n\n"
+        "Example: A majestic red dragon soaring through storm clouds, digital art style -- blurry, text, watermark",
+        reply_markup=ReplyKeyboardRemove()
     )
+    await state.set_state(UserStates.waiting_for_image_prompt)
 
-@router.message(UserStates.waiting_for_image_prompt)
+@router.message(StateFilter(UserStates.waiting_for_image_prompt))
 async def handle_image_prompt(message: Message, state: FSMContext):
-    """Handle the image generation prompt."""
+    """Handle the image generation prompt"""
+    if not is_user_authorized(message.from_user.id):
+        return
+        
+    prompt = message.text
+    negative_prompt = ""
+    
+    # Split prompt and negative prompt if -- is present
+    if " -- " in prompt:
+        prompt, negative_prompt = prompt.split(" -- ", 1)
+    
+    # Get Fal provider for image generation
+    provider = get_provider("fal", config)
+    
+    # Send a processing message
+    processing_msg = await message.answer("🎨 Generating your image... This may take a few seconds.")
+    
     try:
-        # Initialize Fal provider
-        provider = get_provider("fal", config)
-        if not isinstance(provider, FalProvider):
-            await message.answer(
-                "❌ Error: Image generation provider not available.",
-                reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
-            )
-            await state.set_state(UserStates.chatting)
-            return
-
-        # Send a processing message
-        processing_msg = await message.answer("🎨 Generating your image...")
+        # Generate the image
+        image_url = await provider.generate_image(
+            prompt=prompt,
+            negative_prompt=negative_prompt,
+            width=1024,
+            height=1024,
+            num_inference_steps=30,
+            guidance_scale=7.5
+        )
         
-        try:
-            # Generate the image
-            image_url = await provider.generate_image(
-                prompt=message.text,
-                width=1024,
-                height=1024,
-                num_inference_steps=50,
-                guidance_scale=7.5
-            )
+        if not image_url:
+            raise Exception("Failed to generate image - no URL returned")
             
-            if image_url:
-                # Send the generated image
-                await message.answer_photo(
-                    photo=image_url,
-                    caption=f"Generated image based on prompt:\n{message.text}",
-                    reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
-                )
-                
-                # Log usage
-                await storage.log_usage(
-                    user_id=message.from_user.id,
-                    provider="fal",
-                    model="fal-stable-diffusion",
-                    tokens=0,
-                    has_image=True
-                )
-            else:
-                await message.answer(
-                    "Sorry, I couldn't generate the image. Please try again with a different prompt.",
-                    reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
-                )
-        finally:
-            # Always try to delete the processing message
-            try:
-                await processing_msg.delete()
-            except:
-                pass
+        # Send the generated image
+        await message.answer_photo(
+            image_url,
+            caption=f"✨ Generated image based on your prompt:\n{prompt}"
+        )
         
-        # Reset state back to chatting
-        await state.set_state(UserStates.chatting)
+        # Log the successful generation
+        await storage.add_to_history(
+            user_id=message.from_user.id,
+            content=f"[Image generation prompt] {prompt}",
+            is_bot=False
+        )
+        await storage.add_to_history(
+            user_id=message.from_user.id,
+            content="[Generated image]",
+            is_bot=True
+        )
+        
+        # Log usage statistics
+        await storage.log_usage(
+            user_id=message.from_user.id,
+            provider="fal",
+            model="flux-dev",
+            tokens=0,
+            has_image=True
+        )
         
     except Exception as e:
         error_message = str(e)
         if "API key" in error_message.lower():
-            error_message = "Missing or invalid API key for image generation."
+            error_message = "Missing or invalid Fal.ai API key"
         elif "quota" in error_message.lower():
             error_message = "Image generation quota exceeded. Please try again later."
             
         await message.answer(
-            f"❌ {error_message}",
+            f"❌ Sorry, there was an error generating your image: {error_message}\n"
+            "Please try again with a different prompt."
+        )
+    finally:
+        # Delete the processing message and reset state
+        await processing_msg.delete()
+        await state.set_state(UserStates.chatting)
+        await message.answer(
+            "You can generate another image or continue chatting.",
             reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
         )
-        await state.set_state(UserStates.chatting)
 
 # Chat handler for normal messages
 @router.message(UserStates.chatting)

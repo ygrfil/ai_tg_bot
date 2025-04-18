@@ -1,6 +1,7 @@
 from typing import Optional, Dict, Any, List, AsyncGenerator
 import aiohttp
 import logging
+import asyncio
 from .base import BaseAIProvider
 from ...config import Config
 
@@ -9,7 +10,50 @@ class FalProvider(BaseAIProvider):
     
     def __init__(self, api_key: str, config: Config = None):
         super().__init__(api_key, config)
-        self.base_url = "https://fal.run/fal-ai/flux"  # Changed to flux model
+        # Using FLUX.1 [dev] model as it offers the best balance of:
+        # - High image quality with excellent detail, text rendering, and realism
+        # - Reasonable generation speed (3-4s per image)
+        # - Cost-effective pricing ($25 per 1000 images)
+        self.base_url = "https://fal.run/fal-ai/flux/dev"
+        
+    async def _poll_queue_status(self, request_id: str, headers: Dict[str, str], max_retries: int = 30) -> Optional[Dict]:
+        """Poll the queue status until the request is completed or fails."""
+        retries = 0
+        
+        while retries < max_retries:
+            try:
+                async with aiohttp.ClientSession() as session:
+                    # Use the subscription endpoint for status checking
+                    async with session.post(
+                        self.base_url + "/subscribe",
+                        headers=headers,
+                        json={"request_id": request_id}
+                    ) as response:
+                        if response.status != 200:
+                            error_text = await response.text()
+                            logging.error(f"Error checking queue status: {error_text}")
+                            return None
+                            
+                        result = await response.json()
+                        
+                        # Check if we have the final result
+                        if "error" in result:
+                            logging.error(f"Image generation failed: {result['error']}")
+                            return None
+                        elif "images" in result:
+                            return result
+                        else:
+                            # Still processing, wait before next check
+                            await asyncio.sleep(1)
+                            retries += 1
+                            continue
+                            
+            except Exception as e:
+                logging.error(f"Error polling queue status: {e}")
+                return None
+                
+        logging.error("Max retries reached while waiting for image generation")
+        return None
         
     async def generate_image(
         self,
@@ -32,22 +76,19 @@ class FalProvider(BaseAIProvider):
             "Content-Type": "application/json"
         }
         
-        # Base data dictionary with required fields
+        # Prepare request data according to fal.ai docs
         data = {
-            "prompt": prompt,
-            "image_size": {
-                "width": width,
-                "height": height
-            },
+            "prompt": prompt,  # Prompt should be at the root level
+            "negative_prompt": negative_prompt if negative_prompt else "",
             "num_inference_steps": num_inference_steps,
             "guidance_scale": guidance_scale,
+            "width": width,
+            "height": height,
             "scheduler": "dpmpp_2m",  # Best scheduler for Flux
-            "enable_safety_checks": True  # Enable safety filters
+            "enable_safety_checker": True  # Enable safety filters
         }
         
         # Add optional fields only if they are provided
-        if negative_prompt:
-            data["negative_prompt"] = negative_prompt
         if seed is not None:
             data["seed"] = seed
         if style_preset:
@@ -55,26 +96,25 @@ class FalProvider(BaseAIProvider):
         
         try:
             async with aiohttp.ClientSession() as session:
+                # Submit the generation request
                 async with session.post(
                     self.base_url,
                     headers=headers,
                     json=data,
-                    timeout=30  # Reduced timeout since Flux is faster
+                    timeout=30
                 ) as response:
                     if response.status != 200:
                         error_text = await response.text()
                         logging.error(f"Fal.ai API error: {error_text}")
                         return None
                     
-                    # Parse the JSON response
-                    response_data = await response.json()
+                    result = await response.json()
                     
-                    # The API returns a JSON with an 'images' array containing image URLs
-                    if 'images' in response_data and response_data['images']:
-                        # Return the URL of the first generated image
-                        return response_data['images'][0]['url']
+                    # Check if we have images in the response
+                    if "images" in result and result["images"]:
+                        return result["images"][0]["url"]
                     else:
-                        logging.error(f"Unexpected Fal.ai response format: {response_data}")
+                        logging.error(f"No images in result: {result}")
                         return None
                     
         except aiohttp.ClientError as e:
