@@ -10,11 +10,8 @@ class FalProvider(BaseAIProvider):
     
     def __init__(self, api_key: str, config: Config = None):
         super().__init__(api_key, config)
-        # Using FLUX.1 [dev] model as it offers the best balance of:
-        # - High image quality with excellent detail, text rendering, and realism
-        # - Reasonable generation speed (3-4s per image)
-        # - Cost-effective pricing ($25 per 1000 images)
-        self.base_url = "https://fal.run/fal-ai/flux/dev"
+        # Using hidream-i1-fast model which is optimized for speed (16 steps)
+        self.base_url = "https://fal.run/fal-ai/hidream-i1-fast"
         
     async def _poll_queue_status(self, request_id: str, headers: Dict[str, str], max_retries: int = 30) -> Optional[Dict]:
         """Poll the queue status until the request is completed or fails."""
@@ -58,16 +55,16 @@ class FalProvider(BaseAIProvider):
     async def generate_image(
         self,
         prompt: str,
-        negative_prompt: Optional[str] = None,
-        width: int = 1024,
-        height: int = 1024,
-        num_inference_steps: int = 30,
-        guidance_scale: float = 7.5,
-        seed: Optional[int] = None,
-        style_preset: Optional[str] = None
-    ) -> Optional[str]:
+        negative_prompt: str = "",
+        # Using model defaults for best results
+        # width: int = 1024,
+        # height: int = 1024,
+        # num_inference_steps: int = 16,
+        # guidance_scale: float = 7.0,
+        seed: Optional[int] = None
+    ) -> str:
         """
-        Generate an image using fal.ai's flux model.
+        Generate an image using fal.ai's hidream-i1-fast model.
         Returns the URL of the generated image or None if generation failed.
         """
         
@@ -76,23 +73,16 @@ class FalProvider(BaseAIProvider):
             "Content-Type": "application/json"
         }
         
-        # Prepare request data according to fal.ai docs
+        # Base data dictionary with minimal required fields
         data = {
-            "prompt": prompt,  # Prompt should be at the root level
-            "negative_prompt": negative_prompt if negative_prompt else "",
-            "num_inference_steps": num_inference_steps,
-            "guidance_scale": guidance_scale,
-            "width": width,
-            "height": height,
-            "scheduler": "dpmpp_2m",  # Best scheduler for Flux
-            "enable_safety_checker": True  # Enable safety filters
+            "prompt": prompt,
+            "negative_prompt": negative_prompt,
+            "enable_safety_checker": True  # Keep safety filters enabled
         }
         
-        # Add optional fields only if they are provided
+        # Add seed only if specified
         if seed is not None:
             data["seed"] = seed
-        if style_preset:
-            data["style_preset"] = style_preset
         
         try:
             async with aiohttp.ClientSession() as session:

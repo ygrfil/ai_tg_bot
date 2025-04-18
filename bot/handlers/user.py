@@ -362,20 +362,39 @@ async def handle_image_prompt(message: Message, state: FSMContext):
     
     try:
         # Generate the image
-        image_url = await provider.generate_image(
+        result = await provider.generate_image(
             prompt=prompt,
-            negative_prompt=negative_prompt,
-            width=1024,
-            height=1024,
-            num_inference_steps=30,
-            guidance_scale=7.5
+            negative_prompt=negative_prompt
         )
         
-        if not image_url:
-            raise Exception("Failed to generate image - no URL returned")
+        if not result:
+            raise Exception("Failed to generate image - no result returned")
             
-        # Send the generated image with minimal caption
-        await message.answer_photo(image_url)
+        image_data = None
+        # Check if result is a base64 string (starts with data:image)
+        if isinstance(result, str) and result.startswith('data:image'):
+            # Extract base64 data after the comma
+            import base64
+            base64_data = result.split(',')[1]
+            image_data = base64.b64decode(base64_data)
+        else:
+            # Treat as URL and download
+            async with aiohttp.ClientSession() as session:
+                async with session.get(result) as response:
+                    if response.status != 200:
+                        raise Exception(f"Failed to download image: HTTP {response.status}")
+                    image_data = await response.read()
+        
+        if not image_data:
+            raise Exception("No image data received")
+            
+        # Send the generated image
+        await message.answer_photo(
+            types.BufferedInputFile(
+                image_data,
+                filename="generated_image.png"
+            )
+        )
         
         # Log the successful generation
         await storage.add_to_history(
@@ -393,7 +412,7 @@ async def handle_image_prompt(message: Message, state: FSMContext):
         await storage.log_usage(
             user_id=message.from_user.id,
             provider="fal",
-            model="flux-dev",
+            model="hidream-i1-full",
             tokens=0,
             has_image=True
         )
@@ -413,6 +432,8 @@ async def handle_image_prompt(message: Message, state: FSMContext):
             user_friendly_error = "The request timed out. Please try again"
         elif "too many requests" in error_message.lower():
             user_friendly_error = "Too many requests. Please wait a moment and try again"
+        elif "download" in error_message.lower() or "no image data" in error_message.lower():
+            user_friendly_error = "Failed to process the generated image. Please try again"
             
         await message.answer(f"❌ {user_friendly_error}")
         
