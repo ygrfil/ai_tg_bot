@@ -325,7 +325,10 @@ async def handle_generate_image_button(message: Message, state: FSMContext):
         "• Mention lighting, camera angle, or mood if relevant\n"
         "• Use 'negative prompt' after -- to specify what to avoid\n\n"
         "Example: A majestic red dragon soaring through storm clouds, digital art style -- blurry, text, watermark",
-        reply_markup=ReplyKeyboardRemove()
+        reply_markup=kb.ReplyKeyboardBuilder()
+            .button(text="🔙 Cancel")
+            .adjust(1)
+            .as_markup(resize_keyboard=True)
     )
     await state.set_state(UserStates.waiting_for_image_prompt)
 
@@ -333,6 +336,15 @@ async def handle_generate_image_button(message: Message, state: FSMContext):
 async def handle_image_prompt(message: Message, state: FSMContext):
     """Handle the image generation prompt"""
     if not is_user_authorized(message.from_user.id):
+        return
+        
+    # Handle cancel button
+    if message.text == "🔙 Cancel":
+        await state.set_state(UserStates.chatting)
+        await message.answer(
+            "Image generation cancelled.",
+            reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
+        )
         return
         
     prompt = message.text
@@ -346,7 +358,7 @@ async def handle_image_prompt(message: Message, state: FSMContext):
     provider = get_provider("fal", config)
     
     # Send a processing message
-    processing_msg = await message.answer("🎨 Generating your image... This may take a few seconds.")
+    processing_msg = await message.answer("🎨 Generating your image...")
     
     try:
         # Generate the image
@@ -362,11 +374,8 @@ async def handle_image_prompt(message: Message, state: FSMContext):
         if not image_url:
             raise Exception("Failed to generate image - no URL returned")
             
-        # Send the generated image
-        await message.answer_photo(
-            image_url,
-            caption=f"✨ Generated image based on your prompt:\n{prompt}"
-        )
+        # Send the generated image with minimal caption
+        await message.answer_photo(image_url)
         
         # Log the successful generation
         await storage.add_to_history(
@@ -391,15 +400,25 @@ async def handle_image_prompt(message: Message, state: FSMContext):
         
     except Exception as e:
         error_message = str(e)
+        user_friendly_error = "An unexpected error occurred"
+        
+        # Map common errors to user-friendly messages
         if "API key" in error_message.lower():
-            error_message = "Missing or invalid Fal.ai API key"
+            user_friendly_error = "The image generation service is temporarily unavailable"
         elif "quota" in error_message.lower():
-            error_message = "Image generation quota exceeded. Please try again later."
+            user_friendly_error = "Image generation quota exceeded. Please try again later"
+        elif "content policy" in error_message.lower():
+            user_friendly_error = "Your prompt was flagged by content filters. Please try a different prompt"
+        elif "timeout" in error_message.lower():
+            user_friendly_error = "The request timed out. Please try again"
+        elif "too many requests" in error_message.lower():
+            user_friendly_error = "Too many requests. Please wait a moment and try again"
             
-        await message.answer(
-            f"❌ Sorry, there was an error generating your image: {error_message}\n"
-            "Please try again with a different prompt."
-        )
+        await message.answer(f"❌ {user_friendly_error}")
+        
+        # Log the error for debugging
+        logging.error(f"Image generation error: {error_message}")
+        
     finally:
         # Delete the processing message and reset state
         await processing_msg.delete()
