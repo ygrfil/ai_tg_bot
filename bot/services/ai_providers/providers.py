@@ -3,8 +3,8 @@ PROVIDER_MODELS = {
         "name": "anthropic/claude-3.7-sonnet",
         "vision": True
     },
-    "gpt-4.1": {
-        "name": "openai/gpt-4.1",
+    "openai": {
+        "name": "openai/o4-mini",
         "vision": True
     },
     "online": {

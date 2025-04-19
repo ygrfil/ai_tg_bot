@@ -35,7 +35,7 @@ def get_provider_menu() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
     
     model_buttons = [
-        ["GPT-4.1", "Sonnet"],
+        ["OpenAI", "Sonnet"],
         ["Online🌐", "Gemini 2.5"]
     ]
     

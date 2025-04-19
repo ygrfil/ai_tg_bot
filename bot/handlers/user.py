@@ -99,8 +99,8 @@ async def cmd_start(message: Message, state: FSMContext):
     
     # Set default model if no provider is selected
     if not settings or 'current_provider' not in settings:
-        # Use gpt-4.1 as the default model
-        default_provider = "gpt-4.1"
+        # Use openai as the default model
+        default_provider = "openai"
         settings = settings or {}
         settings['current_provider'] = default_provider
         settings['current_model'] = PROVIDER_MODELS[default_provider]['name']
@@ -219,7 +219,7 @@ async def info_button(message: Message, state: FSMContext):
     
     if not settings or 'current_provider' not in settings:
         # Set default model if no provider is selected
-        default_provider = "gpt-4.1"
+        default_provider = "openai"
         settings = settings or {}
         settings['current_provider'] = default_provider
         settings['current_model'] = PROVIDER_MODELS[default_provider]['name']
@@ -472,7 +472,7 @@ async def handle_message(message: Message, state: FSMContext):
         
         if not settings or 'current_provider' not in settings:
             # Set default model if no provider is selected
-            default_provider = "gpt-4.1"
+            default_provider = "openai"
             settings = settings or {}
             settings['current_provider'] = default_provider
             settings['current_model'] = PROVIDER_MODELS[default_provider]['name']
@@ -494,10 +494,10 @@ async def handle_message(message: Message, state: FSMContext):
 
         # Map legacy provider names to new ones
         legacy_to_new = {
-            'openai': 'gpt-4.1',
+            'openai': 'openai',
             'claude': 'sonnet',
             'openrouter_deepseek': 'gemini',
-            'groq': 'gpt-4.1',
+            'groq': 'openai',
             'o3-mini': 'online',  # Map o3-mini to online
             'r1-1776': 'gemini',
             'online': 'online'  # Ensure online maps to itself
@@ -601,7 +601,7 @@ async def handle_unauthorized(message: Message, state: FSMContext):
         # Set default model if needed
         if not settings or 'current_provider' not in settings:
             # Set default model
-            default_provider = "gpt-4.1"
+            default_provider = "openai"
             settings = settings or {}
             settings['current_provider'] = default_provider
             settings['current_model'] = PROVIDER_MODELS[default_provider]['name']
