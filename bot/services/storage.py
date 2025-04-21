@@ -152,7 +152,7 @@ class Storage:
             await self.pool.release(db)
 
     @with_retries(max_retries=3)
-    async def get_chat_history(self, user_id: int, limit: int = 5) -> List[Dict[str, Any]]:
+    async def get_chat_history(self, user_id: int, limit: int = 5, max_tokens: int = None) -> List[Dict[str, Any]]:
         """Get recent chat history for context"""
         await self.ensure_initialized()
         cache_key = f"history_{user_id}"
@@ -175,6 +175,30 @@ class Storage:
                         if datetime.now(timezone.utc) - last_ts > timedelta(hours=2):
                             await self.clear_user_history(user_id)
                             return []
+
+                # Get total token count first if max_tokens is specified
+                if max_tokens:
+                    async with db.execute("""
+                        SELECT SUM(LENGTH(content) / 4) as total_tokens
+                        FROM chat_history
+                        WHERE user_id = ?
+                    """, (user_id,)) as cursor:
+                        row = await cursor.fetchone()
+                        total_tokens = int(row[0] or 0)
+                        
+                        # If we're approaching the token limit, clear older messages
+                        if total_tokens > max_tokens * 0.8:  # 80% of max
+                            await db.execute("""
+                                DELETE FROM chat_history 
+                                WHERE user_id = ? 
+                                AND id NOT IN (
+                                    SELECT id FROM chat_history 
+                                    WHERE user_id = ? 
+                                    ORDER BY timestamp DESC 
+                                    LIMIT ?
+                                )
+                            """, (user_id, user_id, limit))
+                            await db.commit()
 
                 # Get recent messages
                 async with db.execute("""

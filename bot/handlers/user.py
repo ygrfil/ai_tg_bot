@@ -467,10 +467,9 @@ async def handle_message(message: Message, state: FSMContext):
 
         # Get settings and history concurrently
         settings_task = storage.get_user_settings(message.from_user.id)
-        history_task = storage.get_chat_history(message.from_user.id, limit=20)
-        
-        settings, history = await asyncio.gather(settings_task, history_task)
-        
+
+        # Get model config first to determine token limits
+        settings = await settings_task
         if not settings or 'current_provider' not in settings:
             # Set default model if no provider is selected
             default_provider = "openai"
@@ -514,7 +513,14 @@ async def handle_message(message: Message, state: FSMContext):
             return
             
         model_config = PROVIDER_MODELS[provider_name]
-        
+
+        # Get history with model-specific token limits
+        history = await storage.get_chat_history(
+            message.from_user.id,
+            limit=10,  # Reduced from 20 to be safer
+            max_tokens=model_config.get('max_context_tokens', 4096)  # Default to 4096 if not specified
+        )
+
         # Process message and image
         image_data = None
         message_text = message.caption if message.caption else message.text

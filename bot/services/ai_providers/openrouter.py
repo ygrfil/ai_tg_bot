@@ -54,7 +54,7 @@ class OpenRouterProvider(BaseAIProvider):
             "messages": messages,
             "stream": True,
             "temperature": 0.7,
-            "max_tokens": 2000
+            "max_tokens": model_config.get('max_output_tokens', 2000)
         }
 
         try:
