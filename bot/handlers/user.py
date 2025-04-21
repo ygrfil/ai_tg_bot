@@ -10,6 +10,7 @@ from datetime import datetime
 import logging
 from typing import Optional
 import asyncio
+import time
 
 from bot.keyboards import reply as kb
 from bot.services.storage import Storage
@@ -498,9 +499,9 @@ async def handle_message(message: Message, state: FSMContext):
             'claude': 'sonnet',
             'openrouter_deepseek': 'gemini',
             'groq': 'openai',
-            'o3-mini': 'online',  # Map o3-mini to online
+            'o3-mini': 'online',
             'r1-1776': 'gemini',
-            'online': 'online'  # Ensure online maps to itself
+            'online': 'online'
         }
             
         provider_name = legacy_to_new.get(settings['current_provider'], settings['current_provider'])
@@ -533,47 +534,72 @@ async def handle_message(message: Message, state: FSMContext):
         # Get AI provider and prepare response
         ai_provider = get_provider(provider_name, config)
         await message.bot.send_chat_action(message.chat.id, "typing")
-        bot_response = await message.answer("Processing...")
+        
+        # Initialize response message
+        bot_response = await message.answer("...")
+        rate_limiter = MessageRateLimiter(update_interval=0.5, min_chunk_size=100)
         
         # Stream the response
         collected_response = ""
         token_count = 0
-        async for response_chunk in ai_provider.chat_completion_stream(
-            message=message_text,
-            model_config=model_config,
-            history=history,
-            image=image_data
-        ):
-            if response_chunk and response_chunk.strip():
-                collected_response += response_chunk
-                token_count += len(response_chunk.split())  # Rough token count estimation
-                sanitized_response = sanitize_html_tags(collected_response)
-                if await rate_limiter.should_update_message(sanitized_response):
-                    try:
-                        await bot_response.edit_text(sanitized_response, parse_mode="HTML")
-                        await asyncio.sleep(0.5)
-                    except Exception as e:
-                        if "message is not modified" not in str(e).lower():
-                            logging.debug(f"Message update error: {e}")
+        last_update_time = time.time()
+        
+        try:
+            async for response_chunk in ai_provider.chat_completion_stream(
+                message=message_text,
+                model_config=model_config,
+                history=history,
+                image=image_data
+            ):
+                if response_chunk and response_chunk.strip():
+                    collected_response += response_chunk
+                    token_count += len(response_chunk.split())
+                    
+                    # Sanitize response for HTML tags
+                    sanitized_response = sanitize_html_tags(collected_response)
+                    
+                    # Check if we should update the message
+                    current_time = time.time()
+                    if await rate_limiter.should_update_message(sanitized_response):
+                        try:
+                            await bot_response.edit_text(sanitized_response, parse_mode="HTML")
+                            last_update_time = current_time
+                        except Exception as e:
+                            if "message is not modified" not in str(e).lower():
+                                logging.debug(f"Message update error: {e}")
 
-        # Save final response
-        if collected_response:
-            await storage.add_to_history(message.from_user.id, collected_response, True)
+            # Ensure final response is sent
+            if collected_response:
+                final_response = sanitize_html_tags(collected_response)
+                await rate_limiter.retry_final_update(bot_response, final_response)
+                
+                # Save to history and log usage
+                await storage.add_to_history(message.from_user.id, collected_response, True)
+                await storage.log_usage(
+                    user_id=message.from_user.id,
+                    provider=provider_name,
+                    model=model_config['name'],
+                    tokens=token_count,
+                    has_image=bool(image_data)
+                )
+            else:
+                await bot_response.edit_text("❌ No response generated. Please try again.")
+
+        except Exception as e:
+            error_msg = str(e)
+            user_friendly_error = "An unexpected error occurred"
             
-            # Log usage statistics
-            await storage.log_usage(
-                user_id=message.from_user.id,
-                provider=provider_name,
-                model=model_config['name'],
-                tokens=token_count,
-                has_image=bool(image_data)
-            )
-            
-            final_response = sanitize_html_tags(collected_response)
-            try:
-                await bot_response.edit_text(final_response, parse_mode="HTML")
-            except Exception as e:
-                logging.debug(f"Final message update error: {e}")
+            if "api key" in error_msg.lower():
+                user_friendly_error = "API authentication error"
+            elif "quota" in error_msg.lower():
+                user_friendly_error = "API quota exceeded"
+            elif "timeout" in error_msg.lower():
+                user_friendly_error = "Request timed out"
+            elif "content policy" in error_msg.lower():
+                user_friendly_error = "Content policy violation"
+                
+            await bot_response.edit_text(f"❌ {user_friendly_error}. Please try again.")
+            logging.error(f"Streaming error: {e}")
 
     except Exception as e:
         logging.error(f"Error in handle_message: {e}", exc_info=True)

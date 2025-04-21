@@ -4,25 +4,40 @@ from typing import Optional
 import asyncio
 from aiogram.types import Message
 import re
+import time
 
 class MessageRateLimiter:
     def __init__(self, update_interval: float = 0.3, min_chunk_size: int = 150):
-        self.update_interval = timedelta(seconds=update_interval)
+        self.last_update = 0.0
+        self.update_interval = update_interval
         self.min_chunk_size = min_chunk_size
-        self.last_update_time = datetime.min
-        self.current_message = None
+        self.last_content = ""
+        self.accumulated_content = ""
 
-    async def should_update_message(self, new_content: str) -> bool:
-        current_time = datetime.now()
-        content_length = len(new_content)
-        current_length = len(self.current_message or "")
-
-        if (self.current_message is None or
-            (content_length >= current_length + self.min_chunk_size and 
-             current_time - self.last_update_time >= self.update_interval)):
-            self.last_update_time = current_time
-            self.current_message = new_content
-            return True
+    async def should_update_message(self, content: str) -> bool:
+        """Determine if message should be updated based on content and timing."""
+        current_time = time.time()
+        time_since_last = current_time - self.last_update
+        
+        # Always update if enough time has passed and content is different
+        if time_since_last >= self.update_interval and content != self.last_content:
+            # Accumulate content
+            self.accumulated_content += content[len(self.last_content):]
+            
+            # Check if we have enough new content
+            if len(self.accumulated_content) >= self.min_chunk_size:
+                self.last_update = current_time
+                self.last_content = content
+                self.accumulated_content = ""
+                return True
+                
+            # Update if we have a natural break point
+            if self.accumulated_content.endswith((".", "!", "?", "\n")):
+                self.last_update = current_time
+                self.last_content = content
+                self.accumulated_content = ""
+                return True
+                
         return False
 
     @staticmethod
@@ -68,4 +83,4 @@ class MessageRateLimiter:
                     break
                 else:
                     logging.warning(f"Final message update error: {e}")
-                break
+                    break

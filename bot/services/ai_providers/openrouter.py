@@ -5,6 +5,7 @@ import aiohttp
 from .base import BaseAIProvider
 from ...config import Config
 import logging
+import asyncio
 
 class OpenRouterProvider(BaseAIProvider):
     """OpenRouter provider that handles all AI models."""
@@ -51,7 +52,9 @@ class OpenRouterProvider(BaseAIProvider):
         data = {
             "model": model_config['name'],
             "messages": messages,
-            "stream": True
+            "stream": True,
+            "temperature": 0.7,
+            "max_tokens": 2000
         }
 
         try:
@@ -60,37 +63,51 @@ class OpenRouterProvider(BaseAIProvider):
                     f"{self.base_url}/chat/completions",
                     headers=headers,
                     json=data,
-                    timeout=30  # 30 second timeout
+                    timeout=60
                 ) as response:
                     if response.status != 200:
                         error_text = await response.text()
                         logging.error(f"OpenRouter API error: {error_text}")
-                        yield f"❌ Error: API returned status {response.status}. Please try again later."
+                        yield f"Error: {error_text}"
                         return
-                        
+
+                    # Process the stream
+                    buffer = ""
                     async for line in response.content:
-                        try:
-                            line = line.decode('utf-8').strip()
-                            if line:
+                        if line:
+                            try:
+                                line = line.decode('utf-8').strip()
                                 if line.startswith('data: '):
-                                    line = line[6:]
-                                if line == '[DONE]':
-                                    break
-                                    
-                                chunk = json.loads(line)
-                                if chunk.get('choices') and len(chunk['choices']) > 0:
-                                    content = chunk['choices'][0].get('delta', {}).get('content', '')
-                                    if content:
-                                        yield content
-                        except json.JSONDecodeError:
-                            continue
-                        except Exception as e:
-                            logging.error(f"Error processing chunk: {e}")
-                            continue
-                            
-        except aiohttp.ClientError as e:
-            logging.error(f"Network error with OpenRouter API: {e}")
-            yield "❌ Network error occurred. Please try again later."
+                                    line = line[6:]  # Remove 'data: ' prefix
+                                if line and line != '[DONE]':
+                                    try:
+                                        chunk = json.loads(line)
+                                        if chunk.get('choices') and len(chunk['choices']) > 0:
+                                            content = chunk['choices'][0].get('delta', {}).get('content', '')
+                                            if content:
+                                                buffer += content
+                                                # Yield complete sentences or accumulated content
+                                                while '.' in buffer or '\n' in buffer:
+                                                    split_char = '.' if '.' in buffer else '\n'
+                                                    parts = buffer.split(split_char, 1)
+                                                    if len(parts) > 1:
+                                                        yield parts[0] + split_char
+                                                        buffer = parts[1]
+                                                    else:
+                                                        break
+                                    except json.JSONDecodeError:
+                                        continue
+                            except Exception as e:
+                                logging.error(f"Error processing chunk: {e}")
+                                continue
+
+                    # Yield any remaining content in buffer
+                    if buffer:
+                        yield buffer
+
+        except asyncio.TimeoutError:
+            logging.error("OpenRouter API timeout")
+            yield "Error: Request timed out. Please try again."
         except Exception as e:
-            logging.error(f"Unexpected error in OpenRouter provider: {e}")
-            yield "❌ An unexpected error occurred. Please try again later."
+            logging.error(f"OpenRouter API error: {e}")
+            yield f"Error: An unexpected error occurred. Please try again."
