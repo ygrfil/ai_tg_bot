@@ -1,0 +1,29 @@
+{
+  "openrouter_current_model": "openai",
+  "openrouter_conversation_history": [
+    {
+      "role": "user",
+      "content": "22+222="
+    },
+    {
+      "role": "assistant",
+      "content": "244"
+    },
+    {
+      "role": "user",
+      "content": "+11="
+    },
+    {
+      "role": "assistant",
+      "content": "255"
+    },
+    {
+      "role": "user",
+      "content": "+1111"
+    },
+    {
+      "role": "assistant",
+      "content": "1366"
+    }
+  ]
+}

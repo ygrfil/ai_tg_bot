@@ -521,6 +521,11 @@ async def handle_message(message: Message, state: FSMContext):
             max_tokens=model_config.get('max_context_tokens', 4096)  # Default to 4096 if not specified
         )
 
+        # Convert history format for logging
+        if history:
+            history_format = "is_bot" if "is_bot" in history[0] else "role"
+            logging.info(f"Retrieved {len(history)} history messages in {history_format} format")
+            
         # Process message and image
         image_data = None
         message_text = message.caption if message.caption else message.text

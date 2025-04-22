@@ -1,5 +1,8 @@
 from environs import Env
 from typing import List, Dict, Any
+import json
+import os
+from pathlib import Path
 
 class Config:
     def __init__(self,
@@ -19,15 +22,51 @@ class Config:
         
         # Default polling settings
         self.polling_settings = polling_settings or {
-            "timeout": int(env.str("POLLING_TIMEOUT", "10")),  # Long polling timeout in seconds
-            "poll_interval": float(env.str("POLLING_INTERVAL", "0.5")),  # Minimum interval between requests
+            "timeout": 10,
+            "poll_interval": 0.5,
             "backoff": {
-                "max_delay": float(env.str("POLLING_MAX_DELAY", "5.0")),  # Maximum delay between retries
-                "start_delay": float(env.str("POLLING_START_DELAY", "1.0")),  # Initial retry delay
-                "factor": float(env.str("POLLING_BACKOFF_FACTOR", "1.5")),  # Multiplier for each retry
-                "jitter": float(env.str("POLLING_JITTER", "0.1")),  # Random jitter
+                "max_delay": 5.0,
+                "start_delay": 1.0,
+                "factor": 1.5,
+                "jitter": 0.1,
             }
         }
+
+        # Dynamic state storage
+        self._state: Dict[str, Any] = {}
+        self._state_file = Path("bot_state.json")
+        self._load_state()
+
+    def __getattr__(self, name: str) -> Any:
+        """Handle dynamic attribute access."""
+        return self._state.get(name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Handle dynamic attribute setting."""
+        if name in ['bot_token', 'allowed_user_ids', 'admin_id', 'openrouter_api_key', 
+                   'fal_api_key', 'max_tokens', 'polling_settings', '_state', '_state_file']:
+            super().__setattr__(name, value)
+        else:
+            self._state[name] = value
+            self._save_state()
+
+    def _load_state(self) -> None:
+        """Load state from file."""
+        try:
+            if self._state_file.exists():
+                with open(self._state_file, 'r') as f:
+                    self._state = json.load(f)
+        except Exception as e:
+            print(f"Error loading state: {e}")
+            self._state = {}
+
+    def _save_state(self) -> None:
+        """Save state to file."""
+        try:
+            with open(self._state_file, 'w') as f:
+                json.dump(self._state, f, indent=2)
+        except Exception as e:
+            print(f"Error saving state: {e}")
 
     @classmethod
     def from_env(cls):
