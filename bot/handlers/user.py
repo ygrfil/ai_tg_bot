@@ -92,13 +92,16 @@ async def cmd_start(message: Message, state: FSMContext):
     if not is_user_authorized(message.from_user.id):
         return
         
-    settings = await get_or_create_settings(message.from_user.id)
+    # Clear any existing state
+    await state.clear()
+    # Set initial state immediately to prevent falling into handle_unauthorized
+    await state.set_state(UserStates.chatting)
+    
     is_admin = str(message.from_user.id) == config.admin_id
-
-    await state.clear()  # Clear any existing state
-    await state.set_state(UserStates.chatting)  # Set initial state
+    settings = await get_or_create_settings(message.from_user.id)
     
     # Set default model if no provider is selected
+    model_was_set = False
     if not settings or 'current_provider' not in settings:
         # Use openai as the default model
         default_provider = "openai"
@@ -106,6 +109,7 @@ async def cmd_start(message: Message, state: FSMContext):
         settings['current_provider'] = default_provider
         settings['current_model'] = PROVIDER_MODELS[default_provider]['name']
         await storage.save_user_settings(message.from_user.id, settings)
+        model_was_set = True
         
         # Log model selection as usage
         await storage.log_usage(
@@ -115,12 +119,17 @@ async def cmd_start(message: Message, state: FSMContext):
             tokens=0,
             has_image=False
         )
-        
+    
+    welcome_message = f"Welcome, {hbold(message.from_user.full_name)}!\n"
+    if model_was_set:
+        welcome_message += f"Using default AI model: {settings['current_model']}\n\n"
+    else:
+        welcome_message += f"Current AI: {settings['current_provider']} ({settings['current_model']})\n\n"
+    
+    welcome_message += "You can start chatting now or use the menu buttons below."
+    
     await message.answer(
-        f"Welcome, {hbold(message.from_user.full_name)}!\n"
-        f"Current AI: {settings['current_provider']} "
-        f"({settings['current_model']})\n\n"
-        "You can start chatting now or use the menu buttons below.",
+        welcome_message,
         reply_markup=kb.get_main_menu(is_admin=is_admin)
     )
 
@@ -256,12 +265,31 @@ async def clear_history(message: Message):
         return
     
     try:
+        # Clear history in database
         await storage.clear_user_history(message.from_user.id)
+        
+        # Clear history in OpenRouter provider and other providers
+        settings = await storage.get_user_settings(message.from_user.id)
+        if settings and 'current_provider' in settings:
+            provider_name = settings['current_provider']
+            provider = get_provider(provider_name, config)
+            
+            # Check if provider has clear_conversation_history method
+            if hasattr(provider, 'clear_conversation_history'):
+                provider.clear_conversation_history()
+                logging.info(f"Cleared conversation history for provider {provider_name}")
+            
+            # Also clear provider instances to force a fresh state
+            from bot.services.ai_providers import clear_provider_instances
+            clear_provider_instances()
+            logging.info("Cleared all provider instances")
+        
         await message.answer(
-            "✅ Chat history cleared!",
+            "✅ Chat history cleared! All AI memory has been reset.",
             reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
         )
     except Exception as e:
+        logging.error(f"Failed to clear history: {e}", exc_info=True)
         await message.answer(
             "❌ Error: Could not clear history",
             reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
@@ -458,6 +486,12 @@ async def handle_message(message: Message, state: FSMContext):
         if str(user.id) not in config.allowed_user_ids:
             return
 
+        # Make sure we're in the chatting state
+        current_state = await state.get_state()
+        if current_state != UserStates.chatting:
+            await state.set_state(UserStates.chatting)
+            logging.info(f"Setting state to chatting for user {user.id}")
+
         # Update user information with each message
         await storage.ensure_user_exists(
             user_id=user.id,
@@ -633,16 +667,19 @@ async def handle_unauthorized(message: Message, state: FSMContext):
     
     current_state = await state.get_state()
     if not current_state:
-        settings = await storage.get_user_settings(message.from_user.id)
+        # Set state to chatting first to prevent looping back here
+        await state.set_state(UserStates.chatting)
+        logging.info(f"Setting state to chatting for user {message.from_user.id} (no prior state)")
         
-        # Set default model if needed
+        # Get or create settings with default model
+        settings = await storage.get_user_settings(message.from_user.id)
         if not settings or 'current_provider' not in settings:
-            # Set default model
             default_provider = "openai"
             settings = settings or {}
             settings['current_provider'] = default_provider
             settings['current_model'] = PROVIDER_MODELS[default_provider]['name']
             await storage.save_user_settings(message.from_user.id, settings)
+            logging.info(f"Set default model for user {message.from_user.id}: {default_provider}")
             
             # Log model selection
             await storage.log_usage(
@@ -652,18 +689,14 @@ async def handle_unauthorized(message: Message, state: FSMContext):
                 tokens=0,
                 has_image=False
             )
-        
-        is_admin = str(message.from_user.id) == config.admin_id
-        keyboard = kb.get_main_menu(is_admin)
-        
-        # Update keyboard silently
+            
+        # Process this message directly
         try:
-            updated = await update_keyboard(message.bot, message.from_user.id, keyboard)
-            if not updated:
-                await message.answer("Please select an option:", reply_markup=keyboard)
+            await handle_message(message, state)
         except Exception as e:
-            logging.debug(f"Keyboard update error: {e}")
-            await message.answer("Please select an option:", reply_markup=keyboard)
-        
-        # Set state to chatting since we always have a default model now
-        await state.set_state(UserStates.chatting)
+            logging.error(f"Error processing message in handle_unauthorized: {e}", exc_info=True)
+            is_admin = str(message.from_user.id) == config.admin_id
+            await message.answer(
+                "I encountered an error processing your message. Please try again.",
+                reply_markup=kb.get_main_menu(is_admin=is_admin)
+            )

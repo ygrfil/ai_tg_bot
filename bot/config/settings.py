@@ -96,3 +96,14 @@ class Config:
             max_tokens=env.int("MAX_TOKENS", 4096),
             polling_settings=polling_settings
         )
+
+    def clear_attribute(self, name: str) -> None:
+        """Remove a dynamic attribute from state."""
+        if name in self._state:
+            del self._state[name]
+            self._save_state()
+            
+    def clear_all_attributes(self) -> None:
+        """Clear all dynamic attributes."""
+        self._state = {}
+        self._save_state()

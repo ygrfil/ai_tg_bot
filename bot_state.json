@@ -1,29 +1,13 @@
 {
-  "openrouter_current_model": "openai",
+  "openrouter_current_model": "sonnet",
   "openrouter_conversation_history": [
     {
       "role": "user",
-      "content": "22+222="
+      "content": "1222+22"
     },
     {
       "role": "assistant",
-      "content": "244"
-    },
-    {
-      "role": "user",
-      "content": "+11="
-    },
-    {
-      "role": "assistant",
-      "content": "255"
-    },
-    {
-      "role": "user",
-      "content": "+1111"
-    },
-    {
-      "role": "assistant",
-      "content": "1366"
+      "content": "To solve 1222 + 22, I'll add these numbers:\n\n1222\n+  22\n------\n1244\n\nThe sum of 1222 and 22 is 1244."
     }
   ]
 }

@@ -4,12 +4,17 @@ from .openrouter import OpenRouterProvider
 from .fal import FalProvider
 from ...config import Config
 from .providers import PROVIDER_MODELS
+import logging
 
 __all__ = ['get_provider']
+
+# Provider instance cache to maintain state
+_provider_instances: Dict[str, BaseAIProvider] = {}
 
 def get_provider(provider_name: str, config: Config) -> BaseAIProvider:
     """
     Get an AI provider instance based on the provider name.
+    Uses a singleton pattern to maintain provider state.
     
     Args:
         provider_name: Name of the provider to get
@@ -21,6 +26,13 @@ def get_provider(provider_name: str, config: Config) -> BaseAIProvider:
     Raises:
         ValueError: If provider is not found
     """
+    global _provider_instances
+    
+    # Check if we already have an instance for this provider
+    if provider_name in _provider_instances:
+        logging.debug(f"Using existing provider instance for {provider_name}")
+        return _provider_instances[provider_name]
+    
     # First check if the provider exists in our models
     if provider_name not in PROVIDER_MODELS:
         raise ValueError(f"Provider {provider_name} not found in PROVIDER_MODELS")
@@ -40,4 +52,14 @@ def get_provider(provider_name: str, config: Config) -> BaseAIProvider:
     if provider is None:
         raise ValueError(f"No implementation found for provider {provider_name} (type: {provider_type})")
     
+    # Cache the provider instance
+    _provider_instances[provider_name] = provider
+    logging.info(f"Created and cached new provider instance for {provider_name}")
+    
     return provider
+
+def clear_provider_instances():
+    """Clear all provider instances from the cache."""
+    global _provider_instances
+    _provider_instances.clear()
+    logging.info("Cleared all provider instances from cache")

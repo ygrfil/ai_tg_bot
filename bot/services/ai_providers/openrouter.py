@@ -141,7 +141,17 @@ class OpenRouterProvider(BaseAIProvider):
     def clear_conversation_history(self) -> None:
         """Clear the conversation history."""
         self._conversation_history = []
-        self._save_state_to_config()
+        
+        # Also clear from config if available
+        if self._user_config:
+            if hasattr(self._user_config, 'clear_attribute'):
+                self._user_config.clear_attribute(self.CONFIG_KEY_HISTORY)
+                logger.info("Cleared conversation history from config")
+            else:
+                # Fallback to direct attribute setting
+                setattr(self._user_config, self.CONFIG_KEY_HISTORY, [])
+                logger.info("Set empty conversation history in config")
+                
         logger.info("Conversation history cleared")
 
     def _handle_stream_line(self, line_text: str) -> str | None:
