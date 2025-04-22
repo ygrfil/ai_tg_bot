@@ -1,49 +1,57 @@
-from typing import Optional, List, Dict, Any, AsyncGenerator
+from typing import Optional, List, Dict, Any, AsyncGenerator, TypedDict, cast
+from dataclasses import dataclass, field
 import base64
 import json
 import aiohttp
-from .base import BaseAIProvider
+from .base import BaseAIProvider, ProviderConfig
 from ...config import Config
 import logging
 import asyncio
+from ..ai_providers.providers import ModelConfig
+
+logger = logging.getLogger(__name__)
+
+@dataclass
+class OpenRouterConfig:
+    """Configuration for OpenRouter provider."""
+    base_url: str = "https://openrouter.ai/api/v1"
+    timeout: int = 60
+    temperature: float = 0.7
+    referer: str = "https://github.com/your-username/your-repo"
+    title: str = "AI Chat Bot"
+    stream_chunk_size: int = 8192
+    max_retries: int = 3
+    retry_delay: float = 1.0
 
 class OpenRouterProvider(BaseAIProvider):
-    """OpenRouter provider that handles all AI models."""
-    
-    def __init__(self, api_key: str, config: Config = None):
+    """OpenRouter API provider implementation."""
+
+    def __init__(self, api_key: str, config: Config | None = None) -> None:
+        """Initialize OpenRouter provider with API key and config."""
         super().__init__(api_key, config)
-        self.base_url = "https://openrouter.ai/api/v1"
-        self.model_name = None
-        self.vision = False
+        self.config = OpenRouterConfig()
+        self.model_name: str | None = None
+        self.vision: bool = False
 
     async def chat_completion_stream(
         self,
         message: str,
-        model_config: Dict[str, Any],
-        history: Optional[List[Dict[str, Any]]] = None,
-        image: Optional[bytes] = None
+        model_config: ModelConfig,
+        history: list[dict[str, Any]] | None = None,
+        image: bytes | None = None
     ) -> AsyncGenerator[str, None]:
-        """Generate a streaming response from OpenRouter."""
-        
+        """Generate a streaming chat completion response."""
         headers = {
             "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://github.com/yourgithub/ai_tg_bot",
-            "X-Title": "AI Telegram Bot"
+            "HTTP-Referer": self.config.referer,
+            "X-Title": self.config.title,
         }
 
         messages = []
-        
-        # Add system message
-        system_prompt = self._get_system_prompt(model_config.get('name', ''))
-        messages.append({"role": "system", "content": system_prompt})
-        
-        # Add history
         if history:
             messages.extend(self._format_history(history, model_config))
-        
-        # Add current message with image if provided
-        if image and self._supports_vision(model_config):
+
+        if image:
             base64_image = base64.b64encode(image).decode('utf-8')
             messages.append(self._format_image_message(message, base64_image))
         else:
@@ -53,61 +61,49 @@ class OpenRouterProvider(BaseAIProvider):
             "model": model_config['name'],
             "messages": messages,
             "stream": True,
-            "temperature": 0.7,
-            "max_tokens": model_config.get('max_output_tokens', 2000)
+            "temperature": self.config.temperature,
+            "max_tokens": self._get_max_tokens(model_config),
         }
 
-        try:
-            async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession() as session:
+            try:
                 async with session.post(
-                    f"{self.base_url}/chat/completions",
+                    f"{self.config.base_url}/chat/completions",
                     headers=headers,
                     json=data,
-                    timeout=60
+                    timeout=self.config.timeout
                 ) as response:
                     if response.status != 200:
                         error_text = await response.text()
-                        logging.error(f"OpenRouter API error: {error_text}")
-                        yield f"Error: {error_text}"
+                        logger.error(f"OpenRouter API error: {response.status} - {error_text}")
+                        yield f"Error: OpenRouter API returned status {response.status}"
                         return
 
-                    # Process the stream
-                    buffer = ""
                     async for line in response.content:
-                        if line:
-                            try:
-                                line = line.decode('utf-8').strip()
-                                if line.startswith('data: '):
-                                    line = line[6:]  # Remove 'data: ' prefix
-                                if line and line != '[DONE]':
-                                    try:
-                                        chunk = json.loads(line)
-                                        if chunk.get('choices') and len(chunk['choices']) > 0:
-                                            content = chunk['choices'][0].get('delta', {}).get('content', '')
-                                            if content:
-                                                buffer += content
-                                                # Yield complete sentences or accumulated content
-                                                while '.' in buffer or '\n' in buffer:
-                                                    split_char = '.' if '.' in buffer else '\n'
-                                                    parts = buffer.split(split_char, 1)
-                                                    if len(parts) > 1:
-                                                        yield parts[0] + split_char
-                                                        buffer = parts[1]
-                                                    else:
-                                                        break
-                                    except json.JSONDecodeError:
-                                        continue
-                            except Exception as e:
-                                logging.error(f"Error processing chunk: {e}")
-                                continue
+                        line_text = line.decode('utf-8').strip()
+                        if not line_text or line_text == "data: [DONE]":
+                            continue
 
-                    # Yield any remaining content in buffer
-                    if buffer:
-                        yield buffer
+                        if not line_text.startswith("data: "):
+                            logger.warning(f"Unexpected line format: {line_text}")
+                            continue
 
-        except asyncio.TimeoutError:
-            logging.error("OpenRouter API timeout")
-            yield "Error: Request timed out. Please try again."
-        except Exception as e:
-            logging.error(f"OpenRouter API error: {e}")
-            yield f"Error: An unexpected error occurred. Please try again."
+                        try:
+                            json_str = line_text[6:]  # Remove "data: " prefix
+                            data = json.loads(json_str)
+                            if content := data.get('choices', [{}])[0].get('delta', {}).get('content'):
+                                yield content
+                        except json.JSONDecodeError as e:
+                            logger.error(f"JSON decode error: {e} - Line: {line_text}")
+                            continue
+                        except Exception as e:
+                            logger.error(f"Error processing stream: {e}")
+                            yield f"Error processing response: {str(e)}"
+                            return
+
+            except aiohttp.ClientError as e:
+                logger.error(f"Network error: {e}")
+                yield f"Network error: {str(e)}"
+            except Exception as e:
+                logger.error(f"Unexpected error: {e}")
+                yield f"Unexpected error: {str(e)}"
