@@ -1,5 +1,5 @@
 {
-  "openrouter_current_model": "gemini",
+  "openrouter_current_model": "openai",
   "openrouter_conversation_history": [
     {
       "role": "user",
@@ -7,7 +7,7 @@
     },
     {
       "role": "assistant",
-      "content": "In deutschen Kinos dauert der Werbeblock vor dem Hauptfilm **in der Regel zwischen 15 und 25 Minuten**.\n\nDieser Block besteht meistens aus zwei Teilen:\n\n1.  **Werbespots:** Klassische Werbung f\u00fcr Produkte, Dienstleistungen oder lokale Unternehmen (oft ca. 5-10 Minuten).\n2.  **Filmtrailer (Vorschau):** Trailer f\u00fcr kommende Kinofilme (oft ca. 10-15 Minuten).\n\n**Wichtige Punkte:**\n\n*   **Variabilit\u00e4t:** Die genaue L\u00e4nge kann stark variieren. Sie h\u00e4ngt von der Kinokette, dem gezeigten Film (bei Blockbustern oft l\u00e4nger), der Uhrzeit und dem Wochentag ab.\n*   **Angegebene Startzeit:** Die auf dem Ticket oder im Programm angegebene Zeit ist normalerweise der Beginn des Werbe- und Trailerblocks, **nicht** der Start des Hauptfilms. Der eigentliche Film beginnt also entsprechend sp\u00e4ter.\n\nDu kannst also grob damit rechnen, dass der Hauptfilm etwa **20 Minuten nach der offiziellen Anfangszeit** startet."
+      "content": "In den meisten deutschen Kinos l\u00e4uft vor dem im Saal ausgewiesenen Filmstart ein ganzes Vorprogramm aus Trailern, Hinweisen (z.\u00a0B. FSK\u2010Warnungen) und Produktwerbung. Die Zeiten liegen grob in diesem Rahmen:\n\n\u2022 Film\u2011Trailer (Vorschauen auf kommende Filme): ca.\u00a06\u201310 Minuten  \n\u2022 Werbung (Getr\u00e4nke/Snacks, lokale Partner, Events o.\u00a0\u00c4.): ca.\u00a04\u20138 Minuten  \n\u2022 FSK\u2011Hinweise, Fluchtwege etc.: ca.\u00a01\u20132 Minuten  \n\nZusammen also in der Regel zwischen 10 und 20 Minuten Vorprogramm. Je nach Kino\u2011Kette, Saalgr\u00f6\u00dfe oder Format (3D, IMAX) kann es mal ein paar Minuten mehr oder weniger werden."
     }
   ]
 }

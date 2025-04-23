@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Any, AsyncGenerator, Protocol, TypeVar, cast
 from dataclasses import dataclass, field
 from bot.config import Config
-from bot.config.prompts import get_system_prompt, uses_system_prompt_parameter
+from bot.config.prompts import get_system_prompt, uses_system_prompt_parameter, needs_system_prompt
 import re
 import logging
 from openai import AsyncOpenAI
@@ -42,6 +42,11 @@ class BaseAIProvider(ABC):
         Returns:
             None (modifies data and/or messages in place)
         """
+        # Skip if this provider doesn't need a system prompt (e.g., image generation)
+        if not needs_system_prompt(self.provider_name):
+            logging.debug(f"Skipping system prompt for {self.provider_name}")
+            return
+            
         system_prompt = self._get_system_prompt(model_name)
         
         if uses_system_prompt_parameter(self.provider_name):
