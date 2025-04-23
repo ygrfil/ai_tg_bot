@@ -20,6 +20,16 @@ DEFAULT_SYSTEM_PROMPT = """You are an AI assistant optimized for Telegram conver
 
 Keep responses concise, informative, and well-structured. Use formatting and emojis purposefully to enhance readability."""
 
+# List of providers that need system_prompt as a parameter instead of a message
+SYSTEM_PROMPT_AS_PARAMETER = [
+    "openrouter",  # For OpenRouter API
+    # Add other providers as needed
+]
+
 def get_system_prompt(model_name: str) -> str:
     """Get the system prompt regardless of model."""
     return DEFAULT_SYSTEM_PROMPT
+
+def uses_system_prompt_parameter(provider_name: str) -> bool:
+    """Check if the provider uses system_prompt as a parameter instead of a message."""
+    return provider_name.lower() in SYSTEM_PROMPT_AS_PARAMETER

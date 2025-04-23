@@ -273,13 +273,8 @@ class OpenRouterProvider(BaseAIProvider):
             "X-Title": self.config.title,
         }
 
-        # Prepare messages array with system prompt
-        messages = [
-            {
-                "role": "system",
-                "content": self._get_system_prompt(model_config['name'])
-            }
-        ]
+        # Initialize an empty messages array
+        messages = []
 
         # Add conversation history
         if history:
@@ -323,6 +318,9 @@ class OpenRouterProvider(BaseAIProvider):
             "temperature": self.config.temperature,
             "max_tokens": self._get_max_tokens(model_config),
         }
+        
+        # Add system prompt (either as parameter or message)
+        self._add_system_prompt(data, model_config['name'], messages)
 
         logger.debug(f"Sending request with {len(messages)} messages in context")
 

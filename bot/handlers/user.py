@@ -144,55 +144,65 @@ async def handle_provider_choice(message: Message, state: FSMContext):
     display_to_provider = {
         'online🌐': 'online',
         'gemini 2.5': 'gemini',
-        'gpt-4.1': 'gpt-4.1',
-        'sonnet': 'sonnet'
+        'sonnet': 'sonnet',
+        'openai': 'openai'
     }
     
-    # Try exact match first
-    if clean_text in PROVIDER_MODELS:
-        provider = clean_text
-    else:
-        # Try without emojis/special characters
-        clean_text = re.sub(r'[🌐🏆\(\)]\s*', '', clean_text).strip()
-        # Try to match with display names
-        provider = display_to_provider.get(clean_text)
-        if not provider:
-            # Try partial match with provider names
-            for model_name in PROVIDER_MODELS.keys():
-                if clean_text in model_name.lower():
-                    provider = model_name
-                    break
-    
-    if provider and provider in PROVIDER_MODELS:
-        settings = await get_or_create_settings(message.from_user.id)
-        if not settings:
-            settings = {}
+    try:
+        # Try exact match first
+        if clean_text in PROVIDER_MODELS:
+            provider = clean_text
+        else:
+            # Try without emojis/special characters
+            clean_text = re.sub(r'[🌐🏆\(\)]\s*', '', clean_text).strip()
+            # Try to match with display names
+            provider = display_to_provider.get(clean_text)
+            if not provider:
+                # Try partial match with provider names
+                for model_name in PROVIDER_MODELS.keys():
+                    if clean_text in model_name.lower():
+                        provider = model_name
+                        break
+        
+        # Validate that the provider exists in PROVIDER_MODELS
+        if provider and provider in PROVIDER_MODELS:
+            settings = await get_or_create_settings(message.from_user.id)
+            if not settings:
+                settings = {}
+                
+            settings['current_provider'] = provider
+            settings['current_model'] = PROVIDER_MODELS[provider]['name']
             
-        settings['current_provider'] = provider
-        settings['current_model'] = PROVIDER_MODELS[provider]['name']
-        
-        await storage.save_user_settings(
-            message.from_user.id,
-            settings
-        )
-        
-        # Log model selection as usage
-        await storage.log_usage(
-            user_id=message.from_user.id,
-            provider=provider,
-            model=PROVIDER_MODELS[provider]['name'],
-            tokens=0,
-            has_image=False
-        )
-        
+            await storage.save_user_settings(
+                message.from_user.id,
+                settings
+            )
+            
+            # Log model selection as usage
+            await storage.log_usage(
+                user_id=message.from_user.id,
+                provider=provider,
+                model=PROVIDER_MODELS[provider]['name'],
+                tokens=0,
+                has_image=False
+            )
+            
+            await message.answer(
+                f"AI Model changed to {PROVIDER_MODELS[provider]['name']}. Ready to chat!",
+                reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
+            )
+            await state.set_state(UserStates.chatting)
+        else:
+            # Provider not found or invalid
+            available_models = ", ".join(PROVIDER_MODELS.keys())
+            await message.answer(
+                f"Sorry, that provider isn't available. Please select from: {available_models}",
+                reply_markup=kb.get_provider_menu()
+            )
+    except Exception as e:
+        logging.error(f"Error handling provider choice: {e}", exc_info=True)
         await message.answer(
-            f"AI Model changed to {PROVIDER_MODELS[provider]['name']}. Ready to chat!",
-            reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
-        )
-        await state.set_state(UserStates.chatting)
-    else:
-        await message.answer(
-            "Please select a model from the menu.",
+            "An error occurred while selecting the provider. Please try again.",
             reply_markup=kb.get_provider_menu()
         )
 
@@ -268,18 +278,31 @@ async def clear_history(message: Message):
         # Clear history in database
         await storage.clear_user_history(message.from_user.id)
         
-        # Clear history in OpenRouter provider and other providers
+        # Clear history in provider if available
         settings = await storage.get_user_settings(message.from_user.id)
         if settings and 'current_provider' in settings:
             provider_name = settings['current_provider']
-            provider = get_provider(provider_name, config)
             
-            # Check if provider has clear_conversation_history method
-            if hasattr(provider, 'clear_conversation_history'):
-                provider.clear_conversation_history()
-                logging.info(f"Cleared conversation history for provider {provider_name}")
+            try:
+                # Check if provider exists in PROVIDER_MODELS
+                if provider_name in PROVIDER_MODELS:
+                    provider = get_provider(provider_name, config)
+                    
+                    # Check if provider has clear_conversation_history method
+                    if hasattr(provider, 'clear_conversation_history'):
+                        provider.clear_conversation_history()
+                        logging.info(f"Cleared conversation history for provider {provider_name}")
+                else:
+                    # Provider not found, reset to default provider
+                    default_provider = "openai"
+                    settings['current_provider'] = default_provider
+                    settings['current_model'] = PROVIDER_MODELS[default_provider]['name']
+                    await storage.save_user_settings(message.from_user.id, settings)
+                    logging.info(f"Reset to default provider {default_provider} for user {message.from_user.id}")
+            except Exception as e:
+                logging.warning(f"Error clearing provider history: {e}")
             
-            # Also clear provider instances to force a fresh state
+            # Always clear provider instances to force a fresh state
             from bot.services.ai_providers import clear_provider_instances
             clear_provider_instances()
             logging.info("Cleared all provider instances")
@@ -534,7 +557,8 @@ async def handle_message(message: Message, state: FSMContext):
             'groq': 'openai',
             'o3-mini': 'online',
             'r1-1776': 'gemini',
-            'online': 'online'
+            'online': 'online',
+            'gpt-4.1': 'openai'  # Map any existing gpt-4.1 references to openai
         }
             
         provider_name = legacy_to_new.get(settings['current_provider'], settings['current_provider'])

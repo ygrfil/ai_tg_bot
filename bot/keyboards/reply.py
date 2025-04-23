@@ -34,13 +34,31 @@ def get_admin_menu() -> ReplyKeyboardMarkup:
 def get_provider_menu() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
     
-    model_buttons = [
-        ["OpenAI", "Sonnet"],
-        ["Online🌐", "Gemini 2.5"]
-    ]
+    # Get available provider models
+    available_models = list(PROVIDER_MODELS.keys())
     
-    for row in model_buttons:
-        builder.row(*[KeyboardButton(text=text) for text in row])
+    # Filter out fal which is only for image generation
+    available_models = [model for model in available_models if model != "fal"]
+    
+    # Create nice display names for models
+    display_names = {
+        "openai": "OpenAI",
+        "sonnet": "Sonnet",
+        "online": "Online🌐",
+        "gemini": "Gemini 2.5"
+    }
+    
+    # Build rows with 2 buttons each
+    row = []
+    for model in sorted(available_models):
+        row.append(KeyboardButton(text=display_names.get(model, model.capitalize())))
+        if len(row) == 2:
+            builder.row(*row)
+            row = []
+    
+    # Add any remaining buttons
+    if row:
+        builder.row(*row)
     
     builder.row(KeyboardButton(text="🔙 Back"))
     return builder.as_markup(resize_keyboard=True)
