@@ -59,7 +59,7 @@ class OpenRouterProvider(BaseAIProvider):
 
     def _load_state_from_config(self) -> None:
         """Load saved state from config."""
-        # Load model
+        # Load model - keep this part since model selection is lightweight
         saved_model = getattr(self._user_config, self.CONFIG_KEY_MODEL, None)
         if saved_model and saved_model in PROVIDER_MODELS:
             self._current_model = PROVIDER_MODELS[saved_model]
@@ -67,14 +67,9 @@ class OpenRouterProvider(BaseAIProvider):
         else:
             self._initialize_default_model()
 
-        # Load conversation history
-        saved_history = getattr(self._user_config, self.CONFIG_KEY_HISTORY, [])
-        if isinstance(saved_history, list):
-            self._conversation_history = saved_history
-            logger.info(f"Loaded {len(saved_history)} messages from conversation history")
-        else:
-            logger.warning("Invalid conversation history format in config")
-            self._conversation_history = []
+        # Don't load conversation history from file - it's already handled by SQLite
+        self._conversation_history = []
+        logger.info("Starting with empty conversation history to improve performance")
 
     def _save_state_to_config(self) -> None:
         """Save current state to config."""
@@ -82,16 +77,16 @@ class OpenRouterProvider(BaseAIProvider):
             logger.warning("No config available to save state")
             return
 
-        # Save current model
+        # Save current model - this is lightweight and useful to persist
         if self._current_model:
             for key, model in PROVIDER_MODELS.items():
                 if model['name'] == self._current_model['name']:
                     setattr(self._user_config, self.CONFIG_KEY_MODEL, key)
                     break
 
-        # Save conversation history
-        setattr(self._user_config, self.CONFIG_KEY_HISTORY, self._conversation_history)
-        logger.debug(f"Saved state to config: model={self._current_model['name'] if self._current_model else 'None'}, history_size={len(self._conversation_history)}")
+        # Don't save conversation history to file - conversation context is handled by SQLite
+        # This avoids excessive disk I/O and improves performance
+        logger.debug(f"Model selection saved: {self._current_model['name'] if self._current_model else 'None'}")
 
     def _initialize_default_model(self) -> None:
         """Initialize the default model to ensure we always have a model selected."""
@@ -134,25 +129,15 @@ class OpenRouterProvider(BaseAIProvider):
         if len(self._conversation_history) > self.config.max_history_size:
             self._conversation_history = self._conversation_history[-self.config.max_history_size:]
         
-        # Save after each update
-        self._save_state_to_config()
-        logger.debug(f"Updated conversation history: {len(self._conversation_history)} messages")
+        # Skip saving to JSON file - this data is already in SQLite
+        logger.debug(f"Updated in-memory conversation history: {len(self._conversation_history)} messages")
 
     def clear_conversation_history(self) -> None:
         """Clear the conversation history."""
         self._conversation_history = []
         
-        # Also clear from config if available
-        if self._user_config:
-            if hasattr(self._user_config, 'clear_attribute'):
-                self._user_config.clear_attribute(self.CONFIG_KEY_HISTORY)
-                logger.info("Cleared conversation history from config")
-            else:
-                # Fallback to direct attribute setting
-                setattr(self._user_config, self.CONFIG_KEY_HISTORY, [])
-                logger.info("Set empty conversation history in config")
-                
-        logger.info("Conversation history cleared")
+        # No need to clear from config file - we're not using it for conversation history
+        logger.info("Conversation history cleared in memory")
 
     def _handle_stream_line(self, line_text: str) -> str | None:
         """Handle a single line from the stream and return content if available."""

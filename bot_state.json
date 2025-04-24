@@ -1,5 +1,5 @@
 {
-  "openrouter_current_model": "openai",
+  "openrouter_current_model": "sonnet",
   "openrouter_conversation_history": [
     {
       "role": "user",
@@ -7,7 +7,7 @@
     },
     {
       "role": "assistant",
-      "content": "In den meisten deutschen Kinos l\u00e4uft vor dem im Saal ausgewiesenen Filmstart ein ganzes Vorprogramm aus Trailern, Hinweisen (z.\u00a0B. FSK\u2010Warnungen) und Produktwerbung. Die Zeiten liegen grob in diesem Rahmen:\n\n\u2022 Film\u2011Trailer (Vorschauen auf kommende Filme): ca.\u00a06\u201310 Minuten  \n\u2022 Werbung (Getr\u00e4nke/Snacks, lokale Partner, Events o.\u00a0\u00c4.): ca.\u00a04\u20138 Minuten  \n\u2022 FSK\u2011Hinweise, Fluchtwege etc.: ca.\u00a01\u20132 Minuten  \n\nZusammen also in der Regel zwischen 10 und 20 Minuten Vorprogramm. Je nach Kino\u2011Kette, Saalgr\u00f6\u00dfe oder Format (3D, IMAX) kann es mal ein paar Minuten mehr oder weniger werden."
+      "content": "In deutschen Kinos dauert die Werbung (inklusive Filmtrailern) vor dem Hauptfilm typischerweise zwischen 20 und 30 Minuten. Die genaue Dauer kann jedoch variieren und h\u00e4ngt von mehreren Faktoren ab:\n\n- Gr\u00f6\u00dfe des Kinos/der Kinokette\n- Tageszeit der Vorstellung (Abendvorstellungen haben oft mehr Werbung)\n- Blockbuster vs. kleinere Filme (bei gro\u00dfen Filmen gibt es tendenziell mehr Werbung)\n\nWenn du p\u00fcnktlich zum Hauptfilm kommen m\u00f6chtest, ist es ratsam, die angegebene Startzeit plus etwa 20-25 Minuten zu kalkulieren. Manche Kinos geben auch die tats\u00e4chliche Startzeit des Hauptfilms an oder informieren \u00fcber die Dauer der Vorschau."
     }
   ]
 }
