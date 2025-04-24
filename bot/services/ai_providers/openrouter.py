@@ -8,6 +8,7 @@ from ...config import Config
 import logging
 import asyncio
 from ..ai_providers.providers import ModelConfig, PROVIDER_MODELS
+from ...services.storage import Storage
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +29,9 @@ class OpenRouterConfig:
 class OpenRouterProvider(BaseAIProvider):
     """OpenRouter API provider implementation."""
 
-    # Config attribute names for persistence
-    CONFIG_KEY_MODEL = "openrouter_current_model"
-    CONFIG_KEY_HISTORY = "openrouter_conversation_history"
+    # Constants for storing in database
+    PROVIDER_NAME = "openrouter"
+    DEFAULT_MODEL = "openai"
 
     # Known OpenRouter status messages that should not trigger warnings
     _KNOWN_STATUS_MESSAGES = {
@@ -47,57 +48,37 @@ class OpenRouterProvider(BaseAIProvider):
         self._current_model: ModelConfig | None = None
         self._conversation_history: list[dict[str, Any]] = []
         self._user_config = config
+        self._storage = Storage("data/chat.db")
         
-        # Load saved state from config if available
-        if config:
-            self._load_state_from_config()
-        else:
-            self._initialize_default_model()
+        # Initialize with default model
+        self._initialize_default_model()
 
         logger.info(f"OpenRouterProvider initialized with model: {self._current_model['name'] if self._current_model else 'None'}")
-        logger.info(f"Conversation history loaded: {len(self._conversation_history)} messages")
+        logger.info(f"Conversation history will be managed by SQLite database")
 
-    def _load_state_from_config(self) -> None:
-        """Load saved state from config."""
-        # Load model - keep this part since model selection is lightweight
-        saved_model = getattr(self._user_config, self.CONFIG_KEY_MODEL, None)
-        if saved_model and saved_model in PROVIDER_MODELS:
-            self._current_model = PROVIDER_MODELS[saved_model]
-            logger.info(f"Loaded saved model from config: {saved_model}")
-        else:
-            self._initialize_default_model()
+    async def _get_user_model_preference(self, user_id: int) -> Optional[str]:
+        """Get user's model preference from database."""
+        settings = await self._storage.get_user_settings(user_id)
+        if settings and 'current_provider' in settings and settings['current_provider'] == self.PROVIDER_NAME:
+            return settings.get('model_key')
+        return None
 
-        # Don't load conversation history from file - it's already handled by SQLite
-        self._conversation_history = []
-        logger.info("Starting with empty conversation history to improve performance")
-
-    def _save_state_to_config(self) -> None:
-        """Save current state to config."""
-        if not self._user_config:
-            logger.warning("No config available to save state")
-            return
-
-        # Save current model - this is lightweight and useful to persist
-        if self._current_model:
-            for key, model in PROVIDER_MODELS.items():
-                if model['name'] == self._current_model['name']:
-                    setattr(self._user_config, self.CONFIG_KEY_MODEL, key)
-                    break
-
-        # Don't save conversation history to file - conversation context is handled by SQLite
-        # This avoids excessive disk I/O and improves performance
-        logger.debug(f"Model selection saved: {self._current_model['name'] if self._current_model else 'None'}")
+    async def _save_user_model_preference(self, user_id: int, model_key: str) -> None:
+        """Save user's model preference to database."""
+        settings = await self._storage.get_user_settings(user_id) or {}
+        if 'current_provider' in settings and settings['current_provider'] == self.PROVIDER_NAME:
+            settings['model_key'] = model_key
+            await self._storage.save_user_settings(user_id, settings)
 
     def _initialize_default_model(self) -> None:
         """Initialize the default model to ensure we always have a model selected."""
         if self._current_model is None:
-            default_model = PROVIDER_MODELS.get(self.config.default_model)
+            default_model = PROVIDER_MODELS.get(self.DEFAULT_MODEL)
             if default_model is None:
                 # Fallback to first available model if default is not found
                 default_model = next(iter(PROVIDER_MODELS.values()))
             self._current_model = default_model
             logger.info(f"Initialized default model: {self._current_model['name']}")
-            self._save_state_to_config()
 
     def set_model(self, model_key: str) -> None:
         """Set the current model configuration."""
@@ -112,7 +93,6 @@ class OpenRouterProvider(BaseAIProvider):
 
         self._current_model = PROVIDER_MODELS[model_key]
         logger.info(f"Model set to: {self._current_model['name']}")
-        self._save_state_to_config()
 
     def get_current_model(self) -> ModelConfig:
         """Get the current model configuration, initializing default if none set."""
@@ -129,14 +109,11 @@ class OpenRouterProvider(BaseAIProvider):
         if len(self._conversation_history) > self.config.max_history_size:
             self._conversation_history = self._conversation_history[-self.config.max_history_size:]
         
-        # Skip saving to JSON file - this data is already in SQLite
         logger.debug(f"Updated in-memory conversation history: {len(self._conversation_history)} messages")
 
     def clear_conversation_history(self) -> None:
         """Clear the conversation history."""
         self._conversation_history = []
-        
-        # No need to clear from config file - we're not using it for conversation history
         logger.info("Conversation history cleared in memory")
 
     def _handle_stream_line(self, line_text: str) -> str | None:
@@ -247,7 +224,7 @@ class OpenRouterProvider(BaseAIProvider):
         image: bytes | None = None
     ) -> AsyncGenerator[str, None]:
         """Generate a streaming chat completion response."""
-        # Update current model state if different
+        # Update model selection to match config
         if not self._current_model or self._current_model['name'] != model_config['name']:
             self._current_model = model_config
             logger.info(f"Updated model to: {model_config['name']}")
