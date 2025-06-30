@@ -6,7 +6,7 @@ from aiogram.types import Message
 import re
 
 class MessageRateLimiter:
-    def __init__(self, update_interval: float = 0.3, min_chunk_size: int = 150):
+    def __init__(self, update_interval: float = 0.2, min_chunk_size: int = 100):
         self.update_interval = timedelta(seconds=update_interval)
         self.min_chunk_size = min_chunk_size
         self.last_update_time = datetime.min

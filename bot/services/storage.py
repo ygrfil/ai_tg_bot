@@ -152,7 +152,7 @@ class Storage:
             await self.pool.release(db)
 
     @with_retries(max_retries=3)
-    async def get_chat_history(self, user_id: int, limit: int = 5) -> List[Dict[str, Any]]:
+    async def get_chat_history(self, user_id: int, limit: int = 10) -> List[Dict[str, Any]]:
         """Get recent chat history for context"""
         await self.ensure_initialized()
         cache_key = f"history_{user_id}"
@@ -247,46 +247,19 @@ class Storage:
                 """, (user_id, content_str, 1 if is_bot else 0))
                 await db.commit()
                 
-                # Try to extract user name if it's a bot response or user message
-                if is_bot:
-                    # Check if this bot message might contain a name reference
-                    name_patterns = [
-                        r"(?:Hello|Hi|Hey|Thanks|Thank you),? ([A-Z][a-z]+)",
-                        r"(?:Hello|Hi|Hey|Thanks|Thank you) ([A-Z][a-z]+)",
-                        r"(?:Nice to meet you|Good to see you),? ([A-Z][a-z]+)",
-                        r"(?:Welcome back|Welcome),? ([A-Z][a-z]+)",
-                        r"(?:I understand|I see|I agree|I hear you),? ([A-Z][a-z]+)"
+                # Simplified name extraction - only for direct introductions
+                if not is_bot and not content_str.startswith('/'):
+                    # Only check first few messages for self-introductions
+                    intro_patterns = [
+                        r"(?:I am|I'm|my name is|call me) ([A-Z][a-z]+)",
+                        r"(?:Hello|Hi)(?:,|!) (?:I am|I'm) ([A-Z][a-z]+)"
                     ]
                     
-                    for pattern in name_patterns:
-                        match = re.search(pattern, content_str)
-                        if match:
-                            possible_name = match.group(1)
-                            # Update the user's first_name in the database
-                            await db.execute("""
-                                UPDATE users
-                                SET first_name = ?
-                                WHERE user_id = ? AND (first_name IS NULL OR first_name = '')
-                            """, (possible_name, user_id))
-                            await db.commit()
-                            break
-                else:
-                    # Check if user's message contains a self-introduction
-                    user_patterns = [
-                        r"(?:I am|I'm|my name is|call me|this is) ([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)",
-                        r"(?:Hello|Hi|Hey)(?:,|!) (?:I am|I'm|my name is|this is) ([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)",
-                        r"(?:Hello|Hi|Hey)(?:,|!) ([A-Z][a-z]+(?:\s[A-Z][a-z]+)?) (?:here|speaking)",
-                        r"(?:Regards|Best|Sincerely|Thanks),?\s+([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)"
-                    ]
-                    
-                    for pattern in user_patterns:
+                    for pattern in intro_patterns:
                         match = re.search(pattern, content_str)
                         if match:
                             possible_name = match.group(1).strip()
-                            
-                            # Validate the name (basic check)
-                            if len(possible_name) > 2 and len(possible_name) < 30:
-                                # Update the user's name in the database
+                            if 2 < len(possible_name) < 20:
                                 await db.execute("""
                                     UPDATE users
                                     SET first_name = ?

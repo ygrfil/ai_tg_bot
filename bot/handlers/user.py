@@ -10,6 +10,7 @@ from datetime import datetime
 import logging
 from typing import Optional
 import asyncio
+import time
 
 from bot.keyboards import reply as kb
 from bot.services.storage import Storage
@@ -457,19 +458,21 @@ async def handle_message(message: Message, state: FSMContext):
         if str(user.id) not in config.allowed_user_ids:
             return
 
+        t0 = time.monotonic()
         # Update user information with each message
         await storage.ensure_user_exists(
             user_id=user.id,
             username=user.username,
             first_name=user.first_name
         )
+        t1 = time.monotonic()
 
         # Get settings and history concurrently
         settings_task = storage.get_user_settings(message.from_user.id)
-        history_task = storage.get_chat_history(message.from_user.id, limit=20)
-        
+        history_task = storage.get_chat_history(message.from_user.id, limit=10)
         settings, history = await asyncio.gather(settings_task, history_task)
-        
+        t2 = time.monotonic()
+
         if not settings or 'current_provider' not in settings:
             # Set default model if no provider is selected
             default_provider = "openai"
@@ -477,8 +480,6 @@ async def handle_message(message: Message, state: FSMContext):
             settings['current_provider'] = default_provider
             settings['current_model'] = PROVIDER_MODELS[default_provider]['name']
             await storage.save_user_settings(message.from_user.id, settings)
-            
-            # Log model selection as usage
             await storage.log_usage(
                 user_id=message.from_user.id,
                 provider=default_provider,
@@ -486,23 +487,19 @@ async def handle_message(message: Message, state: FSMContext):
                 tokens=0,
                 has_image=False
             )
-            
-            # Notify user about default model
             await message.answer(
                 f"Using default model: {settings['current_model']}. You can change it using the '🤖 Choose AI Model' button."
             )
 
-        # Map legacy provider names to new ones
         legacy_to_new = {
             'openai': 'openai',
             'claude': 'sonnet',
             'openrouter_deepseek': 'gemini',
             'groq': 'openai',
-            'o3-mini': 'online',  # Map o3-mini to online
+            'o3-mini': 'online',
             'r1-1776': 'gemini',
-            'online': 'online'  # Ensure online maps to itself
+            'online': 'online'
         }
-            
         provider_name = legacy_to_new.get(settings['current_provider'], settings['current_provider'])
         if provider_name not in PROVIDER_MODELS:
             await message.answer(
@@ -511,33 +508,29 @@ async def handle_message(message: Message, state: FSMContext):
             )
             await state.set_state(UserStates.choosing_provider)
             return
-            
         model_config = PROVIDER_MODELS[provider_name]
-        
-        # Process message and image
+
         image_data = None
         message_text = message.caption if message.caption else message.text
-
         if message.photo:
             photo = message.photo[-1]
             image_file = await message.bot.get_file(photo.file_id)
             image_bytes = await message.bot.download_file(image_file.file_path)
             image_data = image_bytes.read()
-            
             if not message_text:
                 message_text = "Please analyze this image."
 
-        # Add user message to history first
         await storage.add_to_history(message.from_user.id, message_text, False, image_data)
+        t3 = time.monotonic()
 
-        # Get AI provider and prepare response
         ai_provider = get_provider(provider_name, config)
         await message.bot.send_chat_action(message.chat.id, "typing")
         bot_response = await message.answer("Processing...")
-        
+
         # Stream the response
         collected_response = ""
         token_count = 0
+        t4 = time.monotonic()
         async for response_chunk in ai_provider.chat_completion_stream(
             message=message_text,
             model_config=model_config,
@@ -546,21 +539,19 @@ async def handle_message(message: Message, state: FSMContext):
         ):
             if response_chunk and response_chunk.strip():
                 collected_response += response_chunk
-                token_count += len(response_chunk.split())  # Rough token count estimation
+                token_count += len(response_chunk.split())
                 sanitized_response = sanitize_html_tags(collected_response)
                 if await rate_limiter.should_update_message(sanitized_response):
                     try:
                         await bot_response.edit_text(sanitized_response, parse_mode="HTML")
-                        await asyncio.sleep(0.5)
+                        await asyncio.sleep(0.2)
                     except Exception as e:
                         if "message is not modified" not in str(e).lower():
                             logging.debug(f"Message update error: {e}")
+        t5 = time.monotonic()
 
-        # Save final response
         if collected_response:
             await storage.add_to_history(message.from_user.id, collected_response, True)
-            
-            # Log usage statistics
             await storage.log_usage(
                 user_id=message.from_user.id,
                 provider=provider_name,
@@ -568,12 +559,14 @@ async def handle_message(message: Message, state: FSMContext):
                 tokens=token_count,
                 has_image=bool(image_data)
             )
-            
             final_response = sanitize_html_tags(collected_response)
             try:
                 await bot_response.edit_text(final_response, parse_mode="HTML")
             except Exception as e:
                 logging.debug(f"Final message update error: {e}")
+
+        t6 = time.monotonic()
+        logging.info(f"[TIMING] ensure_user_exists: {t1-t0:.3f}s, get_settings+history: {t2-t1:.3f}s, add_to_history: {t3-t2:.3f}s, ai_provider_stream: {t5-t4:.3f}s, save_response+log: {t6-t5:.3f}s, total: {t6-t0:.3f}s")
 
     except Exception as e:
         logging.error(f"Error in handle_message: {e}", exc_info=True)
