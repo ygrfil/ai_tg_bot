@@ -27,12 +27,9 @@ def is_user_authorized(user_id: int) -> bool:
     return str(user_id) in config.allowed_user_ids
 
 
-@router.message(Command("start"))
+@router.message(Command("start"), lambda message: not is_user_authorized(message.from_user.id))
 async def start_unauthorized(message: Message, state: FSMContext):
     """Handle /start command for unauthorized users."""
-    if is_user_authorized(message.from_user.id):
-        # Authorized users should be handled by the main user handler
-        return
     
     user = message.from_user
     can_request = await storage.can_request_access(user.id)
@@ -90,12 +87,9 @@ async def start_access_request(callback_query, state: FSMContext):
     await callback_query.answer()
 
 
-@router.message(Command("request"))
+@router.message(Command("request"), lambda message: not is_user_authorized(message.from_user.id))
 async def request_command(message: Message, state: FSMContext):
     """Handle /request command."""
-    if is_user_authorized(message.from_user.id):
-        await message.answer("✅ You already have access to this bot!")
-        return
     
     user = message.from_user
     can_request = await storage.can_request_access(user.id)
@@ -205,12 +199,9 @@ async def notify_admin_new_request(bot, user, request_message: str):
         logging.error(f"Failed to notify admin about access request: {e}")
 
 
-@router.message()
+@router.message(lambda message: not is_user_authorized(message.from_user.id))
 async def handle_unauthorized_message(message: Message):
     """Handle any other message from unauthorized users."""
-    if is_user_authorized(message.from_user.id):
-        # Let authorized users be handled by the main handler
-        return
     
     user = message.from_user
     can_request = await storage.can_request_access(user.id)
