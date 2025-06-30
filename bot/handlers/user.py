@@ -464,9 +464,9 @@ async def handle_message(message: Message, state: FSMContext):
         await message.bot.send_chat_action(message.chat.id, "typing")
         bot_response = await message.answer("💭")
         
-        # Get only essential data needed for AI call (no user creation delays)
+        # Get only essential data needed for AI call (minimal context for speed)
         settings_task = storage.get_user_settings(message.from_user.id)
-        history_task = storage.get_chat_history(message.from_user.id, limit=8)
+        history_task = storage.get_chat_history(message.from_user.id, limit=6)  # Reduced for speed
         settings, history = await asyncio.gather(settings_task, history_task)
         t1 = time.monotonic()
 
