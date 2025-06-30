@@ -24,7 +24,8 @@ class AccessRequestState(StatesGroup):
 
 def is_user_authorized(user_id: int) -> bool:
     """Check if user is authorized to use the bot."""
-    return str(user_id) in config.allowed_user_ids
+    user_id_str = str(user_id)
+    return user_id_str == config.admin_id or user_id_str in config.allowed_user_ids
 
 
 @router.message(Command("start"), lambda message: not is_user_authorized(message.from_user.id))

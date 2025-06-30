@@ -60,9 +60,9 @@ async def main():
     dp.update.outer_middleware(PollingMiddleware(config.polling_settings))
     
     # Register routers
-    dp.include_router(access_request.router)  # Access request router first (for unauthorized users)
-    dp.include_router(admin.router)   # Admin router second
-    dp.include_router(user.router)    # User router last (catch-all)
+    dp.include_router(admin.router)   # Admin router first
+    dp.include_router(user.router)    # User router second (handles authorized users)
+    dp.include_router(access_request.router)  # Access request router last (handles unauthorized users)
     
     # Start polling with debug info
     print("\n[INFO] Bot is starting...")
