@@ -18,14 +18,12 @@ from bot.services.ai_providers import get_provider
 from bot.config import Config
 from bot.utils.message_sanitizer import sanitize_html_tags
 from bot.services.ai_providers.providers import PROVIDER_MODELS
-from bot.utils.rate_limiter import MessageRateLimiter
 from bot.services.ai_providers.fal import FalProvider
 from bot.states import UserStates
 
 router = Router()
 storage = Storage("data/chat.db")
 config = Config.from_env()
-rate_limiter = MessageRateLimiter()
 
 # Initialize database on startup
 async def init_storage():
@@ -531,13 +529,11 @@ async def handle_message(message: Message, state: FSMContext):
                 collected_response += response_chunk
                 token_count += len(response_chunk.split())
                 sanitized_response = sanitize_html_tags(collected_response)
-                if await rate_limiter.should_update_message(sanitized_response):
-                    try:
-                        await bot_response.edit_text(sanitized_response, parse_mode="HTML")
-                        await asyncio.sleep(0.1)
-                    except Exception as e:
-                        if "message is not modified" not in str(e).lower():
-                            logging.debug(f"Message update error: {e}")
+                try:
+                    await bot_response.edit_text(sanitized_response, parse_mode="HTML")
+                except Exception as e:
+                    if "message is not modified" not in str(e).lower():
+                        logging.debug(f"Message update error: {e}")
         t3 = time.monotonic()
 
         if collected_response:
