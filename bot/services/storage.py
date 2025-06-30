@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 import json
 from collections import deque
 from .cache import CacheManager
+from .async_file_manager import save_image_background, compute_image_hash_async, AsyncFileManager
 import hashlib
 import re
 
@@ -227,11 +228,12 @@ class Storage:
                         WHERE user_id = ? AND content LIKE '%[Image:%'
                     """, (user_id,))
                     
-                    image_hash = hashlib.md5(image_data).hexdigest()
-                    image_path = f"data/images/{image_hash}.jpg"
-                    os.makedirs(os.path.dirname(image_path), exist_ok=True)
-                    with open(image_path, "wb") as f:
-                        f.write(image_data)
+                    # Compute hash asynchronously to avoid blocking
+                    image_hash = await compute_image_hash_async(image_data)
+                    
+                    # Start image saving in background - don't wait for completion
+                    save_image_background(image_data, image_hash, "data/images")
+                    
                     content_str = f"{content_str}\n[Image: {image_hash}]"
             
                 await db.execute("""
@@ -378,7 +380,9 @@ class Storage:
                         ON users(user_id, current_provider, current_model)
                     """)
 
-                    os.makedirs("data/images", exist_ok=True)
+                    # Create images directory asynchronously
+                    file_manager = AsyncFileManager()
+                    await file_manager.ensure_directory_async("data/images")
 
                     await db.commit()
                     self._initialized = True
