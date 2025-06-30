@@ -354,7 +354,7 @@ async def handle_image_prompt(message: Message, state: FSMContext):
         prompt, negative_prompt = prompt.split(" -- ", 1)
     
     # Get Fal provider for image generation
-    provider = get_provider("fal", config)
+    provider = await get_provider("fal", config)
     
     # Send a processing message
     processing_msg = await message.answer("🎨 Generating your image...")
@@ -507,7 +507,7 @@ async def handle_message(message: Message, state: FSMContext):
                 message_text = "Please analyze this image."
 
         # Start AI streaming immediately, handle history in background
-        ai_provider = get_provider(provider_name, config)
+        ai_provider = await get_provider(provider_name, config)
         
         # Start user creation and history saving in background (don't block AI call)
         asyncio.create_task(storage.ensure_user_exists(
