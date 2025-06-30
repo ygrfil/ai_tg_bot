@@ -467,9 +467,9 @@ async def handle_message(message: Message, state: FSMContext):
         )
         t1 = time.monotonic()
 
-        # Get settings and history concurrently
+        # Get settings and history concurrently (reduce history for faster responses)
         settings_task = storage.get_user_settings(message.from_user.id)
-        history_task = storage.get_chat_history(message.from_user.id, limit=10)
+        history_task = storage.get_chat_history(message.from_user.id, limit=8)
         settings, history = await asyncio.gather(settings_task, history_task)
         t2 = time.monotonic()
 
@@ -524,8 +524,10 @@ async def handle_message(message: Message, state: FSMContext):
         t3 = time.monotonic()
 
         ai_provider = get_provider(provider_name, config)
+        
+        # Start streaming immediately with a responsive placeholder
         await message.bot.send_chat_action(message.chat.id, "typing")
-        bot_response = await message.answer("Processing...")
+        bot_response = await message.answer("💭")
 
         # Stream the response
         collected_response = ""
@@ -544,7 +546,7 @@ async def handle_message(message: Message, state: FSMContext):
                 if await rate_limiter.should_update_message(sanitized_response):
                     try:
                         await bot_response.edit_text(sanitized_response, parse_mode="HTML")
-                        await asyncio.sleep(0.2)
+                        await asyncio.sleep(0.1)
                     except Exception as e:
                         if "message is not modified" not in str(e).lower():
                             logging.debug(f"Message update error: {e}")
@@ -612,14 +614,14 @@ async def handle_unauthorized(message: Message, state: FSMContext):
         is_admin = str(message.from_user.id) == config.admin_id
         keyboard = kb.get_main_menu(is_admin)
         
-        # Update keyboard silently
+        # Update keyboard silently and set state to chatting
         try:
-            updated = await update_keyboard(message.bot, message.from_user.id, keyboard)
-            if not updated:
-                await message.answer("Please select an option:", reply_markup=keyboard)
+            await update_keyboard(message.bot, message.from_user.id, keyboard)
         except Exception as e:
             logging.debug(f"Keyboard update error: {e}")
-            await message.answer("Please select an option:", reply_markup=keyboard)
         
-        # Set state to chatting since we always have a default model now
+        # Set state to chatting and redirect to handle_message
         await state.set_state(UserStates.chatting)
+        
+        # Process the message directly instead of showing "Please select an option"
+        await handle_message(message, state)

@@ -6,7 +6,7 @@ from aiogram.types import Message
 import re
 
 class MessageRateLimiter:
-    def __init__(self, update_interval: float = 0.2, min_chunk_size: int = 100):
+    def __init__(self, update_interval: float = 0.1, min_chunk_size: int = 50):
         self.update_interval = timedelta(seconds=update_interval)
         self.min_chunk_size = min_chunk_size
         self.last_update_time = datetime.min
@@ -17,9 +17,16 @@ class MessageRateLimiter:
         content_length = len(new_content)
         current_length = len(self.current_message or "")
 
-        if (self.current_message is None or
-            (content_length >= current_length + self.min_chunk_size and 
-             current_time - self.last_update_time >= self.update_interval)):
+        # Always update on first meaningful content
+        if self.current_message is None and content_length > 10:
+            self.last_update_time = current_time
+            self.current_message = new_content
+            return True
+        
+        # Regular update logic for subsequent updates
+        if (self.current_message is not None and
+            content_length >= current_length + self.min_chunk_size and 
+            current_time - self.last_update_time >= self.update_interval):
             self.last_update_time = current_time
             self.current_message = new_content
             return True
