@@ -26,9 +26,12 @@ def get_admin_menu() -> ReplyKeyboardMarkup:
     )
     builder.row(
         KeyboardButton(text="👥 Users"),
-        KeyboardButton(text="⚙️ Settings")
+        KeyboardButton(text="🔓 Access Requests")
     )
-    builder.row(KeyboardButton(text="🔙 Back"))
+    builder.row(
+        KeyboardButton(text="⚙️ Settings"),
+        KeyboardButton(text="🔙 Back")
+    )
     return builder.as_markup(resize_keyboard=True)
 
 def get_provider_menu() -> ReplyKeyboardMarkup:

@@ -1315,3 +1315,383 @@ async def process_settings_callback(callback_query: CallbackQuery, state: FSMCon
     else:
         await callback_query.answer(f"Action '{action}' not implemented yet")
 
+@router.message(F.text == "🔓 Access Requests", UserStates.admin_menu)
+async def access_requests_button(message: Message, state: FSMContext):
+    """Handle access requests button press to show access request management"""
+    if str(message.from_user.id) != config.admin_id:
+        return
+        
+    try:
+        # Get access request stats
+        stats = await storage.get_access_request_stats()
+        pending_requests = await storage.get_pending_access_requests()
+        
+        # Create access request management keyboard
+        request_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text=f"🔍 Review ({stats['pending']})", callback_data="access:review"),
+                InlineKeyboardButton(text="📋 All Requests", callback_data="access:all")
+            ],
+            [
+                InlineKeyboardButton(text="👤 Add User", callback_data="access:add_user"),
+                InlineKeyboardButton(text="🚫 Remove User", callback_data="access:remove_user")
+            ],
+            [
+                InlineKeyboardButton(text="📊 Statistics", callback_data="access:stats")
+            ]
+        ])
+        
+        # Format response
+        response = [
+            "<b>🔓 Access Request Management</b>\n",
+            f"📬 Pending Requests: <b>{stats['pending']}</b>",
+            f"📅 Requests Today: {stats['today']}",
+            f"✅ Approved This Week: {stats['approved_this_week']}"
+        ]
+        
+        if pending_requests:
+            response.append("\n<b>⏰ Recent Pending Requests:</b>")
+            for req in pending_requests[:3]:  # Show only first 3
+                # Format user info
+                name_parts = []
+                if req['first_name']:
+                    name_parts.append(req['first_name'])
+                if req['last_name']:
+                    name_parts.append(req['last_name'])
+                if req['username']:
+                    name_parts.append(f"@{req['username']}")
+                    
+                display_name = " | ".join(name_parts) if name_parts else f"User {req['user_id']}"
+                
+                # Format timestamp
+                try:
+                    ts = datetime.fromisoformat(req['request_timestamp'].replace('Z', '+00:00'))
+                    ts_str = ts.strftime("%d %b %Y %H:%M")
+                except:
+                    ts_str = "Unknown"
+                
+                # Truncate message if too long
+                message_preview = req['request_message']
+                if message_preview and len(message_preview) > 100:
+                    message_preview = message_preview[:100] + "..."
+                
+                response.append(f"• <b>{display_name}</b> (ID: {req['user_id']})")
+                response.append(f"  ├ Time: {ts_str}")
+                response.append(f"  └ Message: {message_preview or 'No message'}")
+        else:
+            response.append("\n✨ No pending requests")
+        
+        await message.answer(
+            "\n".join(response),
+            parse_mode="HTML",
+            reply_markup=request_keyboard
+        )
+        
+    except Exception as e:
+        logging.error(f"Error in access requests command: {str(e)}")
+        logging.error(traceback.format_exc())
+        await message.answer(
+            "❌ Error fetching access request data",
+            reply_markup=kb.get_admin_menu()
+        )
+
+# Add callback handlers for access request management
+@router.callback_query(lambda c: c.data and c.data.startswith("access:"))
+async def process_access_callback(callback_query: CallbackQuery, state: FSMContext):
+    """Process access request management callbacks"""
+    if str(callback_query.from_user.id) != config.admin_id:
+        return
+    
+    # Extract the action from callback data
+    parts = callback_query.data.split(":")
+    action = parts[1]
+    
+    if action == "review":
+        await callback_query.answer("Loading pending requests...")
+        
+        try:
+            pending_requests = await storage.get_pending_access_requests()
+            
+            if not pending_requests:
+                await callback_query.message.answer(
+                    "✨ No pending access requests!",
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(text="Back", callback_data="access:back")]
+                    ])
+                )
+                return
+            
+            # Show each request with approve/reject buttons
+            for req in pending_requests:
+                # Format user info
+                name_parts = []
+                if req['first_name']:
+                    name_parts.append(req['first_name'])
+                if req['last_name']:
+                    name_parts.append(req['last_name'])
+                if req['username']:
+                    name_parts.append(f"@{req['username']}")
+                    
+                display_name = " | ".join(name_parts) if name_parts else f"User {req['user_id']}"
+                
+                # Format timestamp
+                try:
+                    ts = datetime.fromisoformat(req['request_timestamp'].replace('Z', '+00:00'))
+                    ts_str = ts.strftime("%d %b %Y %H:%M")
+                except:
+                    ts_str = "Unknown"
+                
+                response = [
+                    f"<b>🔍 Access Request #{req['id']}</b>\n",
+                    f"👤 <b>User:</b> {display_name}",
+                    f"🆔 <b>ID:</b> <code>{req['user_id']}</code>",
+                    f"⏰ <b>Requested:</b> {ts_str}",
+                    f"\n💬 <b>Message:</b>\n{req['request_message'] or 'No message provided'}"
+                ]
+                
+                # Create approve/reject buttons
+                decision_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                    [
+                        InlineKeyboardButton(text="✅ Approve", callback_data=f"access:approve:{req['id']}"),
+                        InlineKeyboardButton(text="❌ Reject", callback_data=f"access:reject:{req['id']}")
+                    ],
+                    [
+                        InlineKeyboardButton(text="📝 View Details", callback_data=f"access:details:{req['user_id']}")
+                    ]
+                ])
+                
+                await callback_query.message.answer(
+                    "\n".join(response),
+                    parse_mode="HTML",
+                    reply_markup=decision_keyboard
+                )
+            
+            # Add navigation button
+            await callback_query.message.answer(
+                f"<b>📋 All {len(pending_requests)} pending requests shown above.</b>",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="Back to Access Management", callback_data="access:back")]
+                ])
+            )
+            
+        except Exception as e:
+            logging.error(f"Error loading pending requests: {e}")
+            await callback_query.message.answer(f"Error loading requests: {str(e)}")
+    
+    elif action == "approve":
+        if len(parts) >= 3:
+            request_id = int(parts[2])
+            await callback_query.answer("Approving access request...")
+            
+            try:
+                success = await storage.approve_access_request(request_id, int(config.admin_id))
+                
+                if success:
+                    # Get request details for notification
+                    async with aiosqlite.connect(storage.db_path) as db:
+                        async with db.execute("""
+                            SELECT user_id, username, first_name FROM access_requests 
+                            WHERE id = ?
+                        """, (request_id,)) as cursor:
+                            req_data = await cursor.fetchone()
+                    
+                    if req_data:
+                        user_id, username, first_name = req_data
+                        
+                        # Update allowed users list in config
+                        if str(user_id) not in config.allowed_user_ids:
+                            config.allowed_user_ids.append(str(user_id))
+                            
+                            # Try to update .env file
+                            try:
+                                import os
+                                from pathlib import Path
+                                
+                                env_path = Path(".env")
+                                if env_path.exists():
+                                    # Read current .env content
+                                    with open(env_path, "r") as f:
+                                        lines = f.readlines()
+                                    
+                                    # Update ALLOWED_USER_IDS line
+                                    new_ids = ",".join(config.allowed_user_ids)
+                                    updated = False
+                                    for i, line in enumerate(lines):
+                                        if line.startswith("ALLOWED_USER_IDS="):
+                                            lines[i] = f"ALLOWED_USER_IDS={new_ids}\n"
+                                            updated = True
+                                            break
+                                    
+                                    if updated:
+                                        with open(env_path, "w") as f:
+                                            f.writelines(lines)
+                                        logging.info(f"Updated .env file with new user: {user_id}")
+                                    else:
+                                        logging.warning("ALLOWED_USER_IDS not found in .env file")
+                                        
+                            except Exception as env_error:
+                                logging.error(f"Error updating .env file: {env_error}")
+                        
+                        # Notify the user about approval
+                        try:
+                            await callback_query.bot.send_message(
+                                user_id,
+                                "🎉 <b>Access Approved!</b>\n\n"
+                                "Your request to use this AI assistant bot has been approved.\n\n"
+                                "You can now start chatting with the bot. Use /start to begin!\n\n"
+                                "Welcome to the bot! 🤖",
+                                parse_mode="HTML"
+                            )
+                        except Exception as notify_error:
+                            logging.error(f"Failed to notify user {user_id} about approval: {notify_error}")
+                    
+                    await callback_query.message.edit_text(
+                        f"✅ <b>Request #{request_id} approved successfully!</b>\n\n"
+                        f"User {user_id} has been added to the allowed users list and notified.",
+                        parse_mode="HTML",
+                        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                            [InlineKeyboardButton(text="Back to Requests", callback_data="access:review")]
+                        ])
+                    )
+                else:
+                    await callback_query.message.answer("❌ Failed to approve request. It may have already been processed.")
+                    
+            except Exception as e:
+                logging.error(f"Error approving request: {e}")
+                await callback_query.message.answer(f"❌ Error approving request: {str(e)}")
+        else:
+            await callback_query.answer("Invalid request ID")
+    
+    elif action == "reject":
+        if len(parts) >= 3:
+            request_id = int(parts[2])
+            await callback_query.answer("Rejecting access request...")
+            
+            try:
+                # Get request details before rejecting
+                async with aiosqlite.connect(storage.db_path) as db:
+                    async with db.execute("""
+                        SELECT user_id, username, first_name FROM access_requests 
+                        WHERE id = ? AND status = 'pending'
+                    """, (request_id,)) as cursor:
+                        req_data = await cursor.fetchone()
+                
+                if req_data:
+                    user_id, username, first_name = req_data
+                    
+                    success = await storage.reject_access_request(request_id, int(config.admin_id))
+                    
+                    if success:
+                        # Notify the user about rejection
+                        try:
+                            await callback_query.bot.send_message(
+                                user_id,
+                                "❌ <b>Access Request Declined</b>\n\n"
+                                "Unfortunately, your request to use this AI assistant bot has been declined.\n\n"
+                                "You can submit a new request tomorrow if you'd like to try again.\n\n"
+                                "Thank you for your understanding.",
+                                parse_mode="HTML"
+                            )
+                        except Exception as notify_error:
+                            logging.error(f"Failed to notify user {user_id} about rejection: {notify_error}")
+                        
+                        await callback_query.message.edit_text(
+                            f"❌ <b>Request #{request_id} rejected.</b>\n\n"
+                            f"User {user_id} has been notified about the decision.",
+                            parse_mode="HTML",
+                            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                                [InlineKeyboardButton(text="Back to Requests", callback_data="access:review")]
+                            ])
+                        )
+                    else:
+                        await callback_query.message.answer("❌ Failed to reject request. It may have already been processed.")
+                else:
+                    await callback_query.message.answer("❌ Request not found or already processed.")
+                    
+            except Exception as e:
+                logging.error(f"Error rejecting request: {e}")
+                await callback_query.message.answer(f"❌ Error rejecting request: {str(e)}")
+        else:
+            await callback_query.answer("Invalid request ID")
+    
+    elif action == "stats":
+        await callback_query.answer("Loading access request statistics...")
+        
+        try:
+            stats = await storage.get_access_request_stats()
+            
+            # Get additional detailed stats
+            async with aiosqlite.connect(storage.db_path) as db:
+                # Count by status
+                async with db.execute("""
+                    SELECT status, COUNT(*) FROM access_requests 
+                    GROUP BY status
+                """) as cursor:
+                    status_counts = await cursor.fetchall()
+                
+                # Recent activity
+                async with db.execute("""
+                    SELECT COUNT(*) FROM access_requests 
+                    WHERE request_timestamp >= date('now', '-7 days')
+                """) as cursor:
+                    recent_requests = (await cursor.fetchone())[0]
+                
+                # Top requesting users (users who made multiple requests)
+                async with db.execute("""
+                    SELECT user_id, username, first_name, COUNT(*) as request_count
+                    FROM access_requests 
+                    GROUP BY user_id
+                    HAVING request_count > 1
+                    ORDER BY request_count DESC
+                    LIMIT 5
+                """) as cursor:
+                    repeat_requesters = await cursor.fetchall()
+            
+            response = [
+                "<b>📊 Access Request Statistics</b>\n",
+                f"📬 Pending: <b>{stats['pending']}</b>",
+                f"📅 Today: {stats['today']}",
+                f"✅ Approved This Week: {stats['approved_this_week']}",
+                f"📈 Requests Last 7 Days: {recent_requests}"
+            ]
+            
+            if status_counts:
+                response.append("\n<b>📋 All Time Status Breakdown:</b>")
+                for status, count in status_counts:
+                    status_emoji = {"pending": "⏳", "approved": "✅", "rejected": "❌"}.get(status, "❓")
+                    response.append(f"├ {status_emoji} {status.title()}: {count}")
+            
+            if repeat_requesters:
+                response.append("\n<b>🔄 Multiple Request Users:</b>")
+                for user_id, username, first_name, count in repeat_requesters:
+                    name_parts = []
+                    if first_name:
+                        name_parts.append(first_name)
+                    if username:
+                        name_parts.append(f"@{username}")
+                    
+                    display_name = " | ".join(name_parts) if name_parts else f"User {user_id}"
+                    response.append(f"• {display_name} ({count} requests)")
+            
+            back_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="Back", callback_data="access:back")]
+            ])
+            
+            await callback_query.message.answer(
+                "\n".join(response),
+                parse_mode="HTML",
+                reply_markup=back_keyboard
+            )
+            
+        except Exception as e:
+            logging.error(f"Error loading access stats: {e}")
+            await callback_query.message.answer(f"Error loading statistics: {str(e)}")
+    
+    elif action == "back":
+        await callback_query.answer()
+        await access_requests_button(callback_query.message, state)
+    
+    else:
+        await callback_query.answer(f"Action '{action}' not implemented yet")
+

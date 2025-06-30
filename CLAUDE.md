@@ -152,3 +152,8 @@ The bot automatically detects query types and uses structured outputs for:
 - **OpenAI SDK**: `>=1.62.0` (supports structured outputs)
 - **Pydantic**: `>=2.9.0` (schema validation)
 - **aiofiles**: `>=23.1.0` (async file operations)
+
+## Development Best Practices
+
+### Git Workflow
+- *** commit changes to git**

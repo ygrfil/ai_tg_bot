@@ -368,6 +368,22 @@ class Storage:
                     """)
 
                     await db.execute("""
+                        CREATE TABLE IF NOT EXISTS access_requests (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            user_id INTEGER NOT NULL,
+                            username TEXT,
+                            first_name TEXT,
+                            last_name TEXT,
+                            request_message TEXT,
+                            status TEXT DEFAULT 'pending',
+                            request_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                            admin_response_timestamp TIMESTAMP,
+                            admin_id INTEGER,
+                            UNIQUE(user_id, date(request_timestamp))
+                        )
+                    """)
+
+                    await db.execute("""
                         CREATE INDEX IF NOT EXISTS idx_chat_history_user_id_timestamp 
                         ON chat_history(user_id, timestamp DESC)
                     """)
@@ -378,6 +394,10 @@ class Storage:
                     await db.execute("""
                         CREATE INDEX IF NOT EXISTS idx_users_settings
                         ON users(user_id, current_provider, current_model)
+                    """)
+                    await db.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_access_requests_status
+                        ON access_requests(status, request_timestamp DESC)
                     """)
 
                     # Create images directory asynchronously
@@ -559,3 +579,154 @@ class Storage:
         except Exception as e:
             logging.error(f"Error getting user display name: {e}")
             return f"User {user_id}"
+
+    async def can_request_access(self, user_id: int) -> bool:
+        """Check if user can make an access request (1 per 24 hours)."""
+        await self.ensure_initialized()
+        try:
+            async with self._db_connect() as db:
+                async with db.execute("""
+                    SELECT id FROM access_requests 
+                    WHERE user_id = ? 
+                    AND date(request_timestamp) = date('now')
+                """, (user_id,)) as cursor:
+                    result = await cursor.fetchone()
+                    return result is None
+        except Exception as e:
+            logging.error(f"Error checking access request eligibility: {e}")
+            return False
+
+    async def submit_access_request(
+        self, 
+        user_id: int, 
+        username: str = None, 
+        first_name: str = None, 
+        last_name: str = None, 
+        message: str = None
+    ) -> bool:
+        """Submit an access request."""
+        await self.ensure_initialized()
+        try:
+            async with self._db_connect() as db:
+                await db.execute("""
+                    INSERT INTO access_requests (
+                        user_id, username, first_name, last_name, request_message
+                    ) VALUES (?, ?, ?, ?, ?)
+                """, (user_id, username, first_name, last_name, message))
+                await db.commit()
+                return True
+        except Exception as e:
+            logging.error(f"Error submitting access request: {e}")
+            return False
+
+    async def get_pending_access_requests(self) -> List[Dict[str, Any]]:
+        """Get all pending access requests."""
+        await self.ensure_initialized()
+        try:
+            async with self._db_connect() as db:
+                async with db.execute("""
+                    SELECT id, user_id, username, first_name, last_name, 
+                           request_message, request_timestamp
+                    FROM access_requests 
+                    WHERE status = 'pending'
+                    ORDER BY request_timestamp ASC
+                """) as cursor:
+                    rows = await cursor.fetchall()
+                    return [
+                        {
+                            "id": row[0],
+                            "user_id": row[1],
+                            "username": row[2],
+                            "first_name": row[3],
+                            "last_name": row[4],
+                            "request_message": row[5],
+                            "request_timestamp": row[6]
+                        }
+                        for row in rows
+                    ]
+        except Exception as e:
+            logging.error(f"Error getting pending access requests: {e}")
+            return []
+
+    async def approve_access_request(self, request_id: int, admin_id: int) -> bool:
+        """Approve an access request and add user to allowed list."""
+        await self.ensure_initialized()
+        try:
+            async with self._db_connect() as db:
+                # Get request details
+                async with db.execute("""
+                    SELECT user_id, username, first_name FROM access_requests 
+                    WHERE id = ? AND status = 'pending'
+                """, (request_id,)) as cursor:
+                    request = await cursor.fetchone()
+                    
+                if not request:
+                    return False
+                
+                user_id, username, first_name = request
+                
+                # Update request status
+                await db.execute("""
+                    UPDATE access_requests 
+                    SET status = 'approved', admin_response_timestamp = CURRENT_TIMESTAMP, admin_id = ?
+                    WHERE id = ?
+                """, (admin_id, request_id))
+                
+                # Ensure user exists in users table
+                await db.execute("""
+                    INSERT OR REPLACE INTO users (user_id, username, first_name, updated_at)
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                """, (user_id, username, first_name))
+                
+                await db.commit()
+                return True
+        except Exception as e:
+            logging.error(f"Error approving access request: {e}")
+            return False
+
+    async def reject_access_request(self, request_id: int, admin_id: int) -> bool:
+        """Reject an access request."""
+        await self.ensure_initialized()
+        try:
+            async with self._db_connect() as db:
+                await db.execute("""
+                    UPDATE access_requests 
+                    SET status = 'rejected', admin_response_timestamp = CURRENT_TIMESTAMP, admin_id = ?
+                    WHERE id = ? AND status = 'pending'
+                """, (admin_id, request_id))
+                await db.commit()
+                return True
+        except Exception as e:
+            logging.error(f"Error rejecting access request: {e}")
+            return False
+
+    async def get_access_request_stats(self) -> Dict[str, Any]:
+        """Get access request statistics."""
+        await self.ensure_initialized()
+        try:
+            async with self._db_connect() as db:
+                stats = {}
+                
+                # Count pending requests
+                async with db.execute("SELECT COUNT(*) FROM access_requests WHERE status = 'pending'") as cursor:
+                    stats['pending'] = (await cursor.fetchone())[0]
+                
+                # Count total requests today
+                async with db.execute("""
+                    SELECT COUNT(*) FROM access_requests 
+                    WHERE date(request_timestamp) = date('now')
+                """) as cursor:
+                    stats['today'] = (await cursor.fetchone())[0]
+                
+                # Count approved this week
+                async with db.execute("""
+                    SELECT COUNT(*) FROM access_requests 
+                    WHERE status = 'approved' 
+                    AND request_timestamp >= date('now', '-7 days')
+                """) as cursor:
+                    stats['approved_this_week'] = (await cursor.fetchone())[0]
+                
+                return stats
+        except Exception as e:
+            logging.error(f"Error getting access request stats: {e}")
+            return {"pending": 0, "today": 0, "approved_this_week": 0}

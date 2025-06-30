@@ -7,7 +7,7 @@ from aiogram.utils.chat_action import ChatActionMiddleware
 from aiogram.client.default import DefaultBotProperties
 
 from bot.config import Config
-from bot.handlers import admin, user
+from bot.handlers import admin, user, access_request
 from bot.services.storage import Storage
 from bot.keyboards import reply as kb
 from bot.utils.polling import PollingMiddleware
@@ -60,8 +60,9 @@ async def main():
     dp.update.outer_middleware(PollingMiddleware(config.polling_settings))
     
     # Register routers
-    dp.include_router(admin.router)  # Admin router first
-    dp.include_router(user.router)   # User router second
+    dp.include_router(access_request.router)  # Access request router first (for unauthorized users)
+    dp.include_router(admin.router)   # Admin router second
+    dp.include_router(user.router)    # User router last (catch-all)
     
     # Start polling with debug info
     print("\n[INFO] Bot is starting...")
