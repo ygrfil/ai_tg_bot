@@ -19,6 +19,7 @@ from bot.config import Config
 from bot.utils.message_sanitizer import sanitize_html_tags
 from bot.services.ai_providers.providers import PROVIDER_MODELS
 from bot.services.ai_providers.fal import FalProvider
+from bot.schemas import get_response_schema, detect_response_type
 from bot.states import UserStates
 
 router = Router()
@@ -515,7 +516,35 @@ async def handle_message(message: Message, state: FSMContext):
         ))
         asyncio.create_task(storage.add_to_history(message.from_user.id, message_text, False, image_data))
         
-        # Stream the response immediately
+        # Check if we should use structured outputs (for supported models and specific query types)
+        use_structured = await should_use_structured_output(message_text, provider_name, image_data is not None)
+        
+        if use_structured:
+            # Use structured output for better reliability
+            response_type = detect_response_type(message_text, image_data is not None)
+            response_schema = get_response_schema(response_type)
+            
+            logging.info(f"Using structured output with schema: {response_type}")
+            
+            try:
+                # Get structured response
+                structured_response = await ai_provider.chat_completion_structured(
+                    message=message_text,
+                    model_config=model_config,
+                    response_schema=response_schema,
+                    history=history,
+                    image=image_data
+                )
+                
+                # Extract content and handle the structured response
+                await handle_structured_response(message, reply_msg, structured_response, t2)
+                return
+                
+            except Exception as e:
+                logging.error(f"Structured output failed, falling back to streaming: {e}")
+                # Fall back to regular streaming
+        
+        # Stream the response immediately (regular mode or fallback)
         collected_response = ""
         token_count = 0
         last_update_length = 0
@@ -618,3 +647,212 @@ async def handle_unauthorized(message: Message, state: FSMContext):
         
         # Process the message directly instead of showing "Please select an option"
         await handle_message(message, state)
+
+
+async def should_use_structured_output(message_text: str, provider_name: str, has_image: bool) -> bool:
+    """
+    Determine whether to use structured outputs based on message content and provider.
+    
+    Args:
+        message_text: The user's message
+        provider_name: Name of the AI provider
+        has_image: Whether the message contains an image
+        
+    Returns:
+        True if structured outputs should be used
+    """
+    # Only use structured outputs for supported providers
+    supported_providers = ["sonnet", "openai", "gemini"]
+    if provider_name not in supported_providers:
+        return False
+    
+    # Use structured outputs for specific query types that benefit from structure
+    message_lower = message_text.lower().strip()
+    
+    # Always use for help requests and analysis
+    if any(keyword in message_lower for keyword in [
+        "help", "how to", "tutorial", "guide", "explain how",
+        "analyze", "analysis", "compare", "breakdown", "summarize"
+    ]):
+        return True
+    
+    # Use for math and code requests
+    if any(keyword in message_lower for keyword in [
+        "calculate", "solve", "math", "equation", "code", "program", "function"
+    ]):
+        return True
+    
+    # Use for image analysis
+    if has_image:
+        return True
+    
+    # For now, don't use for general chat to maintain streaming experience
+    return False
+
+
+async def handle_structured_response(message: Message, reply_msg: Message, response_data: dict, start_time: float):
+    """
+    Handle a structured AI response with appropriate formatting.
+    
+    Args:
+        message: Original user message
+        reply_msg: Bot's reply message to update
+        response_data: Structured response from AI
+        start_time: Start time for performance tracking
+    """
+    try:
+        response_type = response_data.get("response_type", "chat")
+        content = response_data.get("content", "No response generated")
+        confidence = response_data.get("confidence", 0.0)
+        
+        # Format response based on type
+        if response_type == "code":
+            # Format code responses
+            lang = response_data.get("programming_language", "")
+            explanation = response_data.get("explanation", "")
+            formatted_content = f"**{lang.title()} Code:**\n\n```{lang}\n{content}\n```"
+            if explanation:
+                formatted_content += f"\n\n**Explanation:** {explanation}"
+                
+        elif response_type == "math":
+            # Format math responses with steps
+            steps = response_data.get("steps", [])
+            final_answer = response_data.get("final_answer", "")
+            units = response_data.get("units", "")
+            
+            formatted_content = f"**Solution:**\n\n"
+            for i, step in enumerate(steps, 1):
+                formatted_content += f"{i}. {step}\n"
+            formatted_content += f"\n**Answer:** {final_answer}"
+            if units:
+                formatted_content += f" {units}"
+                
+        elif response_type == "analysis":
+            # Format analysis responses
+            key_findings = response_data.get("key_findings", [])
+            methodology = response_data.get("methodology", "")
+            
+            formatted_content = f"**Analysis:**\n\n{content}\n\n"
+            if key_findings:
+                formatted_content += "**Key Findings:**\n"
+                for finding in key_findings:
+                    formatted_content += f"• {finding}\n"
+            if methodology:
+                formatted_content += f"\n**Methodology:** {methodology}"
+                
+        elif response_type == "help":
+            # Format help responses
+            instructions = response_data.get("instructions", [])
+            related_commands = response_data.get("related_commands", [])
+            
+            formatted_content = f"**Help:** {content}\n\n"
+            if instructions:
+                formatted_content += "**Instructions:**\n"
+                for i, instruction in enumerate(instructions, 1):
+                    formatted_content += f"{i}. {instruction}\n"
+            if related_commands:
+                formatted_content += f"\n**Related commands:** {', '.join(related_commands)}"
+                
+        elif response_type == "image_analysis":
+            # Format image analysis
+            objects = response_data.get("objects_detected", [])
+            scene = response_data.get("scene_description", "")
+            text_content = response_data.get("text_content", "")
+            
+            formatted_content = f"**Image Analysis:**\n\n{content}\n\n"
+            if scene:
+                formatted_content += f"**Scene:** {scene}\n"
+            if objects:
+                formatted_content += f"**Objects detected:** {', '.join(objects)}\n"
+            if text_content:
+                formatted_content += f"**Text found:** {text_content}\n"
+                
+        elif response_type == "error":
+            # Format error responses
+            error_type = response_data.get("error_type", "unknown")
+            suggestion = response_data.get("suggestion", "")
+            
+            formatted_content = f"❌ **Error ({error_type}):** {content}"
+            if suggestion:
+                formatted_content += f"\n\n💡 **Suggestion:** {suggestion}"
+                
+        else:
+            # Default formatting for chat responses
+            formatted_content = content
+        
+        # Add confidence indicator for low confidence responses
+        if confidence < 0.7:
+            formatted_content += f"\n\n🤔 *Confidence: {confidence:.1%}*"
+        
+        # Sanitize and update message
+        final_response = sanitize_html_tags(formatted_content)
+        await reply_msg.edit_text(final_response)
+        
+        # Log performance
+        elapsed = time.monotonic() - start_time
+        logging.info(f"Structured response completed in {elapsed:.2f}s (type: {response_type}, confidence: {confidence:.2f})")
+        
+        # Save to history
+        asyncio.create_task(storage.add_to_history(message.from_user.id, final_response, True))
+        
+    except Exception as e:
+        logging.error(f"Error handling structured response: {e}")
+        error_msg = "❌ Error processing structured response. Please try again."
+        await reply_msg.edit_text(error_msg)
+
+
+@router.message(Command("structured"))
+async def test_structured_command(message: Message, state: FSMContext):
+    """Test command for structured outputs."""
+    if not is_user_authorized(message.from_user.id):
+        return
+    
+    test_message = message.text.replace("/structured", "").strip()
+    if not test_message:
+        await message.answer(
+            "🧪 **Structured Output Test**\n\n"
+            "Usage: `/structured <your question>`\n\n"
+            "This will force the use of structured outputs for testing.\n\n"
+            "Examples:\n"
+            "• `/structured Calculate 15% of 250`\n"
+            "• `/structured Write a Python function to reverse a string`\n"
+            "• `/structured Analyze the benefits of structured data`"
+        )
+        return
+    
+    # Force structured output for testing
+    provider_name = await get_user_provider(message.from_user.id)
+    ai_provider = await get_provider(provider_name, config)
+    model_config = PROVIDER_MODELS[provider_name]
+    
+    response_type = detect_response_type(test_message, False)
+    response_schema = get_response_schema(response_type)
+    
+    processing_msg = await message.answer("🧪 Testing structured output...")
+    
+    try:
+        start_time = time.monotonic()
+        structured_response = await ai_provider.chat_completion_structured(
+            message=test_message,
+            model_config=model_config,
+            response_schema=response_schema,
+            history=None,
+            image=None
+        )
+        
+        await handle_structured_response(message, processing_msg, structured_response, start_time)
+        
+    except Exception as e:
+        logging.error(f"Structured output test failed: {e}")
+        await processing_msg.edit_text(f"❌ Structured output test failed: {str(e)}")
+
+
+async def get_user_provider(user_id: int) -> str:
+    """Get the user's current provider, with fallback to default."""
+    try:
+        settings = await storage.get_user_settings(user_id)
+        if settings and settings.get('current_provider'):
+            return settings['current_provider']
+    except Exception:
+        pass
+    return "sonnet"  # Default provider
