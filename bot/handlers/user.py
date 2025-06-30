@@ -459,37 +459,25 @@ async def handle_message(message: Message, state: FSMContext):
             return
 
         t0 = time.monotonic()
-        # Update user information with each message
-        await storage.ensure_user_exists(
-            user_id=user.id,
-            username=user.username,
-            first_name=user.first_name
-        )
-        t1 = time.monotonic()
-
-        # Get settings and history concurrently (reduce history for faster responses)
+        
+        # Show response immediately to reduce perceived latency
+        await message.bot.send_chat_action(message.chat.id, "typing")
+        bot_response = await message.answer("💭")
+        
+        # Get only essential data needed for AI call (no user creation delays)
         settings_task = storage.get_user_settings(message.from_user.id)
         history_task = storage.get_chat_history(message.from_user.id, limit=8)
         settings, history = await asyncio.gather(settings_task, history_task)
-        t2 = time.monotonic()
+        t1 = time.monotonic()
 
         if not settings or 'current_provider' not in settings:
-            # Set default model if no provider is selected
+            # Set default model if no provider is selected (minimal setup for immediate AI call)
             default_provider = "openai"
             settings = settings or {}
             settings['current_provider'] = default_provider
             settings['current_model'] = PROVIDER_MODELS[default_provider]['name']
-            await storage.save_user_settings(message.from_user.id, settings)
-            await storage.log_usage(
-                user_id=message.from_user.id,
-                provider=default_provider,
-                model=PROVIDER_MODELS[default_provider]['name'],
-                tokens=0,
-                has_image=False
-            )
-            await message.answer(
-                f"Using default model: {settings['current_model']}. You can change it using the '🤖 Choose AI Model' button."
-            )
+            # Save settings in background, don't wait
+            asyncio.create_task(storage.save_user_settings(message.from_user.id, settings))
 
         legacy_to_new = {
             'openai': 'openai',
@@ -520,19 +508,19 @@ async def handle_message(message: Message, state: FSMContext):
             if not message_text:
                 message_text = "Please analyze this image."
 
-        await storage.add_to_history(message.from_user.id, message_text, False, image_data)
-        t3 = time.monotonic()
-
+        # Start AI streaming immediately, handle history in background
         ai_provider = get_provider(provider_name, config)
         
-        # Start streaming immediately with a responsive placeholder
-        await message.bot.send_chat_action(message.chat.id, "typing")
-        bot_response = await message.answer("💭")
-
-        # Stream the response
+        # Start user creation and history saving in background (don't block AI call)
+        asyncio.create_task(storage.ensure_user_exists(
+            user_id=user.id, username=user.username, first_name=user.first_name
+        ))
+        asyncio.create_task(storage.add_to_history(message.from_user.id, message_text, False, image_data))
+        
+        # Stream the response immediately
         collected_response = ""
         token_count = 0
-        t4 = time.monotonic()
+        t2 = time.monotonic()
         async for response_chunk in ai_provider.chat_completion_stream(
             message=message_text,
             model_config=model_config,
@@ -550,25 +538,26 @@ async def handle_message(message: Message, state: FSMContext):
                     except Exception as e:
                         if "message is not modified" not in str(e).lower():
                             logging.debug(f"Message update error: {e}")
-        t5 = time.monotonic()
+        t3 = time.monotonic()
 
         if collected_response:
-            await storage.add_to_history(message.from_user.id, collected_response, True)
-            await storage.log_usage(
+            # Save response and log usage in background for final cleanup
+            asyncio.create_task(storage.add_to_history(message.from_user.id, collected_response, True))
+            asyncio.create_task(storage.log_usage(
                 user_id=message.from_user.id,
                 provider=provider_name,
                 model=model_config['name'],
                 tokens=token_count,
                 has_image=bool(image_data)
-            )
+            ))
             final_response = sanitize_html_tags(collected_response)
             try:
                 await bot_response.edit_text(final_response, parse_mode="HTML")
             except Exception as e:
                 logging.debug(f"Final message update error: {e}")
 
-        t6 = time.monotonic()
-        logging.info(f"[TIMING] ensure_user_exists: {t1-t0:.3f}s, get_settings+history: {t2-t1:.3f}s, add_to_history: {t3-t2:.3f}s, ai_provider_stream: {t5-t4:.3f}s, save_response+log: {t6-t5:.3f}s, total: {t6-t0:.3f}s")
+        t4 = time.monotonic()
+        logging.info(f"[TIMING] show_response+load_data: {t1-t0:.3f}s, ai_streaming: {t3-t2:.3f}s, finalize: {t4-t3:.3f}s, total: {t4-t0:.3f}s")
 
     except Exception as e:
         logging.error(f"Error in handle_message: {e}", exc_info=True)

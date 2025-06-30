@@ -7,9 +7,13 @@ from .providers import PROVIDER_MODELS
 
 __all__ = ['get_provider']
 
+# Cache providers to avoid recreating them
+_provider_cache: Dict[str, BaseAIProvider] = {}
+
 def get_provider(provider_name: str, config: Config) -> BaseAIProvider:
     """
     Get an AI provider instance based on the provider name.
+    Uses caching to avoid recreating providers.
     
     Args:
         provider_name: Name of the provider to get
@@ -21,6 +25,10 @@ def get_provider(provider_name: str, config: Config) -> BaseAIProvider:
     Raises:
         ValueError: If provider is not found
     """
+    # Return cached provider if available
+    if provider_name in _provider_cache:
+        return _provider_cache[provider_name]
+    
     # First check if the provider exists in our models
     if provider_name not in PROVIDER_MODELS:
         raise ValueError(f"Provider {provider_name} not found in PROVIDER_MODELS")
@@ -39,5 +47,8 @@ def get_provider(provider_name: str, config: Config) -> BaseAIProvider:
     
     if provider is None:
         raise ValueError(f"No implementation found for provider {provider_name} (type: {provider_type})")
+    
+    # Cache the provider for future use
+    _provider_cache[provider_name] = provider
     
     return provider
