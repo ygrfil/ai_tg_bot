@@ -76,7 +76,7 @@ Uses aiogram's FSM (Finite State Machine) with states defined in `bot/states.py`
 - **Streaming responses** - Real-time message updates using `edit_message_text()`
 - **Structured outputs** - JSON schema compliance for reliable parsing
 - **Smart response formatting** - Different formatting for code, math, analysis, help responses
-- **HTML formatting** - Rich text support with sanitization
+- **HTML formatting** - Rich text support
 - **Rate limiting** - Configurable delays between message updates
 - **Vision support** - Image analysis across multiple AI providers
 - **Performance optimized** - 70-250ms faster response times
@@ -84,7 +84,6 @@ Uses aiogram's FSM (Finite State Machine) with states defined in `bot/states.py`
 ### Security Implementation
 - **Whitelist authorization** - Only `ALLOWED_USER_IDS` can interact
 - **Admin-only features** - Separate admin command handlers
-- **Message sanitization** - HTML tag cleaning for safe display
 - **Docker security** - Non-root user execution (UID 1000)
 
 ## Key Development Patterns

@@ -16,7 +16,6 @@ from bot.keyboards import reply as kb
 from bot.services.storage import Storage
 from bot.services.ai_providers import get_provider
 from bot.config import Config
-# from bot.utils.message_sanitizer import sanitize_html_tags  # Commented out for testing
 from bot.services.ai_providers.providers import PROVIDER_MODELS
 from bot.services.ai_providers.fal import FalProvider
 from bot.schemas import get_response_schema, detect_response_type
@@ -561,7 +560,6 @@ async def handle_message(message: Message, state: FSMContext):
                 
                 # Only update message every 50 characters
                 if len(collected_response) - last_update_length >= 50:
-                    # sanitized_response = sanitize_html_tags(collected_response)  # Commented out for testing
                     try:
                         await bot_response.edit_text(collected_response, parse_mode="HTML")
                         last_update_length = len(collected_response)
@@ -583,7 +581,6 @@ async def handle_message(message: Message, state: FSMContext):
             
             # Update final message if there are remaining characters not shown
             if len(collected_response) > last_update_length:
-                # final_response = sanitize_html_tags(collected_response)  # Commented out for testing
                 try:
                     await bot_response.edit_text(collected_response, parse_mode="HTML")
                 except Exception as e:
@@ -784,8 +781,7 @@ async def handle_structured_response(message: Message, reply_msg: Message, respo
         if confidence < 0.7:
             formatted_content += f"\n\n🤔 *Confidence: {confidence:.1%}*"
         
-        # Sanitize and update message
-        # final_response = sanitize_html_tags(formatted_content)  # Commented out for testing
+        # Update message
         await reply_msg.edit_text(formatted_content)
         
         # Log performance
