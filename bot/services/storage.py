@@ -378,8 +378,7 @@ class Storage:
                             status TEXT DEFAULT 'pending',
                             request_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                             admin_response_timestamp TIMESTAMP,
-                            admin_id INTEGER,
-                            UNIQUE(user_id, date(request_timestamp))
+                            admin_id INTEGER
                         )
                     """)
 

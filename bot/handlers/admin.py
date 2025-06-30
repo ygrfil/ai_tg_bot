@@ -5,7 +5,7 @@ from aiogram.fsm.context import FSMContext
 from ..services.storage import Storage
 from ..config import Config
 from ..keyboards import reply as kb
-from ..handlers.user import UserStates
+from ..states import UserStates
 import aiosqlite
 import logging
 import traceback
