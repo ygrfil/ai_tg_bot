@@ -15,27 +15,11 @@ from bot.utils.polling import PollingMiddleware
 async def on_startup(bot: Bot, storage: Storage):
     """Initialize bot on startup"""
     try:
-        all_users = await storage.get_all_users()
-        for user_id, _ in all_users:
-            try:
-                # Get user settings to check preferences
-                settings = await storage.get_user_settings(user_id)
-                is_admin = str(user_id) == config.admin_id
-                
-                # Try to restore keyboard by editing last message
-                messages = await bot.get_chat_history(user_id, limit=10)
-                for msg in messages:
-                    if msg.from_user.is_bot and msg.reply_markup:
-                        keyboard = kb.get_main_menu(is_admin=is_admin) if settings and settings.get('current_provider') else kb.get_provider_menu()
-                        try:
-                            await msg.edit_reply_markup(reply_markup=keyboard)
-                            break
-                        except Exception:
-                            continue
-            except Exception as e:
-                logging.debug(f"Could not restore keyboard for user {user_id}: {e}")
+        # Just log that startup is complete - no database operations needed
+        # Database will be initialized when first user interacts
+        logging.info("Bot startup complete - database will initialize on first use")
     except Exception as e:
-        logging.error(f"Error during startup keyboard restoration: {e}")
+        logging.error(f"Error during startup: {e}")
 
 async def main():
     logging.basicConfig(

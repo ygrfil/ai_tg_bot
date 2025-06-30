@@ -171,33 +171,31 @@ lxc config device override ai-tg-bot root size=10GB
 
 ### Create Update Script
 ```bash
-nano /root/update.sh
-```
-
-Add:
-```bash
 #!/bin/bash
 # Update bot to latest version
 
-cd /root/ai_tg_bot
+echo "[INFO] Starting update script for ai_tg_bot..."
+cd /root/ai_tg_bot || { echo '[ERROR] Failed to cd to /root/ai_tg_bot'; exit 1; }
 
-# Stop the bot
+echo "[INFO] Stopping ai-tg-bot service..."
 systemctl stop ai-tg-bot
 
-# Backup current version
+echo "[INFO] Backing up current version..."
 cp -r . ../ai_tg_bot_backup_$(date +%Y%m%d)
 
-# Pull latest changes
+echo "[INFO] Pulling latest changes from git..."
 git pull origin main
 
-# Update dependencies
+echo "[INFO] Activating virtual environment..."
 source venv/bin/activate
+
+echo "[INFO] Updating Python dependencies..."
 pip install --upgrade -r requirements.txt
 
-# Start the bot
+echo "[INFO] Starting ai-tg-bot service..."
 systemctl start ai-tg-bot
 
-echo "$(date): Bot updated and restarted"
+echo "[SUCCESS] $(date): Bot updated and restarted."
 ```
 
 Make executable:
