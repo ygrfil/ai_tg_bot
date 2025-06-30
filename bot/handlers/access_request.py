@@ -23,7 +23,7 @@ class AccessRequestState(StatesGroup):
 
 
 def is_user_authorized(user_id: int) -> bool:
-    """Check if user is authorized to use the bot."""
+    """Check if user is authorized to use the bot (sync version for filters)."""
     user_id_str = str(user_id)
     return user_id_str == config.admin_id or user_id_str in config.allowed_user_ids
 
@@ -31,6 +31,11 @@ def is_user_authorized(user_id: int) -> bool:
 @router.message(Command("start"), lambda message: not is_user_authorized(message.from_user.id))
 async def start_unauthorized(message: Message, state: FSMContext):
     """Handle /start command for unauthorized users."""
+    
+    # Double-check authorization with database
+    from bot.handlers.user import is_user_authorized as async_is_user_authorized
+    if await async_is_user_authorized(message.from_user.id):
+        return  # User is actually authorized, let main handler deal with it
     
     user = message.from_user
     can_request = await storage.can_request_access(user.id)
@@ -91,6 +96,12 @@ async def start_access_request(callback_query, state: FSMContext):
 @router.message(Command("request"), lambda message: not is_user_authorized(message.from_user.id))
 async def request_command(message: Message, state: FSMContext):
     """Handle /request command."""
+    
+    # Double-check authorization with database
+    from bot.handlers.user import is_user_authorized as async_is_user_authorized
+    if await async_is_user_authorized(message.from_user.id):
+        await message.answer("✅ You already have access to this bot!")
+        return
     
     user = message.from_user
     can_request = await storage.can_request_access(user.id)
@@ -203,6 +214,11 @@ async def notify_admin_new_request(bot, user, request_message: str):
 @router.message(lambda message: not is_user_authorized(message.from_user.id))
 async def handle_unauthorized_message(message: Message):
     """Handle any other message from unauthorized users."""
+    
+    # Double-check authorization with database
+    from bot.handlers.user import is_user_authorized as async_is_user_authorized
+    if await async_is_user_authorized(message.from_user.id):
+        return  # User is actually authorized, let main handler deal with it
     
     user = message.from_user
     can_request = await storage.can_request_access(user.id)

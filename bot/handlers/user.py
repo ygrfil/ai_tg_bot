@@ -28,10 +28,25 @@ config = Config.from_env()
 # Note: Database initialization moved to main.py to avoid circular imports
 
 # Helper functions
-def is_user_authorized(user_id: int) -> bool:
+async def is_user_authorized(user_id: int) -> bool:
     """Check if user is authorized to use the bot"""
     user_id_str = str(user_id)
-    return user_id_str == config.admin_id or user_id_str in config.allowed_user_ids
+    
+    # Check config first (admin + .env users)
+    if user_id_str == config.admin_id or user_id_str in config.allowed_user_ids:
+        return True
+    
+    # Check database for approved access requests
+    try:
+        async with storage._db_connect() as db:
+            async with db.execute("""
+                SELECT COUNT(*) FROM access_requests 
+                WHERE user_id = ? AND status = 'approved'
+            """, (user_id,)) as cursor:
+                result = await cursor.fetchone()
+                return result[0] > 0
+    except Exception:
+        return False
 
 async def get_or_create_settings(user_id: int, message: Optional[Message] = None) -> Optional[dict]:
     """Get user settings and update username if message is provided"""
@@ -71,7 +86,7 @@ async def send_minimal_message(message: Message, text: str = ".", keyboard: Repl
 # Command handlers first
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
-    if not is_user_authorized(message.from_user.id):
+    if not await is_user_authorized(message.from_user.id):
         return
         
     settings = await get_or_create_settings(message.from_user.id)
@@ -171,7 +186,7 @@ async def handle_provider_choice(message: Message, state: FSMContext):
 
 @router.message(F.text == "🤖 Choose AI Model")
 async def choose_model_button(message: Message, state: FSMContext):
-    if not is_user_authorized(message.from_user.id):
+    if not await is_user_authorized(message.from_user.id):
         return
     
     settings = await get_or_create_settings(message.from_user.id)
@@ -195,7 +210,7 @@ async def choose_model_button(message: Message, state: FSMContext):
 
 @router.message(F.text == "ℹ️ Info")
 async def info_button(message: Message, state: FSMContext):
-    if not is_user_authorized(message.from_user.id):
+    if not await is_user_authorized(message.from_user.id):
         return
     
     settings = await storage.get_user_settings(message.from_user.id)
@@ -234,7 +249,7 @@ async def info_button(message: Message, state: FSMContext):
 
 @router.message(F.text == "🗑 Clear History")
 async def clear_history(message: Message):
-    if not is_user_authorized(message.from_user.id):
+    if not await is_user_authorized(message.from_user.id):
         return
     
     try:
@@ -251,7 +266,7 @@ async def clear_history(message: Message):
 
 @router.message(F.text == "₿")
 async def btc_price(message: Message):
-    if not is_user_authorized(message.from_user.id):
+    if not await is_user_authorized(message.from_user.id):
         return
     
     try:
@@ -287,7 +302,7 @@ async def btc_price(message: Message):
 
 @router.message(F.text == "🔙 Back")
 async def back_button(message: Message, state: FSMContext):
-    if not is_user_authorized(message.from_user.id):
+    if not await is_user_authorized(message.from_user.id):
         return
     
     is_admin = str(message.from_user.id) == config.admin_id
@@ -318,7 +333,7 @@ async def handle_generate_image_button(message: Message, state: FSMContext):
 @router.message(StateFilter(UserStates.waiting_for_image_prompt))
 async def handle_image_prompt(message: Message, state: FSMContext):
     """Handle the image generation prompt"""
-    if not is_user_authorized(message.from_user.id):
+    if not await is_user_authorized(message.from_user.id):
         return
         
     # Handle cancel button
@@ -583,7 +598,7 @@ async def handle_message(message: Message, state: FSMContext):
 @router.message()
 async def handle_unauthorized(message: Message, state: FSMContext):
     """Handle unauthorized users and unhandled messages"""
-    if not is_user_authorized(message.from_user.id):
+    if not await is_user_authorized(message.from_user.id):
         await message.answer(
             "⛔️ Access Denied\n\n"
             "Sorry, you don't have permission to use this bot.\n"
@@ -784,7 +799,7 @@ async def handle_structured_response(message: Message, reply_msg: Message, respo
 @router.message(Command("structured"))
 async def test_structured_command(message: Message, state: FSMContext):
     """Test command for structured outputs."""
-    if not is_user_authorized(message.from_user.id):
+    if not await is_user_authorized(message.from_user.id):
         return
     
     test_message = message.text.replace("/structured", "").strip()
