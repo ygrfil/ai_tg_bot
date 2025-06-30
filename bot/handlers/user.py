@@ -518,6 +518,7 @@ async def handle_message(message: Message, state: FSMContext):
         # Stream the response immediately
         collected_response = ""
         token_count = 0
+        last_update_length = 0
         t2 = time.monotonic()
         async for response_chunk in ai_provider.chat_completion_stream(
             message=message_text,
@@ -528,12 +529,16 @@ async def handle_message(message: Message, state: FSMContext):
             if response_chunk and response_chunk.strip():
                 collected_response += response_chunk
                 token_count += len(response_chunk.split())
-                sanitized_response = sanitize_html_tags(collected_response)
-                try:
-                    await bot_response.edit_text(sanitized_response, parse_mode="HTML")
-                except Exception as e:
-                    if "message is not modified" not in str(e).lower():
-                        logging.debug(f"Message update error: {e}")
+                
+                # Only update message every 50 characters
+                if len(collected_response) - last_update_length >= 50:
+                    sanitized_response = sanitize_html_tags(collected_response)
+                    try:
+                        await bot_response.edit_text(sanitized_response, parse_mode="HTML")
+                        last_update_length = len(collected_response)
+                    except Exception as e:
+                        if "message is not modified" not in str(e).lower():
+                            logging.debug(f"Message update error: {e}")
         t3 = time.monotonic()
 
         if collected_response:
@@ -546,11 +551,14 @@ async def handle_message(message: Message, state: FSMContext):
                 tokens=token_count,
                 has_image=bool(image_data)
             ))
-            final_response = sanitize_html_tags(collected_response)
-            try:
-                await bot_response.edit_text(final_response, parse_mode="HTML")
-            except Exception as e:
-                logging.debug(f"Final message update error: {e}")
+            
+            # Update final message if there are remaining characters not shown
+            if len(collected_response) > last_update_length:
+                final_response = sanitize_html_tags(collected_response)
+                try:
+                    await bot_response.edit_text(final_response, parse_mode="HTML")
+                except Exception as e:
+                    logging.debug(f"Final message update error: {e}")
 
         t4 = time.monotonic()
         logging.info(f"[TIMING] show_response+load_data: {t1-t0:.3f}s, ai_streaming: {t3-t2:.3f}s, finalize: {t4-t3:.3f}s, total: {t4-t0:.3f}s")
