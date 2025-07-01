@@ -1533,13 +1533,51 @@ async def process_access_callback(callback_query: CallbackQuery, state: FSMConte
                             except Exception as env_error:
                                 logging.error(f"Error updating .env file: {env_error}")
                         
+                        # Initialize user settings with default model
+                        try:
+                            # Ensure user exists in database
+                            await storage.ensure_user_exists(
+                                user_id=user_id,
+                                username=username,
+                                first_name=first_name
+                            )
+                            
+                            # Set default model settings
+                            from bot.services.ai_providers.providers import PROVIDER_MODELS
+                            default_provider = "openai"
+                            default_settings = {
+                                'current_provider': default_provider,
+                                'current_model': PROVIDER_MODELS[default_provider]['name']
+                            }
+                            
+                            await storage.save_user_settings(user_id, default_settings)
+                            
+                            # Log initial model selection
+                            await storage.log_usage(
+                                user_id=user_id,
+                                provider=default_provider,
+                                model=PROVIDER_MODELS[default_provider]['name'],
+                                tokens=0,
+                                has_image=False
+                            )
+                            
+                            logging.info(f"Initialized user {user_id} with default model: {default_provider}")
+                            
+                        except Exception as init_error:
+                            logging.error(f"Error initializing user {user_id}: {init_error}")
+                        
+                        # Note: User state will be initialized when they send their first message
+                        # The handle_authorized_fallback function will detect they're authorized
+                        # and set their state to chatting automatically
+                        
                         # Notify the user about approval
                         try:
                             await callback_query.bot.send_message(
                                 user_id,
                                 "🎉 <b>Access Approved!</b>\n\n"
                                 "Your request to use this AI assistant bot has been approved.\n\n"
-                                "You can now start chatting with the bot. Use /start to begin!\n\n"
+                                "✅ <b>Ready to chat!</b> Your default AI model (OpenAI) has been set up.\n\n"
+                                "Just send any message to start chatting immediately!\n\n"
                                 "Welcome to the bot! 🤖",
                                 parse_mode="HTML"
                             )
@@ -1688,10 +1726,354 @@ async def process_access_callback(callback_query: CallbackQuery, state: FSMConte
             logging.error(f"Error loading access stats: {e}")
             await callback_query.message.answer(f"Error loading statistics: {str(e)}")
     
+    elif action == "add_user":
+        await callback_query.answer("Add User")
+        
+        # Show current authorized users and add interface
+        current_users = []
+        
+        # Get users from config
+        for user_id in config.allowed_user_ids:
+            if user_id != config.admin_id:  # Don't show admin
+                try:
+                    display_name = await storage.get_user_display_name(int(user_id))
+                    current_users.append(f"• {display_name} (ID: {user_id})")
+                except:
+                    current_users.append(f"• Unknown User (ID: {user_id})")
+        
+        # Get users from database
+        try:
+            async with aiosqlite.connect(storage.db_path) as db:
+                async with db.execute("""
+                    SELECT user_id, username, first_name FROM access_requests 
+                    WHERE status = 'approved'
+                """) as cursor:
+                    approved_users = await cursor.fetchall()
+                    
+                    for user_id, username, first_name in approved_users:
+                        if str(user_id) not in config.allowed_user_ids:
+                            name_parts = []
+                            if first_name:
+                                name_parts.append(first_name)
+                            if username:
+                                name_parts.append(f"@{username}")
+                            display_name = " | ".join(name_parts) if name_parts else f"User {user_id}"
+                            current_users.append(f"• {display_name} (ID: {user_id}) [DB Approved]")
+        except Exception as e:
+            logging.error(f"Error getting approved users: {e}")
+        
+        response = [
+            "<b>👤 Add User</b>\n",
+            f"<b>Currently Authorized Users ({len(current_users)}):</b>"
+        ]
+        
+        if current_users:
+            response.extend(current_users)
+        else:
+            response.append("• No additional users (only admin)")
+        
+        response.extend([
+            "\n<b>To add a user:</b>",
+            "1. Get their Telegram User ID",
+            "2. Use the button below to add them",
+            "\n💡 <i>Tip: Users can send /start to the bot to get their ID in the logs</i>"
+        ])
+        
+        add_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="➕ Add User ID", callback_data="access:add_user_id"),
+                InlineKeyboardButton(text="👁️ View All Users", callback_data="access:view_users")
+            ],
+            [InlineKeyboardButton(text="Back", callback_data="access:back")]
+        ])
+        
+        await callback_query.message.answer(
+            "\n".join(response),
+            parse_mode="HTML",
+            reply_markup=add_keyboard
+        )
+    
+    elif action == "remove_user":
+        await callback_query.answer("Remove User")
+        
+        # Get all authorized users for removal
+        removable_users = []
+        
+        # Get users from config (except admin)
+        for user_id in config.allowed_user_ids:
+            if user_id != config.admin_id:  # Can't remove admin
+                try:
+                    display_name = await storage.get_user_display_name(int(user_id))
+                    removable_users.append({
+                        "id": user_id,
+                        "name": display_name,
+                        "source": "config"
+                    })
+                except:
+                    removable_users.append({
+                        "id": user_id, 
+                        "name": f"Unknown User",
+                        "source": "config"
+                    })
+        
+        # Get users from database
+        try:
+            async with aiosqlite.connect(storage.db_path) as db:
+                async with db.execute("""
+                    SELECT user_id, username, first_name FROM access_requests 
+                    WHERE status = 'approved'
+                """) as cursor:
+                    approved_users = await cursor.fetchall()
+                    
+                    for user_id, username, first_name in approved_users:
+                        if str(user_id) not in config.allowed_user_ids:
+                            name_parts = []
+                            if first_name:
+                                name_parts.append(first_name)
+                            if username:
+                                name_parts.append(f"@{username}")
+                            display_name = " | ".join(name_parts) if name_parts else f"User {user_id}"
+                            removable_users.append({
+                                "id": str(user_id),
+                                "name": display_name,
+                                "source": "database"
+                            })
+        except Exception as e:
+            logging.error(f"Error getting approved users: {e}")
+        
+        if not removable_users:
+            await callback_query.message.answer(
+                "<b>🚫 No Users to Remove</b>\n\n"
+                "Only the admin user is currently authorized.\n"
+                "There are no other users to remove.",
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(text="Back", callback_data="access:back")]
+                ])
+            )
+            return
+        
+        # Create removal buttons
+        removal_buttons = []
+        for user in removable_users[:10]:  # Limit to 10 for UI
+            source_indicator = "📁" if user["source"] == "config" else "💾"
+            removal_buttons.append([
+                InlineKeyboardButton(
+                    text=f"{source_indicator} {user['name']} ({user['id']})",
+                    callback_data=f"access:remove_confirm:{user['id']}"
+                )
+            ])
+        
+        removal_buttons.append([InlineKeyboardButton(text="Back", callback_data="access:back")])
+        
+        response = [
+            "<b>🚫 Remove User Access</b>\n",
+            f"<b>Select user to remove ({len(removable_users)} total):</b>\n",
+            "📁 = Config user (.env file)",
+            "💾 = Database approved user\n",
+            "⚠️ <b>Warning:</b> This will immediately revoke access!"
+        ]
+        
+        await callback_query.message.answer(
+            "\n".join(response),
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=removal_buttons)
+        )
+    
+    elif action == "remove_confirm":
+        if len(parts) >= 3:
+            user_id_to_remove = parts[2]
+            await callback_query.answer("Removing user...")
+            
+            try:
+                success = await remove_user_access(user_id_to_remove)
+                
+                if success:
+                    await callback_query.message.edit_text(
+                        f"✅ <b>User Removed Successfully</b>\n\n"
+                        f"User ID {user_id_to_remove} has been removed from authorized users.\n\n"
+                        f"⚡ <b>Effect:</b> Immediate - user can no longer access the bot.",
+                        parse_mode="HTML",
+                        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                            [InlineKeyboardButton(text="Remove Another", callback_data="access:remove_user")],
+                            [InlineKeyboardButton(text="Back to Management", callback_data="access:back")]
+                        ])
+                    )
+                else:
+                    await callback_query.message.answer("❌ Failed to remove user. Please try again.")
+            except Exception as e:
+                logging.error(f"Error removing user: {e}")
+                await callback_query.message.answer(f"❌ Error removing user: {str(e)}")
+        else:
+            await callback_query.answer("Invalid user ID")
+    
+    elif action == "view_users":
+        await callback_query.answer("Loading user list...")
+        
+        # Get comprehensive user list
+        all_users = []
+        
+        # Admin user
+        try:
+            admin_name = await storage.get_user_display_name(int(config.admin_id))
+            all_users.append(f"👑 <b>{admin_name}</b> (ID: {config.admin_id}) [Admin]")
+        except:
+            all_users.append(f"👑 <b>Admin</b> (ID: {config.admin_id}) [Admin]")
+        
+        # Config users
+        for user_id in config.allowed_user_ids:
+            if user_id != config.admin_id:
+                try:
+                    display_name = await storage.get_user_display_name(int(user_id))
+                    all_users.append(f"📁 {display_name} (ID: {user_id}) [Config]")
+                except:
+                    all_users.append(f"📁 Unknown User (ID: {user_id}) [Config]")
+        
+        # Database approved users
+        try:
+            async with aiosqlite.connect(storage.db_path) as db:
+                async with db.execute("""
+                    SELECT user_id, username, first_name FROM access_requests 
+                    WHERE status = 'approved'
+                """) as cursor:
+                    approved_users = await cursor.fetchall()
+                    
+                    for user_id, username, first_name in approved_users:
+                        if str(user_id) not in config.allowed_user_ids:
+                            name_parts = []
+                            if first_name:
+                                name_parts.append(first_name)
+                            if username:
+                                name_parts.append(f"@{username}")
+                            display_name = " | ".join(name_parts) if name_parts else f"User {user_id}"
+                            all_users.append(f"💾 {display_name} (ID: {user_id}) [DB Approved]")
+        except Exception as e:
+            logging.error(f"Error getting approved users: {e}")
+        
+        response = [
+            f"<b>👥 All Authorized Users ({len(all_users)})</b>\n",
+            "👑 = Admin (cannot be removed)",
+            "📁 = Config user (.env file)", 
+            "💾 = Database approved user\n"
+        ]
+        response.extend(all_users)
+        
+        await callback_query.message.answer(
+            "\n".join(response),
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="➕ Add User", callback_data="access:add_user"),
+                    InlineKeyboardButton(text="🚫 Remove User", callback_data="access:remove_user")
+                ],
+                [InlineKeyboardButton(text="Back", callback_data="access:back")]
+            ])
+        )
+    
     elif action == "back":
         await callback_query.answer()
         await access_requests_button(callback_query.message, state)
     
     else:
         await callback_query.answer(f"Action '{action}' not implemented yet")
+
+
+async def remove_user_access(user_id: str) -> bool:
+    """Remove user access from both config and database."""
+    try:
+        success = False
+        
+        # Remove from config (in-memory)
+        if user_id in config.allowed_user_ids:
+            config.allowed_user_ids.remove(user_id)
+            success = True
+            logging.info(f"Removed user {user_id} from in-memory config")
+        
+        # Remove from database (revoke approved status)
+        try:
+            async with aiosqlite.connect(storage.db_path) as db:
+                await db.execute("""
+                    UPDATE access_requests 
+                    SET status = 'revoked', admin_response_timestamp = CURRENT_TIMESTAMP, admin_id = ?
+                    WHERE user_id = ? AND status = 'approved'
+                """, (int(config.admin_id), int(user_id)))
+                await db.commit()
+                logging.info(f"Revoked database approval for user {user_id}")
+                success = True
+        except Exception as db_error:
+            logging.error(f"Database removal failed for user {user_id}: {db_error}")
+        
+        # Update .env file to persist config changes
+        if success:
+            try:
+                import os
+                from pathlib import Path
+                
+                env_path = Path(".env")
+                if env_path.exists():
+                    # Read current .env content
+                    with open(env_path, "r") as f:
+                        lines = f.readlines()
+                    
+                    # Update ALLOWED_USER_IDS line
+                    new_ids = ",".join(config.allowed_user_ids)
+                    updated = False
+                    for i, line in enumerate(lines):
+                        if line.startswith("ALLOWED_USER_IDS="):
+                            lines[i] = f"ALLOWED_USER_IDS={new_ids}\n"
+                            updated = True
+                            break
+                    
+                    if updated:
+                        with open(env_path, "w") as f:
+                            f.writelines(lines)
+                        logging.info(f"Updated .env file - removed user {user_id}")
+                    else:
+                        logging.warning("ALLOWED_USER_IDS not found in .env file")
+                        
+                # Also try to update system environment variable if possible
+                try:
+                    os.environ["ALLOWED_USER_IDS"] = ",".join(config.allowed_user_ids)
+                    logging.info(f"Updated system environment variable")
+                except Exception as env_error:
+                    logging.warning(f"Could not update system environment: {env_error}")
+                        
+            except Exception as file_error:
+                logging.error(f"Error updating .env file: {file_error}")
+        
+        return success
+        
+    except Exception as e:
+        logging.error(f"Error removing user access: {e}")
+        return False
+
+
+@router.callback_query(F.data == "admin_access_requests")
+async def quick_review_requests(callback_query: CallbackQuery, state: FSMContext):
+    """Handle quick access to review requests from notification"""
+    if str(callback_query.from_user.id) != config.admin_id:
+        await callback_query.answer("Unauthorized", show_alert=True)
+        return
+    
+    await callback_query.answer("Loading access requests...")
+    
+    # Redirect to access requests menu
+    await callback_query.message.answer(
+        "🔓 <b>Access Request Management</b>\n\n"
+        "Choose an option:",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="🔍 Review Pending", callback_data="access:review"),
+                InlineKeyboardButton(text="📋 All Requests", callback_data="access:all")
+            ],
+            [
+                InlineKeyboardButton(text="👤 Add User", callback_data="access:add_user"),
+                InlineKeyboardButton(text="🚫 Remove User", callback_data="access:remove_user")
+            ],
+            [
+                InlineKeyboardButton(text="📊 Statistics", callback_data="access:stats")
+            ]
+        ])
+    )
 

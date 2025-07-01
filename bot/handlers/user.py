@@ -1,6 +1,6 @@
 import re
 from aiogram import Router, F, types
-from aiogram.types import Message, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from aiogram.types import Message, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -37,15 +37,8 @@ async def is_user_authorized(user_id: int) -> bool:
     """Check if user is authorized to use the bot"""
     user_id_str = str(user_id)
     
-    # Debug logging
-    logging.info(f"AUTH DEBUG: Checking authorization for user {user_id}")
-    logging.info(f"AUTH DEBUG: user_id_str='{user_id_str}', admin_id='{config.admin_id}', allowed_ids={config.allowed_user_ids}")
-    
     # Check config first (admin + .env users)
-    config_authorized = user_id_str == config.admin_id or user_id_str in config.allowed_user_ids
-    logging.info(f"AUTH DEBUG: Config check result: {config_authorized}")
-    
-    if config_authorized:
+    if user_id_str == config.admin_id or user_id_str in config.allowed_user_ids:
         return True
     
     # Check database for approved access requests
@@ -56,11 +49,9 @@ async def is_user_authorized(user_id: int) -> bool:
                 WHERE user_id = ? AND status = 'approved'
             """, (user_id,)) as cursor:
                 result = await cursor.fetchone()
-                db_authorized = result[0] > 0
-                logging.info(f"AUTH DEBUG: Database check result: {db_authorized} (count: {result[0]})")
-                return db_authorized
+                return result[0] > 0
     except Exception as e:
-        logging.error(f"AUTH DEBUG: Database check failed: {e}")
+        logging.error(f"Database authorization check failed: {e}")
         return False
 
 async def get_or_create_settings(user_id: int, message: Optional[Message] = None) -> Optional[dict]:
@@ -618,29 +609,49 @@ async def handle_message(message: Message, state: FSMContext):
 @router.message()
 async def handle_authorized_fallback(message: Message, state: FSMContext):
     """Handle authorized users' unhandled messages"""
-    # Critical security check with debug logging
-    user_id = message.from_user.id
-    is_authorized = await is_user_authorized(user_id)
-    
-    # Debug logging
-    logging.info(f"Authorization check for user {user_id}: {is_authorized}")
-    logging.info(f"Admin ID: {config.admin_id}, Allowed IDs: {config.allowed_user_ids}")
-    
-    if not is_authorized:
-        await message.answer(
-            "⛔️ Access Denied\n\n"
-            "Sorry, you don't have permission to use this bot.\n"
-            "Please contact the administrator if you need access.",
-            reply_markup=types.ReplyKeyboardRemove()
-        )
+    # Check authorization (both config and database)
+    if not await is_user_authorized(message.from_user.id):
+        # Handle unauthorized users with access request interface
+        user = message.from_user
+        can_request = await storage.can_request_access(user.id)
+        
+        response_text = f"🔒 Hello {user.first_name or 'there'}!\n\n"
+        response_text += "This is a private AI assistant bot.\n\n"
+        
+        if can_request:
+            response_text += (
+                "📝 To request access, use the /request command or click the button below.\n\n"
+                "⏰ You can make one access request per day."
+            )
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="🔓 Request Access", callback_data="request_access")
+            ]])
+        else:
+            response_text += (
+                "⏳ You have already submitted an access request today.\n\n"
+                "Please wait for the administrator to review your request."
+            )
+            keyboard = None
+        
+        await message.answer(response_text, reply_markup=keyboard)
         return
     
     current_state = await state.get_state()
+    
     if not current_state:
+        # Ensure user exists in database first
+        await storage.ensure_user_exists(
+            user_id=message.from_user.id,
+            username=message.from_user.username,
+            first_name=message.from_user.first_name
+        )
+        
         settings = await storage.get_user_settings(message.from_user.id)
+        is_new_user = not settings or 'current_provider' not in settings
         
         # Set default model if needed
-        if not settings or 'current_provider' not in settings:
+        if is_new_user:
             # Set default model
             default_provider = "openai"
             settings = settings or {}
@@ -656,20 +667,25 @@ async def handle_authorized_fallback(message: Message, state: FSMContext):
                 tokens=0,
                 has_image=False
             )
-        
-        is_admin = str(message.from_user.id) == config.admin_id
-        keyboard = kb.get_main_menu(is_admin)
-        
-        # Update keyboard silently and set state to chatting
-        try:
-            await update_keyboard(message.bot, message.from_user.id, keyboard)
-        except Exception as e:
-            logging.debug(f"Keyboard update error: {e}")
+            
+            # Send welcome message for new users
+            is_admin = str(message.from_user.id) == config.admin_id
+            welcome_msg = (
+                f"Welcome, {message.from_user.first_name or 'there'}! 🎉\n\n"
+                f"You now have access to this AI assistant bot.\n"
+                f"Current AI: {settings['current_provider']} ({settings['current_model']})\n\n"
+                f"You can start chatting now or use the menu buttons below."
+            )
+            
+            await message.answer(
+                welcome_msg,
+                reply_markup=kb.get_main_menu(is_admin=is_admin)
+            )
         
         # Set state to chatting and redirect to handle_message
         await state.set_state(UserStates.chatting)
         
-        # Process the message directly instead of showing "Please select an option"
+        # Process the message directly for both new and existing users
         await handle_message(message, state)
 
 

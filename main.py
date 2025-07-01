@@ -61,8 +61,8 @@ async def main():
     
     # Register routers
     dp.include_router(admin.router)   # Admin router first
-    dp.include_router(user.router)    # User router second (handles authorized users)
-    dp.include_router(access_request.router)  # Access request router last (handles unauthorized users)
+    dp.include_router(access_request.router)  # Access request router second (handles unauthorized user workflows)
+    dp.include_router(user.router)    # User router last (handles authorized users)
     
     # Start polling with debug info
     print("\n[INFO] Bot is starting...")

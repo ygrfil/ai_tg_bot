@@ -211,41 +211,5 @@ async def notify_admin_new_request(bot, user, request_message: str):
         logging.error(f"Failed to notify admin about access request: {e}")
 
 
-@router.message()
-async def handle_unauthorized_message(message: Message):
-    """Handle any other message from unauthorized users."""
-    
-    # Since user router comes first and handles authorized users,
-    # any message reaching here should be from unauthorized users
-    # But double-check to be safe
-    try:
-        from bot.handlers.user import is_user_authorized as async_is_user_authorized
-        if await async_is_user_authorized(message.from_user.id):
-            return  # User is authorized, should have been handled by user router
-    except Exception as e:
-        logging.error(f"Authorization check failed: {e}")
-        # If auth check fails, treat as unauthorized for safety
-    
-    user = message.from_user
-    can_request = await storage.can_request_access(user.id)
-    
-    response_text = f"🔒 Hello {user.first_name or 'there'}!\n\n"
-    response_text += "This is a private AI assistant bot.\n\n"
-    
-    if can_request:
-        response_text += (
-            "📝 To request access, use the /request command or click the button below.\n\n"
-            "⏰ You can make one access request per day."
-        )
-        
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[[
-            InlineKeyboardButton(text="🔓 Request Access", callback_data="request_access")
-        ]])
-    else:
-        response_text += (
-            "⏳ You have already submitted an access request today.\n\n"
-            "Please wait for the administrator to review your request."
-        )
-        keyboard = None
-    
-    await message.answer(response_text, reply_markup=keyboard)
+# Removed the catch-all message handler to prevent intercepting authorized users
+# Unauthorized users will be handled by the user router's fallback handler
