@@ -37,8 +37,15 @@ async def is_user_authorized(user_id: int) -> bool:
     """Check if user is authorized to use the bot"""
     user_id_str = str(user_id)
     
+    # Debug logging
+    logging.info(f"AUTH DEBUG: Checking authorization for user {user_id}")
+    logging.info(f"AUTH DEBUG: user_id_str='{user_id_str}', admin_id='{config.admin_id}', allowed_ids={config.allowed_user_ids}")
+    
     # Check config first (admin + .env users)
-    if user_id_str == config.admin_id or user_id_str in config.allowed_user_ids:
+    config_authorized = user_id_str == config.admin_id or user_id_str in config.allowed_user_ids
+    logging.info(f"AUTH DEBUG: Config check result: {config_authorized}")
+    
+    if config_authorized:
         return True
     
     # Check database for approved access requests
@@ -49,8 +56,11 @@ async def is_user_authorized(user_id: int) -> bool:
                 WHERE user_id = ? AND status = 'approved'
             """, (user_id,)) as cursor:
                 result = await cursor.fetchone()
-                return result[0] > 0
-    except Exception:
+                db_authorized = result[0] > 0
+                logging.info(f"AUTH DEBUG: Database check result: {db_authorized} (count: {result[0]})")
+                return db_authorized
+    except Exception as e:
+        logging.error(f"AUTH DEBUG: Database check failed: {e}")
         return False
 
 async def get_or_create_settings(user_id: int, message: Optional[Message] = None) -> Optional[dict]:
@@ -457,7 +467,12 @@ async def handle_image_prompt(message: Message, state: FSMContext):
 async def handle_message(message: Message, state: FSMContext):
     try:
         user = message.from_user
+        
+        # CRITICAL SECURITY CHECK - failsafe against unauthorized access
         if not await is_user_authorized(user.id):
+            logging.warning(f"SECURITY: Unauthorized user {user.id} attempted to access main chat handler!")
+            await message.answer("⛔️ Access Denied - Unauthorized access to chat function")
+            await state.clear()  # Clear their state
             return
 
         t0 = time.monotonic()
@@ -603,8 +618,15 @@ async def handle_message(message: Message, state: FSMContext):
 @router.message()
 async def handle_authorized_fallback(message: Message, state: FSMContext):
     """Handle authorized users' unhandled messages"""
-    # Double-check with database for approved users
-    if not await is_user_authorized(message.from_user.id):
+    # Critical security check with debug logging
+    user_id = message.from_user.id
+    is_authorized = await is_user_authorized(user_id)
+    
+    # Debug logging
+    logging.info(f"Authorization check for user {user_id}: {is_authorized}")
+    logging.info(f"Admin ID: {config.admin_id}, Allowed IDs: {config.allowed_user_ids}")
+    
+    if not is_authorized:
         await message.answer(
             "⛔️ Access Denied\n\n"
             "Sorry, you don't have permission to use this bot.\n"
