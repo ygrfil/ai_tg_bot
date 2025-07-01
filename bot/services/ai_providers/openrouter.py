@@ -1,6 +1,7 @@
 from typing import Optional, List, Dict, Any, AsyncGenerator
 import base64
 import asyncio
+import httpx
 from openai import AsyncOpenAI
 from .base import BaseAIProvider
 from ...config import Config
@@ -18,7 +19,7 @@ class OpenRouterProvider(BaseAIProvider):
                 "HTTP-Referer": "https://github.com/ygrfil/ai_tg_bot",
                 "X-Title": "AI Telegram Bot"
             },
-            timeout=30.0  # 30 second timeout
+            timeout=httpx.Timeout(30.0, connect=10.0, read=25.0)  # Enhanced timeout config
         )
 
     async def chat_completion_stream(
@@ -73,16 +74,40 @@ class OpenRouterProvider(BaseAIProvider):
             # Create streaming completion
             stream = await self.client.chat.completions.create(**completion_params)
             
-            # Stream the response
+            # Stream the response with enhanced error handling
+            chunk_count = 0
             async for chunk in stream:
-                if chunk.choices and len(chunk.choices) > 0:
-                    delta = chunk.choices[0].delta
-                    if hasattr(delta, 'content') and delta.content:
-                        yield delta.content
+                try:
+                    chunk_count += 1
+                    if chunk.choices and len(chunk.choices) > 0:
+                        delta = chunk.choices[0].delta
+                        if hasattr(delta, 'content') and delta.content:
+                            yield delta.content
+                    
+                    # Safety check for stuck streams
+                    if chunk_count > 1000:
+                        logging.warning("Stream exceeded 1000 chunks, terminating")
+                        break
                         
+                except Exception as chunk_error:
+                    logging.error(f"Error processing stream chunk: {chunk_error}")
+                    # Continue processing other chunks instead of failing completely
+                    continue
+                        
+        except asyncio.TimeoutError:
+            logging.error("OpenRouter streaming timed out")
+            yield "❌ Request timed out. Please try a shorter message or try again later."
         except Exception as e:
             logging.error(f"Error in OpenRouter streaming: {e}")
-            yield f"❌ Error: {str(e)}. Please try again later."
+            # Provide more specific error messages
+            if "rate limit" in str(e).lower():
+                yield "❌ Rate limit exceeded. Please wait a moment and try again."
+            elif "api key" in str(e).lower():
+                yield "❌ API authentication error. Please check configuration."
+            elif "connection" in str(e).lower():
+                yield "❌ Connection error. Please check your internet connection and try again."
+            else:
+                yield f"❌ Error: {str(e)}. Please try again later."
 
     def _supports_structured_outputs(self, model_config: Dict[str, Any]) -> bool:
         """Check if the model supports structured outputs (JSON schema)."""
@@ -161,25 +186,38 @@ class OpenRouterProvider(BaseAIProvider):
             # Create completion
             response = await self.client.chat.completions.create(**completion_params)
             
-            # Extract content
+            # Extract content with improved parsing
             if response.choices and len(response.choices) > 0:
-                content = response.choices[0].message.content
+                message = response.choices[0].message
                 
-                # Parse JSON response
-                try:
-                    import json
-                    return json.loads(content)
-                except json.JSONDecodeError as e:
-                    logging.error(f"Failed to parse JSON response: {e}")
-                    # Return error in expected format
-                    return {
-                        "response_type": "error",
-                        "content": f"Failed to generate valid structured response: {str(e)}",
-                        "confidence": 0.0,
-                        "error_type": "unclear_request",
-                        "suggestion": "Please try rephrasing your request",
-                        "can_retry": True
-                    }
+                # Try using the new parsed attribute first (SDK 1.93+)
+                if hasattr(message, 'parsed') and message.parsed is not None:
+                    logging.debug("Using improved SDK parsing method")
+                    return message.parsed
+                
+                # Fallback to manual JSON parsing
+                content = message.content
+                if content:
+                    try:
+                        import json
+                        parsed_content = json.loads(content)
+                        logging.debug("Successfully parsed JSON response manually")
+                        return parsed_content
+                    except json.JSONDecodeError as e:
+                        logging.error(f"Failed to parse JSON response: {e}")
+                        logging.debug(f"Raw content: {content}")
+                        # Return error in expected format
+                        return {
+                            "response_type": "error",
+                            "content": f"Failed to generate valid structured response: {str(e)}",
+                            "confidence": 0.0,
+                            "error_type": "unclear_request",
+                            "suggestion": "Please try rephrasing your request",
+                            "can_retry": True
+                        }
+                else:
+                    logging.error("Empty content in response")
+                    raise Exception("Received empty response content")
             else:
                 raise Exception("No response received from model")
                 
