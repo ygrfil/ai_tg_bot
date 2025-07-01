@@ -32,7 +32,7 @@ def is_user_authorized(user_id: int) -> bool:
 async def start_unauthorized(message: Message, state: FSMContext):
     """Handle /start command for unauthorized users."""
     
-    # Check authorization with database
+    # Check authorization with database first
     from bot.handlers.user import is_user_authorized as async_is_user_authorized
     if await async_is_user_authorized(message.from_user.id):
         return  # User is authorized, let main handler deal with it
@@ -215,10 +215,16 @@ async def notify_admin_new_request(bot, user, request_message: str):
 async def handle_unauthorized_message(message: Message):
     """Handle any other message from unauthorized users."""
     
-    # Check authorization with database
-    from bot.handlers.user import is_user_authorized as async_is_user_authorized
-    if await async_is_user_authorized(message.from_user.id):
-        return  # User is authorized, let main handler deal with it
+    # Since user router comes first and handles authorized users,
+    # any message reaching here should be from unauthorized users
+    # But double-check to be safe
+    try:
+        from bot.handlers.user import is_user_authorized as async_is_user_authorized
+        if await async_is_user_authorized(message.from_user.id):
+            return  # User is authorized, should have been handled by user router
+    except Exception as e:
+        logging.error(f"Authorization check failed: {e}")
+        # If auth check fails, treat as unauthorized for safety
     
     user = message.from_user
     can_request = await storage.can_request_access(user.id)
