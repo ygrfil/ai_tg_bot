@@ -28,6 +28,11 @@ config = Config.from_env()
 # Note: Database initialization moved to main.py to avoid circular imports
 
 # Helper functions
+def is_user_authorized_sync(user_id: int) -> bool:
+    """Sync version for router filters - only checks config, not database"""
+    user_id_str = str(user_id)
+    return user_id_str == config.admin_id or user_id_str in config.allowed_user_ids
+
 async def is_user_authorized(user_id: int) -> bool:
     """Check if user is authorized to use the bot"""
     user_id_str = str(user_id)
@@ -452,7 +457,7 @@ async def handle_image_prompt(message: Message, state: FSMContext):
 async def handle_message(message: Message, state: FSMContext):
     try:
         user = message.from_user
-        if str(user.id) not in config.allowed_user_ids:
+        if not await is_user_authorized(user.id):
             return
 
         t0 = time.monotonic()
@@ -596,8 +601,9 @@ async def handle_message(message: Message, state: FSMContext):
         )
 
 @router.message()
-async def handle_unauthorized(message: Message, state: FSMContext):
-    """Handle unauthorized users and unhandled messages"""
+async def handle_authorized_fallback(message: Message, state: FSMContext):
+    """Handle authorized users' unhandled messages"""
+    # Double-check with database for approved users
     if not await is_user_authorized(message.from_user.id):
         await message.answer(
             "⛔️ Access Denied\n\n"
