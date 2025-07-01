@@ -644,14 +644,14 @@ async def admin_help_command(message: Message):
     )
     await message.answer(help_text, parse_mode="HTML")
 
-@router.message(F.text == "👥 Users", UserStates.admin_menu)
-async def users_button(message: Message, state: FSMContext):
-    """Handle users button press to show user management options"""
+@router.message(F.text == "👥 User Management", UserStates.admin_menu)
+async def user_management_button(message: Message, state: FSMContext):
+    """Handle consolidated user management button press"""
     if str(message.from_user.id) != config.admin_id:
         return
         
     try:
-        # Get user counts
+        # Get user statistics
         async with aiosqlite.connect(storage.db_path) as db:
             # Get total users
             async with db.execute("SELECT COUNT(*) FROM users") as cursor:
@@ -663,52 +663,51 @@ async def users_button(message: Message, state: FSMContext):
                 WHERE datetime(created_at) > datetime('now', '-7 day')
             """) as cursor:
                 new_users = (await cursor.fetchone())[0]
-                
-            # Get most recent users
-            async with db.execute("""
-                SELECT user_id, username, first_name, created_at
-                FROM users
-                ORDER BY created_at DESC
-                LIMIT 5
-            """) as cursor:
-                recent_users = await cursor.fetchall()
         
-        # Create user management keyboard
+        # Get access request stats
+        stats = await storage.get_access_request_stats()
+        pending_requests = await storage.get_pending_access_requests()
+        
+        # Create consolidated user management keyboard
         user_keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [
-                InlineKeyboardButton(text="View All Users", callback_data="users:view_all"),
-                InlineKeyboardButton(text="Export Users", callback_data="users:export")
+                InlineKeyboardButton(text="📊 User Overview", callback_data="user_mgmt:overview"),
+                InlineKeyboardButton(text=f"🔍 Access Requests ({stats['pending']})", callback_data="user_mgmt:requests")
             ],
             [
-                InlineKeyboardButton(text="Block User", callback_data="users:block"),
-                InlineKeyboardButton(text="Unblock User", callback_data="users:unblock")
+                InlineKeyboardButton(text="👤 Add User", callback_data="user_mgmt:add_user"),
+                InlineKeyboardButton(text="🗑 Remove User", callback_data="user_mgmt:remove_user")
+            ],
+            [
+                InlineKeyboardButton(text="📋 View All Users", callback_data="user_mgmt:view_all")
             ]
         ])
         
-        # Format response
+        # Format consolidated response
         response = [
-            "<b>👥 User Management</b>\n",
-            f"Total Users: {total_users:,}",
-            f"New Users (7d): {new_users:,}"
+            "<b>👥 User Management Center</b>\n",
+            f"<b>📊 User Statistics:</b>",
+            f"├ Total Users: <b>{total_users:,}</b>",
+            f"├ New Users (7d): <b>{new_users:,}</b>",
+            f"└ Active Users (24h): <b>{stats.get('active_users', 'N/A')}</b>\n",
+            f"<b>🔓 Access Requests:</b>",
+            f"├ Pending: <b>{stats['pending']}</b>",
+            f"├ Today: <b>{stats['today']}</b>",
+            f"└ Approved This Week: <b>{stats['approved_this_week']}</b>"
         ]
         
-        if recent_users:
-            response.append("\n<b>Recently Joined Users:</b>")
-            for user_id, username, first_name, created_at in recent_users:
-                # Format user info
-                user_parts = []
-                if username:
-                    user_parts.append(f"@{username}")
-                if first_name:
-                    user_parts.append(first_name)
+        # Show recent pending requests preview
+        if pending_requests:
+            response.append(f"\n<b>⏰ Recent Pending Requests:</b>")
+            for req in pending_requests[:2]:  # Show only first 2
+                name_parts = []
+                if req['first_name']:
+                    name_parts.append(req['first_name'])
+                if req['username']:
+                    name_parts.append(f"@{req['username']}")
                     
-                user_display = " | ".join(user_parts) if user_parts else f"Unknown"
-                
-                # Format date
-                date_obj = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
-                date_str = date_obj.strftime("%d %b %Y")
-                
-                response.append(f"• <b>{user_display}</b> (ID: {user_id}) - {date_str}")
+                display_name = " | ".join(name_parts) if name_parts else f"User {req['user_id']}"
+                response.append(f"• <b>{display_name}</b> (ID: {req['user_id']})")
         
         await message.answer(
             "\n".join(response),
@@ -717,10 +716,10 @@ async def users_button(message: Message, state: FSMContext):
         )
         
     except Exception as e:
-        logging.error(f"Error in users command: {str(e)}")
+        logging.error(f"Error in user management command: {str(e)}")
         logging.error(traceback.format_exc())
         await message.answer(
-            "❌ Error fetching user data",
+            "❌ Error fetching user management data",
             reply_markup=kb.get_admin_menu()
         )
 
@@ -1315,90 +1314,11 @@ async def process_settings_callback(callback_query: CallbackQuery, state: FSMCon
     else:
         await callback_query.answer(f"Action '{action}' not implemented yet")
 
-@router.message(F.text == "🔓 Access Requests", UserStates.admin_menu)
-async def access_requests_button(message: Message, state: FSMContext):
-    """Handle access requests button press to show access request management"""
-    if str(message.from_user.id) != config.admin_id:
-        return
-        
-    try:
-        # Get access request stats
-        stats = await storage.get_access_request_stats()
-        pending_requests = await storage.get_pending_access_requests()
-        
-        # Create access request management keyboard
-        request_keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(text=f"🔍 Review ({stats['pending']})", callback_data="access:review"),
-                InlineKeyboardButton(text="📋 All Requests", callback_data="access:all")
-            ],
-            [
-                InlineKeyboardButton(text="👤 Add User", callback_data="access:add_user"),
-                InlineKeyboardButton(text="🚫 Remove User", callback_data="access:remove_user")
-            ],
-            [
-                InlineKeyboardButton(text="📊 Statistics", callback_data="access:stats")
-            ]
-        ])
-        
-        # Format response
-        response = [
-            "<b>🔓 Access Request Management</b>\n",
-            f"📬 Pending Requests: <b>{stats['pending']}</b>",
-            f"📅 Requests Today: {stats['today']}",
-            f"✅ Approved This Week: {stats['approved_this_week']}"
-        ]
-        
-        if pending_requests:
-            response.append("\n<b>⏰ Recent Pending Requests:</b>")
-            for req in pending_requests[:3]:  # Show only first 3
-                # Format user info
-                name_parts = []
-                if req['first_name']:
-                    name_parts.append(req['first_name'])
-                if req['last_name']:
-                    name_parts.append(req['last_name'])
-                if req['username']:
-                    name_parts.append(f"@{req['username']}")
-                    
-                display_name = " | ".join(name_parts) if name_parts else f"User {req['user_id']}"
-                
-                # Format timestamp
-                try:
-                    ts = datetime.fromisoformat(req['request_timestamp'].replace('Z', '+00:00'))
-                    ts_str = ts.strftime("%d %b %Y %H:%M")
-                except:
-                    ts_str = "Unknown"
-                
-                # Truncate message if too long
-                message_preview = req['request_message']
-                if message_preview and len(message_preview) > 100:
-                    message_preview = message_preview[:100] + "..."
-                
-                response.append(f"• <b>{display_name}</b> (ID: {req['user_id']})")
-                response.append(f"  ├ Time: {ts_str}")
-                response.append(f"  └ Message: {message_preview or 'No message'}")
-        else:
-            response.append("\n✨ No pending requests")
-        
-        await message.answer(
-            "\n".join(response),
-            parse_mode="HTML",
-            reply_markup=request_keyboard
-        )
-        
-    except Exception as e:
-        logging.error(f"Error in access requests command: {str(e)}")
-        logging.error(traceback.format_exc())
-        await message.answer(
-            "❌ Error fetching access request data",
-            reply_markup=kb.get_admin_menu()
-        )
 
-# Add callback handlers for access request management
-@router.callback_query(lambda c: c.data and c.data.startswith("access:"))
-async def process_access_callback(callback_query: CallbackQuery, state: FSMContext):
-    """Process access request management callbacks"""
+# Add callback handlers for consolidated user management
+@router.callback_query(lambda c: c.data and c.data.startswith("user_mgmt:"))
+async def process_user_mgmt_callback(callback_query: CallbackQuery, state: FSMContext):
+    """Process consolidated user management callbacks"""
     if str(callback_query.from_user.id) != config.admin_id:
         return
     
@@ -1406,7 +1326,7 @@ async def process_access_callback(callback_query: CallbackQuery, state: FSMConte
     parts = callback_query.data.split(":")
     action = parts[1]
     
-    if action == "review":
+    if action == "requests":
         await callback_query.answer("Loading pending requests...")
         
         try:
@@ -1416,7 +1336,7 @@ async def process_access_callback(callback_query: CallbackQuery, state: FSMConte
                 await callback_query.message.answer(
                     "✨ No pending access requests!",
                     reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                        [InlineKeyboardButton(text="Back", callback_data="access:back")]
+                        [InlineKeyboardButton(text="Back", callback_data="user_mgmt:back")]
                     ])
                 )
                 return
@@ -1452,11 +1372,11 @@ async def process_access_callback(callback_query: CallbackQuery, state: FSMConte
                 # Create approve/reject buttons
                 decision_keyboard = InlineKeyboardMarkup(inline_keyboard=[
                     [
-                        InlineKeyboardButton(text="✅ Approve", callback_data=f"access:approve:{req['id']}"),
-                        InlineKeyboardButton(text="❌ Reject", callback_data=f"access:reject:{req['id']}")
+                        InlineKeyboardButton(text="✅ Approve", callback_data=f"user_mgmt:approve:{req['id']}"),
+                        InlineKeyboardButton(text="❌ Reject", callback_data=f"user_mgmt:reject:{req['id']}")
                     ],
                     [
-                        InlineKeyboardButton(text="📝 View Details", callback_data=f"access:details:{req['user_id']}")
+                        InlineKeyboardButton(text="📝 View Details", callback_data=f"user_mgmt:details:{req['user_id']}")
                     ]
                 ])
                 
@@ -1471,7 +1391,7 @@ async def process_access_callback(callback_query: CallbackQuery, state: FSMConte
                 f"<b>📋 All {len(pending_requests)} pending requests shown above.</b>",
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="Back to Access Management", callback_data="access:back")]
+                    [InlineKeyboardButton(text="Back to User Management", callback_data="user_mgmt:back")]
                 ])
             )
             
@@ -1793,6 +1713,31 @@ async def process_access_callback(callback_query: CallbackQuery, state: FSMConte
             reply_markup=add_keyboard
         )
     
+    elif action == "add_user":
+        await callback_query.answer("Add User")
+        
+        response = [
+            "<b>👤 Add User to Bot</b>\n",
+            "<b>Instructions:</b>",
+            "1. Ask the user to send /start to the bot",
+            "2. Copy their User ID from the logs",
+            "3. Use the button below to add them\n",
+            "\n💡 <i>Tip: Users can send /start to the bot to get their ID in the logs</i>"
+        ]
+        
+        add_keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="➕ Add User ID", callback_data="user_mgmt:add_user_id")
+            ],
+            [InlineKeyboardButton(text="Back", callback_data="user_mgmt:back")]
+        ])
+        
+        await callback_query.message.answer(
+            "\n".join(response),
+            parse_mode="HTML",
+            reply_markup=add_keyboard
+        )
+    
     elif action == "remove_user":
         await callback_query.answer("Remove User")
         
@@ -1848,7 +1793,7 @@ async def process_access_callback(callback_query: CallbackQuery, state: FSMConte
                 "There are no other users to remove.",
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(text="Back", callback_data="access:back")]
+                    [InlineKeyboardButton(text="Back", callback_data="user_mgmt:back")]
                 ])
             )
             return
@@ -1860,11 +1805,11 @@ async def process_access_callback(callback_query: CallbackQuery, state: FSMConte
             removal_buttons.append([
                 InlineKeyboardButton(
                     text=f"{source_indicator} {user['name']} ({user['id']})",
-                    callback_data=f"access:remove_confirm:{user['id']}"
+                    callback_data=f"user_mgmt:remove_confirm:{user['id']}"
                 )
             ])
         
-        removal_buttons.append([InlineKeyboardButton(text="Back", callback_data="access:back")])
+        removal_buttons.append([InlineKeyboardButton(text="Back", callback_data="user_mgmt:back")])
         
         response = [
             "<b>🚫 Remove User Access</b>\n",
@@ -1963,16 +1908,116 @@ async def process_access_callback(callback_query: CallbackQuery, state: FSMConte
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(inline_keyboard=[
                 [
-                    InlineKeyboardButton(text="➕ Add User", callback_data="access:add_user"),
-                    InlineKeyboardButton(text="🚫 Remove User", callback_data="access:remove_user")
+                    InlineKeyboardButton(text="➕ Add User", callback_data="user_mgmt:add_user"),
+                    InlineKeyboardButton(text="🚫 Remove User", callback_data="user_mgmt:remove_user")
                 ],
-                [InlineKeyboardButton(text="Back", callback_data="access:back")]
+                [InlineKeyboardButton(text="Back", callback_data="user_mgmt:back")]
+            ])
+        )
+    
+    elif action == "overview":
+        await callback_query.answer("Loading user overview...")
+        
+        # Get comprehensive user statistics
+        async with aiosqlite.connect(storage.db_path) as db:
+            # Get recent users
+            async with db.execute("""
+                SELECT user_id, username, first_name, created_at
+                FROM users
+                ORDER BY created_at DESC
+                LIMIT 8
+            """) as cursor:
+                recent_users = await cursor.fetchall()
+        
+        response = [
+            "<b>📊 User Overview</b>\n",
+            "<b>Recent Users:</b>"
+        ]
+        
+        if recent_users:
+            for user_id, username, first_name, created_at in recent_users:
+                user_parts = []
+                if username:
+                    user_parts.append(f"@{username}")
+                if first_name:
+                    user_parts.append(first_name)
+                    
+                user_display = " | ".join(user_parts) if user_parts else f"Unknown"
+                date_obj = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                date_str = date_obj.strftime("%d %b %Y")
+                
+                response.append(f"• <b>{user_display}</b> (ID: {user_id}) - {date_str}")
+        else:
+            response.append("No recent users found")
+        
+        await callback_query.message.answer(
+            "\n".join(response),
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="Back", callback_data="user_mgmt:back")]
+            ])
+        )
+    
+    elif action == "view_all":
+        await callback_query.answer("Loading all users...")
+        
+        # Get all authorized users (same logic as the old handler)
+        all_users = []
+        
+        # Add admin
+        admin_display = await storage.get_user_display_name(int(config.admin_id))
+        all_users.append(f"• 👑 <b>{admin_display}</b> (Admin: {config.admin_id})")
+        
+        # Add config users
+        for user_id in config.allowed_user_ids:
+            if user_id != config.admin_id:
+                try:
+                    display_name = await storage.get_user_display_name(int(user_id))
+                    all_users.append(f"• 📁 <b>{display_name}</b> (ID: {user_id})")
+                except:
+                    all_users.append(f"• 📁 <b>Unknown User</b> (ID: {user_id})")
+        
+        # Add database users
+        try:
+            async with aiosqlite.connect(storage.db_path) as db:
+                async with db.execute("""
+                    SELECT user_id, username, first_name FROM access_requests 
+                    WHERE status = 'approved'
+                """) as cursor:
+                    approved_users = await cursor.fetchall()
+                    
+                    for user_id, username, first_name in approved_users:
+                        if str(user_id) not in config.allowed_user_ids:
+                            name_parts = []
+                            if first_name:
+                                name_parts.append(first_name)
+                            if username:
+                                name_parts.append(f"@{username}")
+                            display_name = " | ".join(name_parts) if name_parts else f"User {user_id}"
+                            all_users.append(f"• 💾 <b>{display_name}</b> (ID: {user_id})")
+        except Exception as e:
+            logging.error(f"Error getting approved users: {e}")
+        
+        response = [
+            f"<b>👥 All Authorized Users ({len(all_users)})</b>\n",
+            "👑 = Admin (cannot be removed)",
+            "📁 = Config user (.env file)", 
+            "💾 = Database approved user\n"
+        ]
+        response.extend(all_users)
+        
+        await callback_query.message.answer(
+            "\n".join(response),
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="Back", callback_data="user_mgmt:back")]
             ])
         )
     
     elif action == "back":
         await callback_query.answer()
-        await access_requests_button(callback_query.message, state)
+        # Navigate back to main user management screen
+        await user_management_button(callback_query.message, state)
     
     else:
         await callback_query.answer(f"Action '{action}' not implemented yet")
@@ -2055,25 +2100,8 @@ async def quick_review_requests(callback_query: CallbackQuery, state: FSMContext
         await callback_query.answer("Unauthorized", show_alert=True)
         return
     
-    await callback_query.answer("Loading access requests...")
+    await callback_query.answer("Loading user management...")
     
-    # Redirect to access requests menu
-    await callback_query.message.answer(
-        "🔓 <b>Access Request Management</b>\n\n"
-        "Choose an option:",
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
-            [
-                InlineKeyboardButton(text="🔍 Review Pending", callback_data="access:review"),
-                InlineKeyboardButton(text="📋 All Requests", callback_data="access:all")
-            ],
-            [
-                InlineKeyboardButton(text="👤 Add User", callback_data="access:add_user"),
-                InlineKeyboardButton(text="🚫 Remove User", callback_data="access:remove_user")
-            ],
-            [
-                InlineKeyboardButton(text="📊 Statistics", callback_data="access:stats")
-            ]
-        ])
-    )
+    # Redirect to consolidated user management menu
+    await user_management_button(callback_query.message, state)
 

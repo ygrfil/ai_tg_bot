@@ -25,11 +25,10 @@ def get_admin_menu() -> ReplyKeyboardMarkup:
         KeyboardButton(text="📢 Broadcast")
     )
     builder.row(
-        KeyboardButton(text="👥 Users"),
-        KeyboardButton(text="🔓 Access Requests")
+        KeyboardButton(text="👥 User Management"),
+        KeyboardButton(text="⚙️ Settings")
     )
     builder.row(
-        KeyboardButton(text="⚙️ Settings"),
         KeyboardButton(text="🔙 Back")
     )
     return builder.as_markup(resize_keyboard=True)
