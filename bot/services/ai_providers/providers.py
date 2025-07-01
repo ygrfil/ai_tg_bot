@@ -4,7 +4,7 @@ PROVIDER_MODELS = {
         "vision": True
     },
     "openai": {
-        "name": "openai/gpt-4.1", 
+        "name": "openai/o4-mini", 
         "vision": True
     },
     "online": {
