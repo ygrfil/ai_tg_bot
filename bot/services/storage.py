@@ -20,6 +20,7 @@ class DatabasePool:
         self.min_connections = min_connections
         self.pool = deque()
         self.lock = asyncio.Lock()
+        self._condition = asyncio.Condition(self.lock)
         self._creating = 0
         self._active = 0
         self._last_cleanup = 0
@@ -32,35 +33,50 @@ class DatabasePool:
             self.pool.append(db)
 
     async def acquire(self, timeout: float = 5.0):
-        start_time = asyncio.get_event_loop().time()
-        while True:
-            async with self.lock:
-                if self.pool:
-                    self.stats["hits"] += 1
-                    conn = self.pool.popleft()
-                    self._active += 1
-                    return conn
+        async with self._condition:
+            # Wait for a connection to become available or create slot
+            try:
+                await asyncio.wait_for(
+                    self._condition.wait_for(
+                        lambda: self.pool or (self._creating + self._active < self.max_connections)
+                    ),
+                    timeout=timeout
+                )
+            except asyncio.TimeoutError:
+                self.stats["timeouts"] += 1
+                raise TimeoutError("Connection pool timeout")
+            
+            # Try to get existing connection first
+            if self.pool:
+                self.stats["hits"] += 1
+                conn = self.pool.popleft()
+                self._active += 1
+                return conn
+            
+            # Create new connection if under limit
+            if self._creating + self._active < self.max_connections:
+                self._creating += 1
+                self.stats["misses"] += 1
                 
-                if self._creating + self._active < self.max_connections:
-                    self._creating += 1
-                    self.stats["misses"] += 1
-                    break
-                
-                if asyncio.get_event_loop().time() - start_time > timeout:
-                    self.stats["timeouts"] += 1
-                    raise TimeoutError("Connection pool timeout")
-                
-            await asyncio.sleep(0.1)
-
-        try:
-            db = await self._create_connection()
-            return db
-        finally:
-            self._creating -= 1
-            self._active += 1
+                # Create connection outside the lock to avoid blocking
+                try:
+                    db = await self._create_connection()
+                    async with self._condition:
+                        self._creating -= 1
+                        self._active += 1
+                    return db
+                except Exception:
+                    async with self._condition:
+                        self._creating -= 1
+                        self._condition.notify_all()  # Wake up other waiters
+                    raise
+            
+            # This should not happen due to wait_for condition
+            self.stats["timeouts"] += 1
+            raise TimeoutError("Connection pool exhausted")
 
     async def release(self, db):
-        async with self.lock:
+        async with self._condition:
             self._active -= 1
             current_time = asyncio.get_event_loop().time()
             
@@ -72,6 +88,8 @@ class DatabasePool:
                 self._last_cleanup = current_time
             
             self.pool.append(db)
+            # Notify waiting acquire() calls that a connection is available
+            self._condition.notify()
 
     async def _create_connection(self):
         db = await aiosqlite.connect(self.db_path)
