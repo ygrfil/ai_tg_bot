@@ -11,7 +11,12 @@ class FalProvider(BaseAIProvider):
     def __init__(self, api_key: str, config: Config = None):
         super().__init__(api_key, config)
         # Using hidream-i1-fast model which is optimized for speed (16 steps)
-        self.base_url = "https://fal.run/fal-ai/hidream-i1-fast"
+        self.model_name = "hidream-i1-fast"
+        self.base_url = f"https://fal.run/fal-ai/{self.model_name}"
+        
+    def get_model_name(self) -> str:
+        """Get the current model name for logging purposes."""
+        return self.model_name
         
     async def _poll_queue_status(self, request_id: str, headers: Dict[str, str], max_retries: int = 30) -> Optional[Dict]:
         """Poll the queue status until the request is completed or fails."""
@@ -64,7 +69,7 @@ class FalProvider(BaseAIProvider):
         seed: Optional[int] = None
     ) -> str:
         """
-        Generate an image using fal.ai's hidream-i1-fast model.
+        Generate an image using fal.ai's hidream model.
         Returns the URL of the generated image or None if generation failed.
         """
         

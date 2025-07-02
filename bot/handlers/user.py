@@ -413,10 +413,17 @@ async def handle_image_prompt(message: Message, state: FSMContext):
         )
         
         # Log usage statistics
+        # Get the actual model name from the provider
+        try:
+            fal_provider = get_provider("fal")
+            model_name = fal_provider.get_model_name() if hasattr(fal_provider, 'get_model_name') else "hidream-i1-fast"
+        except Exception:
+            model_name = "hidream-i1-fast"  # Fallback
+        
         await storage.log_usage(
             user_id=message.from_user.id,
             provider="fal",
-            model="hidream-i1-full",
+            model=model_name,
             tokens=0,
             has_image=True
         )
