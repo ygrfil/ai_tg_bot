@@ -7,6 +7,7 @@ from ..config import Config
 from ..keyboards import reply as kb
 from ..states import UserStates
 import aiosqlite
+import aiofiles
 import logging
 import traceback
 from datetime import datetime
@@ -1430,9 +1431,10 @@ async def process_user_mgmt_callback(callback_query: CallbackQuery, state: FSMCo
                                 
                                 env_path = Path(".env")
                                 if env_path.exists():
-                                    # Read current .env content
-                                    with open(env_path, "r") as f:
-                                        lines = f.readlines()
+                                    # Read current .env content (async)
+                                    async with aiofiles.open(env_path, "r") as f:
+                                        content = await f.read()
+                                        lines = content.splitlines(keepends=True)
                                     
                                     # Update ALLOWED_USER_IDS line
                                     new_ids = ",".join(config.allowed_user_ids)
@@ -1444,8 +1446,8 @@ async def process_user_mgmt_callback(callback_query: CallbackQuery, state: FSMCo
                                             break
                                     
                                     if updated:
-                                        with open(env_path, "w") as f:
-                                            f.writelines(lines)
+                                        async with aiofiles.open(env_path, "w") as f:
+                                            await f.writelines(lines)
                                         logging.info(f"Updated .env file with new user: {user_id}")
                                     else:
                                         logging.warning("ALLOWED_USER_IDS not found in .env file")
@@ -2056,9 +2058,10 @@ async def remove_user_access(user_id: str) -> bool:
                 
                 env_path = Path(".env")
                 if env_path.exists():
-                    # Read current .env content
-                    with open(env_path, "r") as f:
-                        lines = f.readlines()
+                    # Read current .env content (async)
+                    async with aiofiles.open(env_path, "r") as f:
+                        content = await f.read()
+                        lines = content.splitlines(keepends=True)
                     
                     # Update ALLOWED_USER_IDS line
                     new_ids = ",".join(config.allowed_user_ids)
@@ -2070,8 +2073,8 @@ async def remove_user_access(user_id: str) -> bool:
                             break
                     
                     if updated:
-                        with open(env_path, "w") as f:
-                            f.writelines(lines)
+                        async with aiofiles.open(env_path, "w") as f:
+                            await f.writelines(lines)
                         logging.info(f"Updated .env file - removed user {user_id}")
                     else:
                         logging.warning("ALLOWED_USER_IDS not found in .env file")
