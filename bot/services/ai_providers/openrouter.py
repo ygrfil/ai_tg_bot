@@ -19,7 +19,7 @@ class OpenRouterProvider(BaseAIProvider):
                 "HTTP-Referer": "https://github.com/ygrfil/ai_tg_bot",
                 "X-Title": "AI Telegram Bot"
             },
-            timeout=httpx.Timeout(30.0, connect=10.0, read=25.0)  # Enhanced timeout config
+            timeout=httpx.Timeout(60.0, connect=15.0, read=45.0)  # Increased timeouts
         )
 
     async def chat_completion_stream(
@@ -55,7 +55,7 @@ class OpenRouterProvider(BaseAIProvider):
                 "model": model_config['name'],
                 "messages": messages,
                 "stream": True,
-                "max_tokens": 2048,  # Limit tokens for faster responses
+                "max_tokens": 1024,  # Reduced from 2048 to 1024 for faster responses
                 "temperature": 0.7,   # Slightly lower temperature for speed
             }
             
@@ -70,6 +70,8 @@ class OpenRouterProvider(BaseAIProvider):
                     }
                 }
                 logging.debug(f"Using structured output for model {model_config['name']}")
+            
+            logging.info(f"[OpenRouter] Starting streaming request for model {model_config['name']}")
             
             # Create streaming completion
             stream = await self.client.chat.completions.create(**completion_params)
@@ -98,7 +100,7 @@ class OpenRouterProvider(BaseAIProvider):
             logging.error("OpenRouter streaming timed out")
             yield "❌ Request timed out. Please try a shorter message or try again later."
         except Exception as e:
-            logging.error(f"Error in OpenRouter streaming: {e}")
+            logging.error(f"Error in OpenRouter streaming: {e}", exc_info=True)
             # Provide more specific error messages
             if "rate limit" in str(e).lower():
                 yield "❌ Rate limit exceeded. Please wait a moment and try again."
@@ -165,7 +167,7 @@ class OpenRouterProvider(BaseAIProvider):
                 "model": model_config['name'],
                 "messages": messages,
                 "stream": False,  # Non-streaming for structured output
-                "max_tokens": 2048,
+                "max_tokens": 1024,  # Reduced from 2048 to 1024
                 "temperature": 0.3,  # Lower temperature for more consistent JSON
             }
             

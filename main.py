@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -18,14 +19,36 @@ async def on_startup(bot: Bot, storage: Storage):
         # Just log that startup is complete - no database operations needed
         # Database will be initialized when first user interacts
         logging.info("Bot startup complete - database will initialize on first use")
+        
+        # Health check for AI providers
+        logging.info("Performing AI provider health check...")
+        try:
+            from bot.services.ai_providers import get_provider
+            from bot.services.ai_providers.providers import PROVIDER_MODELS
+            
+            # Test the default provider
+            default_provider = "openai"
+            if default_provider in PROVIDER_MODELS:
+                provider = await get_provider(default_provider, config)
+                logging.info(f"✅ AI provider '{default_provider}' initialized successfully")
+            else:
+                logging.warning(f"⚠️ Default provider '{default_provider}' not found in PROVIDER_MODELS")
+                
+        except Exception as e:
+            logging.error(f"❌ AI provider health check failed: {e}")
+            
     except Exception as e:
         logging.error(f"Error during startup: {e}")
 
 async def main():
+    # Configure logging level from environment variable LOG_LEVEL (default INFO)
+    log_level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+    log_level = getattr(logging, log_level_name, logging.INFO)
     logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s'
+        level=log_level,
+        format='%(asctime)s - %(levelname)s - %(name)s - %(message)s'
     )
+    logging.getLogger(__name__).info(f"Logging initialized at level: {log_level_name}")
     
     # Load config
     global config

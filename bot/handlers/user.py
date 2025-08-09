@@ -463,153 +463,326 @@ async def handle_image_prompt(message: Message, state: FSMContext):
 # Chat handler for normal messages
 @router.message(UserStates.chatting)
 async def handle_message(message: Message, state: FSMContext):
-    try:
-        user = message.from_user
-        
-        # CRITICAL SECURITY CHECK - failsafe against unauthorized access
-        if not await is_user_authorized(user.id):
-            logging.warning(f"SECURITY: Unauthorized user {user.id} attempted to access main chat handler!")
-            await message.answer("⛔️ Access Denied - Unauthorized access to chat function")
-            await state.clear()  # Clear their state
-            return
-
-        t0 = time.monotonic()
-        
-        # Show response immediately to reduce perceived latency
-        await message.bot.send_chat_action(message.chat.id, "typing")
-        bot_response = await message.answer("💭")
-        
-        # Get only essential data needed for AI call (minimal context for speed)
-        settings_task = storage.get_user_settings(message.from_user.id)
-        history_task = storage.get_chat_history(message.from_user.id, limit=6)  # Reduced for speed
-        settings, history = await asyncio.gather(settings_task, history_task)
-        t1 = time.monotonic()
-
-        if not settings or 'current_provider' not in settings:
-            # Set default model if no provider is selected (minimal setup for immediate AI call)
-            default_provider = "openai"
-            settings = settings or {}
-            settings['current_provider'] = default_provider
-            settings['current_model'] = PROVIDER_MODELS[default_provider]['name']
-            # Save settings in background, don't wait
-            asyncio.create_task(storage.save_user_settings(message.from_user.id, settings))
-
-        legacy_to_new = {
-            'openai': 'openai',
-            'claude': 'sonnet',
-            'openrouter_deepseek': 'gemini',
-            'groq': 'openai',
-            'o3-mini': 'online',
-            'r1-1776': 'gemini',
-            'online': 'online'
-        }
-        provider_name = legacy_to_new.get(settings['current_provider'], settings['current_provider'])
-        if provider_name not in PROVIDER_MODELS:
-            await message.answer(
-                "🔄 Your selected AI model is no longer available. Please choose a new one:",
-                reply_markup=kb.get_provider_menu()
-            )
-            await state.set_state(UserStates.choosing_provider)
-            return
-        model_config = PROVIDER_MODELS[provider_name]
-
-        image_data = None
-        message_text = message.caption if message.caption else message.text
-        if message.photo:
-            photo = message.photo[-1]
-            image_file = await message.bot.get_file(photo.file_id)
-            image_bytes = await message.bot.download_file(image_file.file_path)
-            image_data = image_bytes.read()
-            if not message_text:
-                message_text = "Please analyze this image."
-
-        # Start AI streaming immediately, handle history in background
-        ai_provider = await get_provider(provider_name, config)
-        
-        # Start user creation and history saving in background (don't block AI call)
-        asyncio.create_task(storage.ensure_user_exists(
-            user_id=user.id, username=user.username, first_name=user.first_name
-        ))
-        asyncio.create_task(storage.add_to_history(message.from_user.id, message_text, False, image_data))
-        
-        # Check if we should use structured outputs (for supported models and specific query types)
-        use_structured = await should_use_structured_output(message_text, provider_name, image_data is not None)
-        
-        if use_structured:
-            # Use structured output for better reliability
-            response_type = detect_response_type(message_text, image_data is not None)
-            response_schema = get_response_schema(response_type)
+    # Wrap the entire function in a timeout
+    processing_timeout = 120.0  # Increased from 60.0 to 120.0 seconds (2 minutes)
+    
+    async def process_message():
+        try:
+            user = message.from_user
             
-            logging.info(f"Using structured output with schema: {response_type}")
+            # CRITICAL SECURITY CHECK - failsafe against unauthorized access
+            if not await is_user_authorized(user.id):
+                logging.warning(f"SECURITY: Unauthorized user {user.id} attempted to access main chat handler!")
+                await message.answer("⛔️ Access Denied - Unauthorized access to chat function")
+                await state.clear()  # Clear their state
+                return
+            
+            # Prepare early message text snapshot for logging (so the unique tag is visible)
+            early_text = message.caption if message.caption else message.text
+            safe_preview = (early_text or "").replace("\n", " ")[:120]
+            logging.info(f"[user.handle_message][START] uid={user.id} text_preview='{safe_preview}'")
+
+            t0 = time.monotonic()
+            
+            # Show response immediately to reduce perceived latency
+            await message.bot.send_chat_action(message.chat.id, "typing")
+            bot_response = await message.answer("💭")
+            
+            # Set a timeout for the entire message processing
+            processing_timeout = 60.0  # 60 seconds total timeout
             
             try:
-                # Get structured response
-                structured_response = await ai_provider.chat_completion_structured(
-                    message=message_text,
-                    model_config=model_config,
-                    response_schema=response_schema,
-                    history=history,
-                    image=image_data
+                # Get only essential data needed for AI call (minimal context for speed)
+                settings_task = storage.get_user_settings(message.from_user.id)
+                history_task = storage.get_chat_history(message.from_user.id, limit=6)  # Reduced for speed
+                settings, history = await asyncio.wait_for(
+                    asyncio.gather(settings_task, history_task), 
+                    timeout=10.0  # 10 second timeout for data loading
+                )
+                t1 = time.monotonic()
+
+                if not settings or 'current_provider' not in settings:
+                    # Set default model if no provider is selected (minimal setup for immediate AI call)
+                    default_provider = "openai"
+                    settings = settings or {}
+                    settings['current_provider'] = default_provider
+                    settings['current_model'] = PROVIDER_MODELS[default_provider]['name']
+                    # Save settings in background, don't wait
+                    asyncio.create_task(storage.save_user_settings(message.from_user.id, settings))
+
+                legacy_to_new = {
+                    'openai': 'openai',
+                    'claude': 'sonnet',
+                    'openrouter_deepseek': 'gemini',
+                    'groq': 'openai',
+                    'o3-mini': 'online',
+                    'r1-1776': 'gemini',
+                    'online': 'online'
+                }
+                provider_name = legacy_to_new.get(settings['current_provider'], settings['current_provider'])
+                if provider_name not in PROVIDER_MODELS:
+                    await message.answer(
+                        "🔄 Your selected AI model is no longer available. Please choose a new one:",
+                        reply_markup=kb.get_provider_menu()
+                    )
+                    await state.set_state(UserStates.choosing_provider)
+                    return
+                model_config = PROVIDER_MODELS[provider_name]
+
+                image_data = None
+                message_text = message.caption if message.caption else message.text
+                if message.photo:
+                    photo = message.photo[-1]
+                    image_file = await message.bot.get_file(photo.file_id)
+                    image_bytes = await message.bot.download_file(image_file.file_path)
+                    image_data = image_bytes.read()
+                    if not message_text:
+                        message_text = "Please analyze this image."
+
+                # Start AI streaming immediately, handle history in background
+                try:
+                    ai_provider = await get_provider(provider_name, config)
+                    logging.info(f"[user.handle_message][PROVIDER] provider={provider_name} model={model_config['name']}")
+                except Exception as e:
+                    logging.error(f"[user.handle_message][PROVIDER_ERROR] provider={provider_name} error={e}")
+                    await bot_response.edit_text("❌ Error: Could not initialize AI provider. Please try again.")
+                    return
+                
+                # Start user creation and history saving in background (don't block AI call)
+                asyncio.create_task(storage.ensure_user_exists(
+                    user_id=user.id, username=user.username, first_name=user.first_name
+                ))
+                asyncio.create_task(storage.add_to_history(message.from_user.id, message_text, False, image_data))
+                
+                # Check if we should use structured outputs (for supported models and specific query types)
+                use_structured = await should_use_structured_output(message_text, provider_name, image_data is not None)
+                
+                if use_structured:
+                    # Use structured output for better reliability
+                    response_type = detect_response_type(message_text, image_data is not None)
+                    response_schema = get_response_schema(response_type)
+                    
+                    logging.info(f"Using structured output with schema: {response_type}")
+                    
+                    try:
+                        # Get structured response
+                        t2 = time.monotonic()
+                        structured_response = await ai_provider.chat_completion_structured(
+                            message=message_text,
+                            model_config=model_config,
+                            response_schema=response_schema,
+                            history=history,
+                            image=image_data
+                        )
+                        
+                        # Extract content and handle the structured response
+                        await handle_structured_response(message, bot_response, structured_response, t2)
+                        return
+                        
+                    except Exception as e:
+                        logging.error(f"Structured output failed, falling back to streaming: {e}")
+                        # Fall back to regular streaming
+                
+                # Stream the response immediately (regular mode or fallback)
+                collected_response = ""
+                token_count = 0
+                last_update_length = 0
+                t2 = time.monotonic()
+
+                async def consume_stream():
+                    nonlocal collected_response, token_count, last_update_length
+                    logging.info(f"[user.handle_message][STREAM_START] provider={provider_name} model={model_config['name']}")
+                    
+                    try:
+                        chunk_count = 0
+                        start_time = time.monotonic()
+                        async for response_chunk in ai_provider.chat_completion_stream(
+                            message=message_text,
+                            model_config=model_config,
+                            history=history,
+                            image=image_data
+                        ):
+                            chunk_count += 1
+                            if response_chunk and response_chunk.strip():
+                                collected_response += response_chunk
+                                token_count += len(response_chunk.split())
+                                
+                                # Update message less frequently (every 100 characters instead of 50)
+                                if len(collected_response) - last_update_length >= 100:
+                                    try:
+                                        await bot_response.edit_text(collected_response, parse_mode=None)
+                                        last_update_length = len(collected_response)
+                                    except Exception as e:
+                                        if "message is not modified" not in str(e).lower():
+                                            logging.debug(f"[user.handle_message][EDIT_ERROR] {e}")
+                                
+                                # Show progress for long responses
+                                elapsed = time.monotonic() - start_time
+                                if elapsed > 10.0 and chunk_count % 50 == 0:  # Every 50 chunks after 10 seconds
+                                    progress_msg = f"{collected_response}\n\n⏳ Still generating... ({chunk_count} chunks, {elapsed:.1f}s)"
+                                    try:
+                                        await bot_response.edit_text(progress_msg, parse_mode=None)
+                                    except Exception:
+                                        pass
+                                            
+                                # Safety check for very long responses
+                                if len(collected_response) > 8000:
+                                    logging.warning("Response too long, truncating")
+                                    break
+                                
+                                # Safety check for too many chunks
+                                if chunk_count > 2000:
+                                    logging.warning("Too many chunks received, stopping")
+                                    break
+                                    
+                    except Exception as stream_error:
+                        logging.error(f"[user.handle_message][STREAM_ERROR] {stream_error}")
+                        # Don't yield here, let the outer handler catch it
+                        raise stream_error
+                        
+                    elapsed = time.monotonic() - start_time
+                    logging.info(f"[user.handle_message][STREAM_END] chars={len(collected_response)} tokens~={token_count} chunks={chunk_count} time={elapsed:.2f}s")
+
+                stream_timeout = 60.0  # Increased from 35.0 to 60.0 seconds
+                try:
+                    await asyncio.wait_for(consume_stream(), timeout=stream_timeout)
+                except asyncio.TimeoutError:
+                    logging.error(f"AI streaming timed out after {stream_timeout}s for provider {provider_name}")
+                    await bot_response.edit_text("❌ Response timed out. Please try again or try a shorter message.")
+                except Exception as stream_e:
+                    logging.error(f"AI streaming failed: {stream_e}", exc_info=True)
+                    
+                    # Try fallback provider if current one failed
+                    fallback_providers = ["sonnet", "openai", "gemini"]
+                    if provider_name in fallback_providers:
+                        fallback_providers.remove(provider_name)
+                    
+                    if fallback_providers:
+                        logging.info(f"Trying fallback providers: {fallback_providers}")
+                        await bot_response.edit_text("🔄 Primary AI provider failed, trying alternative...")
+                        
+                        for fallback_provider in fallback_providers:
+                            try:
+                                logging.info(f"Trying fallback provider: {fallback_provider}")
+                                fallback_ai_provider = await get_provider(fallback_provider, config)
+                                fallback_model_config = PROVIDER_MODELS[fallback_provider]
+                                
+                                # Reset for fallback attempt
+                                collected_response = ""
+                                token_count = 0
+                                last_update_length = 0
+                                
+                                async def consume_fallback_stream():
+                                    nonlocal collected_response, token_count, last_update_length
+                                    async for response_chunk in fallback_ai_provider.chat_completion_stream(
+                                        message=message_text,
+                                        model_config=fallback_model_config,
+                                        history=history,
+                                        image=image_data
+                                    ):
+                                        if response_chunk and response_chunk.strip():
+                                            collected_response += response_chunk
+                                            token_count += len(response_chunk.split())
+                                            
+                                            if len(collected_response) - last_update_length >= 50:
+                                                try:
+                                                    await bot_response.edit_text(collected_response, parse_mode=None)
+                                                    last_update_length = len(collected_response)
+                                                except Exception as e:
+                                                    if "message is not modified" not in str(e).lower():
+                                                        logging.debug(f"Fallback edit error: {e}")
+                                
+                                await asyncio.wait_for(consume_fallback_stream(), timeout=stream_timeout)
+                                
+                                if collected_response:
+                                    logging.info(f"Fallback provider {fallback_provider} succeeded")
+                                    # Update user settings to use the working provider
+                                    asyncio.create_task(storage.save_user_settings(
+                                        message.from_user.id, 
+                                        {'current_provider': fallback_provider, 'current_model': fallback_model_config['name']}
+                                    ))
+                                    break
+                                    
+                            except Exception as fallback_e:
+                                logging.error(f"Fallback provider {fallback_provider} failed: {fallback_e}")
+                                continue
+                        else:
+                            # All fallbacks failed
+                            error_msg = "❌ All AI providers failed. Please try again later."
+                            await bot_response.edit_text(error_msg)
+                            return
+                    else:
+                        error_msg = "❌ An error occurred while generating a response."
+                        
+                        # Provide more specific error messages
+                        if "api key" in str(stream_e).lower():
+                            error_msg = "❌ API authentication error. Please check configuration."
+                        elif "rate limit" in str(stream_e).lower():
+                            error_msg = "❌ Rate limit exceeded. Please wait a moment and try again."
+                        elif "connection" in str(stream_e).lower():
+                            error_msg = "❌ Connection error. Please check your internet connection and try again."
+                        elif "timeout" in str(stream_e).lower():
+                            error_msg = "❌ Request timed out. Please try a shorter message."
+                        
+                        await bot_response.edit_text(error_msg)
+
+                t3 = time.monotonic()
+
+                if collected_response:
+                    # Save response and log usage in background for final cleanup
+                    asyncio.create_task(storage.add_to_history(message.from_user.id, collected_response, True))
+                    asyncio.create_task(storage.log_usage(
+                        user_id=message.from_user.id,
+                        provider=provider_name,
+                        model=model_config['name'],
+                        tokens=token_count,
+                        has_image=bool(image_data)
+                    ))
+                    
+                    # Update final message if there are remaining characters not shown
+                    if len(collected_response) > last_update_length:
+                        try:
+                            await bot_response.edit_text(collected_response, parse_mode=None)
+                        except Exception as e:
+                            logging.debug(f"Final message update error: {e}")
+                else:
+                    # No content produced at all (no chunks). Ensure the user sees a result.
+                    try:
+                        await bot_response.edit_text("❌ No response received. Please try again.")
+                    except Exception as e:
+                        logging.debug(f"No-response message update error: {e}")
+
+                t4 = time.monotonic()
+                logging.info(f"[TIMING] show_response+load_data: {t1-t0:.3f}s, ai_streaming: {t3-t2:.3f}s, finalize: {t4-t3:.3f}s, total: {t4-t0:.3f}s")
+                logging.info(f"[user.handle_message][END] uid={user.id} provider={provider_name} model={model_config['name']} total_time={t4-t0:.3f}s")
+
+            except asyncio.TimeoutError:
+                logging.error(f"Message processing timed out for user {user.id} after {processing_timeout}s.")
+                await message.answer(
+                    "❌ Response timed out. Please try again or try a shorter message.",
+                    reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
+                )
+            except Exception as e:
+                logging.error(f"Error in handle_message: {e}", exc_info=True)
+                await message.answer(
+                    "❌ An error occurred. Please try again later.",
+                    reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
                 )
                 
-                # Extract content and handle the structured response
-                await handle_structured_response(message, reply_msg, structured_response, t2)
-                return
-                
-            except Exception as e:
-                logging.error(f"Structured output failed, falling back to streaming: {e}")
-                # Fall back to regular streaming
-        
-        # Stream the response immediately (regular mode or fallback)
-        collected_response = ""
-        token_count = 0
-        last_update_length = 0
-        t2 = time.monotonic()
-        async for response_chunk in ai_provider.chat_completion_stream(
-            message=message_text,
-            model_config=model_config,
-            history=history,
-            image=image_data
-        ):
-            if response_chunk and response_chunk.strip():
-                collected_response += response_chunk
-                token_count += len(response_chunk.split())
-                
-                # Only update message every 50 characters
-                if len(collected_response) - last_update_length >= 50:
-                    try:
-                        await bot_response.edit_text(collected_response, parse_mode="HTML")
-                        last_update_length = len(collected_response)
-                    except Exception as e:
-                        if "message is not modified" not in str(e).lower():
-                            logging.debug(f"Message update error: {e}")
-        t3 = time.monotonic()
-
-        if collected_response:
-            # Save response and log usage in background for final cleanup
-            asyncio.create_task(storage.add_to_history(message.from_user.id, collected_response, True))
-            asyncio.create_task(storage.log_usage(
-                user_id=message.from_user.id,
-                provider=provider_name,
-                model=model_config['name'],
-                tokens=token_count,
-                has_image=bool(image_data)
-            ))
-            
-            # Update final message if there are remaining characters not shown
-            if len(collected_response) > last_update_length:
-                try:
-                    await bot_response.edit_text(collected_response, parse_mode="HTML")
-                except Exception as e:
-                    logging.debug(f"Final message update error: {e}")
-
-        t4 = time.monotonic()
-        logging.info(f"[TIMING] show_response+load_data: {t1-t0:.3f}s, ai_streaming: {t3-t2:.3f}s, finalize: {t4-t3:.3f}s, total: {t4-t0:.3f}s")
-
-    except Exception as e:
-        logging.error(f"Error in handle_message: {e}", exc_info=True)
+        except Exception as e:
+            logging.error(f"Error in handle_message: {e}", exc_info=True)
+            await message.answer(
+                "❌ An error occurred. Please try again later.",
+                reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
+            )
+    
+    # Execute the message processing with timeout
+    try:
+        await asyncio.wait_for(process_message(), timeout=processing_timeout)
+    except asyncio.TimeoutError:
+        logging.error(f"Message processing timed out for user {message.from_user.id} after {processing_timeout}s.")
         await message.answer(
-            "❌ An error occurred. Please try again later.",
+            "❌ Response timed out. Please try again or try a shorter message.",
             reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
         )
 
@@ -832,14 +1005,14 @@ async def handle_structured_response(message: Message, reply_msg: Message, respo
             formatted_content += f"\n\n🤔 *Confidence: {confidence:.1%}*"
         
         # Update message
-        await reply_msg.edit_text(formatted_content)
+        await reply_msg.edit_text(formatted_content, parse_mode=None)
         
         # Log performance
         elapsed = time.monotonic() - start_time
         logging.info(f"Structured response completed in {elapsed:.2f}s (type: {response_type}, confidence: {confidence:.2f})")
         
         # Save to history
-        asyncio.create_task(storage.add_to_history(message.from_user.id, final_response, True))
+        asyncio.create_task(storage.add_to_history(message.from_user.id, formatted_content, True))
         
     except Exception as e:
         logging.error(f"Error handling structured response: {e}")
@@ -891,6 +1064,211 @@ async def test_structured_command(message: Message, state: FSMContext):
     except Exception as e:
         logging.error(f"Structured output test failed: {e}")
         await processing_msg.edit_text(f"❌ Structured output test failed: {str(e)}")
+
+
+@router.message(Command("test"))
+async def test_ai_provider(message: Message, state: FSMContext):
+    """Test command to check if AI providers are working."""
+    if not await is_user_authorized(message.from_user.id):
+        return
+    
+    await message.answer("🧪 Testing AI providers...")
+    
+    try:
+        # Test OpenRouter provider
+        openrouter_provider = await get_provider("openai", config)
+        test_response = await openrouter_provider.chat_completion_stream(
+            message="Hello, this is a test message. Please respond with 'Test successful'.",
+            model_config=PROVIDER_MODELS["openai"],
+            history=None
+        )
+        
+        response_text = ""
+        async for chunk in test_response:
+            response_text += chunk
+            if len(response_text) > 100:  # Limit response length
+                break
+        
+        if response_text:
+            await message.answer(f"✅ AI provider test successful!\n\nResponse: {response_text[:200]}...")
+        else:
+            await message.answer("❌ AI provider test failed - no response received")
+            
+    except Exception as e:
+        logging.error(f"AI provider test failed: {e}", exc_info=True)
+        await message.answer(f"❌ AI provider test failed: {str(e)}")
+
+
+@router.message(Command("diagnose"))
+async def diagnose_bot(message: Message, state: FSMContext):
+    """Diagnostic command to check bot configuration."""
+    if not await is_user_authorized(message.from_user.id):
+        return
+    
+    # Check if user is admin
+    is_admin = str(message.from_user.id) == config.admin_id
+    if not is_admin:
+        await message.answer("❌ This command is only available to administrators.")
+        return
+    
+    diagnostic_info = []
+    
+    # Check bot token
+    if config.bot_token and len(config.bot_token) > 10:
+        diagnostic_info.append("✅ Bot token configured")
+    else:
+        diagnostic_info.append("❌ Bot token missing or invalid")
+    
+    # Check OpenRouter API key
+    if config.openrouter_api_key and len(config.openrouter_api_key) > 10:
+        diagnostic_info.append("✅ OpenRouter API key configured")
+    else:
+        diagnostic_info.append("❌ OpenRouter API key missing or invalid")
+    
+    # Check Fal API key
+    if config.fal_api_key and len(config.fal_api_key) > 10:
+        diagnostic_info.append("✅ Fal API key configured")
+    else:
+        diagnostic_info.append("❌ Fal API key missing or invalid")
+    
+    # Check admin ID
+    if config.admin_id:
+        diagnostic_info.append(f"✅ Admin ID: {config.admin_id}")
+    else:
+        diagnostic_info.append("❌ Admin ID not configured")
+    
+    # Check allowed users
+    if config.allowed_user_ids:
+        diagnostic_info.append(f"✅ Allowed users: {len(config.allowed_user_ids)} users")
+    else:
+        diagnostic_info.append("❌ No allowed users configured")
+    
+    # Check polling settings
+    diagnostic_info.append(f"✅ Polling timeout: {config.polling_settings['timeout']}s")
+    diagnostic_info.append(f"✅ Polling interval: {config.polling_settings['poll_interval']}s")
+    
+    # Check provider models
+    diagnostic_info.append(f"✅ Available providers: {list(PROVIDER_MODELS.keys())}")
+    
+    diagnostic_text = "🔍 **Bot Diagnostic Report**\n\n" + "\n".join(diagnostic_info)
+    
+    await message.answer(diagnostic_text, parse_mode='HTML')
+
+
+@router.message(Command("debug"))
+async def debug_bot(message: Message, state: FSMContext):
+    """Debug command to check bot state and configuration."""
+    if not await is_user_authorized(message.from_user.id):
+        return
+    
+    # Check if user is admin
+    is_admin = str(message.from_user.id) == config.admin_id
+    if not is_admin:
+        await message.answer("❌ This command is only available to administrators.")
+        return
+    
+    debug_info = []
+    
+    # Check current state
+    current_state = await state.get_state()
+    debug_info.append(f"Current State: {current_state}")
+    
+    # Check user settings
+    settings = await storage.get_user_settings(message.from_user.id)
+    if settings:
+        debug_info.append(f"Current Provider: {settings.get('current_provider', 'Not set')}")
+        debug_info.append(f"Current Model: {settings.get('current_model', 'Not set')}")
+    else:
+        debug_info.append("User Settings: Not found")
+    
+    # Check recent chat history
+    history = await storage.get_chat_history(message.from_user.id, limit=3)
+    debug_info.append(f"Recent Messages: {len(history)} messages")
+    
+    # Check provider cache stats
+    try:
+        from bot.services.ai_providers import get_provider_stats
+        stats = get_provider_stats()
+        debug_info.append(f"Provider Cache Hits: {stats.get('cache_hits', 0)}")
+        debug_info.append(f"Provider Cache Misses: {stats.get('cache_misses', 0)}")
+    except Exception as e:
+        debug_info.append(f"Provider Stats Error: {e}")
+    
+    # Test provider connection
+    try:
+        provider = await get_provider("openai", config)
+        debug_info.append("✅ Provider Connection: Working")
+    except Exception as e:
+        debug_info.append(f"❌ Provider Connection: {e}")
+    
+    debug_text = "🔧 **Debug Information**\n\n" + "\n".join(debug_info)
+    
+    await message.answer(debug_text, parse_mode='HTML')
+
+
+@router.message(Command("ping"))
+async def ping_bot(message: Message, state: FSMContext):
+    """Simple ping command to test bot responsiveness."""
+    if not await is_user_authorized(message.from_user.id):
+        return
+    
+    start_time = time.monotonic()
+    await message.answer("🏓 Pong!")
+    end_time = time.monotonic()
+    
+    response_time = (end_time - start_time) * 1000  # Convert to milliseconds
+    await message.answer(f"⏱️ Response time: {response_time:.1f}ms")
+
+
+@router.message(Command("speedtest"))
+async def speed_test(message: Message, state: FSMContext):
+    """Test AI response speed with a simple query."""
+    if not await is_user_authorized(message.from_user.id):
+        return
+    
+    await message.answer("🚀 Testing AI response speed...")
+    
+    try:
+        start_time = time.monotonic()
+        
+        # Get current provider
+        settings = await storage.get_user_settings(message.from_user.id)
+        provider_name = settings.get('current_provider', 'openai') if settings else 'openai'
+        model_config = PROVIDER_MODELS[provider_name]
+        
+        # Test with a simple query
+        ai_provider = await get_provider(provider_name, config)
+        test_message = "Say 'Hello, this is a speed test!' in one sentence."
+        
+        response_text = ""
+        chunk_count = 0
+        async for chunk in ai_provider.chat_completion_stream(
+            message=test_message,
+            model_config=model_config,
+            history=None
+        ):
+            if chunk and chunk.strip():
+                response_text += chunk
+                chunk_count += 1
+                if len(response_text) > 200:  # Limit response length
+                    break
+        
+        end_time = time.monotonic()
+        total_time = end_time - start_time
+        
+        result_msg = f"✅ Speed test completed!\n\n"
+        result_msg += f"Provider: {provider_name}\n"
+        result_msg += f"Model: {model_config['name']}\n"
+        result_msg += f"Response time: {total_time:.2f}s\n"
+        result_msg += f"Chunks received: {chunk_count}\n"
+        result_msg += f"Response length: {len(response_text)} chars\n\n"
+        result_msg += f"Response: {response_text[:200]}..."
+        
+        await message.answer(result_msg)
+        
+    except Exception as e:
+        logging.error(f"Speed test failed: {e}")
+        await message.answer(f"❌ Speed test failed: {str(e)}")
 
 
 async def get_user_provider(user_id: int) -> str:

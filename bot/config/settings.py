@@ -19,13 +19,13 @@ class Config:
         
         # Default polling settings
         self.polling_settings = polling_settings or {
-            "timeout": int(env.str("POLLING_TIMEOUT", "10")),  # Long polling timeout in seconds
-            "poll_interval": float(env.str("POLLING_INTERVAL", "0.5")),  # Minimum interval between requests
+            "timeout": 10,  # Long polling timeout in seconds
+            "poll_interval": 0.5,  # Minimum interval between requests
             "backoff": {
-                "max_delay": float(env.str("POLLING_MAX_DELAY", "5.0")),  # Maximum delay between retries
-                "start_delay": float(env.str("POLLING_START_DELAY", "1.0")),  # Initial retry delay
-                "factor": float(env.str("POLLING_BACKOFF_FACTOR", "1.5")),  # Multiplier for each retry
-                "jitter": float(env.str("POLLING_JITTER", "0.1")),  # Random jitter
+                "max_delay": 5.0,  # Maximum delay between retries
+                "start_delay": 1.0,  # Initial retry delay
+                "factor": 1.5,  # Multiplier for each retry
+                "jitter": 0.1,  # Random jitter
             }
         }
 
