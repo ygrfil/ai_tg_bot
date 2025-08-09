@@ -68,7 +68,7 @@ async def main():
     bot = Bot(
         token=config.bot_token,
         default=DefaultBotProperties(
-            parse_mode=ParseMode.HTML,
+            parse_mode=ParseMode.HTML,  # HTML allows bold, italic, underline, etc.
             link_preview_is_disabled=True
         )
     )

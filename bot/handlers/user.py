@@ -610,7 +610,7 @@ async def handle_message(message: Message, state: FSMContext):
                                 # Update message less frequently (every 100 characters instead of 50)
                                 if len(collected_response) - last_update_length >= 100:
                                     try:
-                                        await bot_response.edit_text(collected_response, parse_mode=None)
+                                        await bot_response.edit_text(collected_response, parse_mode="HTML")
                                         last_update_length = len(collected_response)
                                     except Exception as e:
                                         if "message is not modified" not in str(e).lower():
@@ -621,7 +621,7 @@ async def handle_message(message: Message, state: FSMContext):
                                 if elapsed > 10.0 and chunk_count % 50 == 0:  # Every 50 chunks after 10 seconds
                                     progress_msg = f"{collected_response}\n\n⏳ Still generating... ({chunk_count} chunks, {elapsed:.1f}s)"
                                     try:
-                                        await bot_response.edit_text(progress_msg, parse_mode=None)
+                                        await bot_response.edit_text(progress_msg, parse_mode="HTML")
                                     except Exception:
                                         pass
                                             
@@ -686,7 +686,7 @@ async def handle_message(message: Message, state: FSMContext):
                                             
                                             if len(collected_response) - last_update_length >= 50:
                                                 try:
-                                                    await bot_response.edit_text(collected_response, parse_mode=None)
+                                                    await bot_response.edit_text(collected_response, parse_mode="HTML")
                                                     last_update_length = len(collected_response)
                                                 except Exception as e:
                                                     if "message is not modified" not in str(e).lower():
@@ -742,7 +742,7 @@ async def handle_message(message: Message, state: FSMContext):
                     # Update final message if there are remaining characters not shown
                     if len(collected_response) > last_update_length:
                         try:
-                            await bot_response.edit_text(collected_response, parse_mode=None)
+                            await bot_response.edit_text(collected_response, parse_mode="HTML")
                         except Exception as e:
                             logging.debug(f"Final message update error: {e}")
                 else:
@@ -1005,7 +1005,7 @@ async def handle_structured_response(message: Message, reply_msg: Message, respo
             formatted_content += f"\n\n🤔 *Confidence: {confidence:.1%}*"
         
         # Update message
-        await reply_msg.edit_text(formatted_content, parse_mode=None)
+        await reply_msg.edit_text(formatted_content, parse_mode="HTML")
         
         # Log performance
         elapsed = time.monotonic() - start_time
