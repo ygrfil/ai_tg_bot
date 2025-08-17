@@ -5,6 +5,8 @@ from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.markdown import hbold
+from bot.utils.message_splitter import split_long_message
+import html
 import aiohttp
 from datetime import datetime
 import logging
@@ -415,7 +417,7 @@ async def handle_image_prompt(message: Message, state: FSMContext):
         # Log usage statistics
         # Get the actual model name from the provider
         try:
-            fal_provider = get_provider("fal")
+            fal_provider = await get_provider("fal", config)
             model_name = fal_provider.get_model_name() if hasattr(fal_provider, 'get_model_name') else "hidream-i1-fast"
         except Exception:
             model_name = "hidream-i1-fast"  # Fallback
@@ -576,8 +578,11 @@ async def handle_message(message: Message, state: FSMContext):
                         )
                         
                         # Extract content and handle the structured response
-                        await handle_structured_response(message, bot_response, structured_response, t2)
-                        return
+                        if structured_response and structured_response.get("response_type") != "error":
+                            await handle_structured_response(message, bot_response, structured_response, t2)
+                            return
+                        else:
+                            logging.warning("Structured output returned error; falling back to streaming mode.")
                         
                     except Exception as e:
                         logging.error(f"Structured output failed, falling back to streaming: {e}")
@@ -610,7 +615,7 @@ async def handle_message(message: Message, state: FSMContext):
                                 # Update message less frequently (every 100 characters instead of 50)
                                 if len(collected_response) - last_update_length >= 100:
                                     try:
-                                        await bot_response.edit_text(collected_response, parse_mode="HTML")
+                                        await bot_response.edit_text(collected_response)
                                         last_update_length = len(collected_response)
                                     except Exception as e:
                                         if "message is not modified" not in str(e).lower():
@@ -621,7 +626,7 @@ async def handle_message(message: Message, state: FSMContext):
                                 if elapsed > 10.0 and chunk_count % 50 == 0:  # Every 50 chunks after 10 seconds
                                     progress_msg = f"{collected_response}\n\n⏳ Still generating... ({chunk_count} chunks, {elapsed:.1f}s)"
                                     try:
-                                        await bot_response.edit_text(progress_msg, parse_mode="HTML")
+                                        await bot_response.edit_text(progress_msg)
                                     except Exception:
                                         pass
                                             
@@ -686,7 +691,7 @@ async def handle_message(message: Message, state: FSMContext):
                                             
                                             if len(collected_response) - last_update_length >= 50:
                                                 try:
-                                                    await bot_response.edit_text(collected_response, parse_mode="HTML")
+                                                    await bot_response.edit_text(collected_response)
                                                     last_update_length = len(collected_response)
                                                 except Exception as e:
                                                     if "message is not modified" not in str(e).lower():
@@ -739,10 +744,15 @@ async def handle_message(message: Message, state: FSMContext):
                         has_image=bool(image_data)
                     ))
                     
-                    # Update final message if there are remaining characters not shown
+                    # Update final message and split if too long
                     if len(collected_response) > last_update_length:
                         try:
-                            await bot_response.edit_text(collected_response, parse_mode="HTML")
+                            chunks = split_long_message(collected_response, min_length=1800, max_length=3800)
+                            # Edit first message
+                            await bot_response.edit_text(chunks[0])
+                            # Send remaining chunks as new messages
+                            for extra_chunk in chunks[1:]:
+                                await message.answer(extra_chunk)
                         except Exception as e:
                             logging.debug(f"Final message update error: {e}")
                 else:
@@ -885,6 +895,14 @@ async def should_use_structured_output(message_text: str, provider_name: str, ha
     supported_providers = ["sonnet", "openai", "gemini"]
     if provider_name not in supported_providers:
         return False
+    
+    # Avoid structured output for very short messages unless there's an image
+    if not has_image:
+        try:
+            if len(message_text.split()) < 3:
+                return False
+        except Exception:
+            return False
     
     # Use structured outputs for specific query types that benefit from structure
     message_lower = message_text.lower().strip()

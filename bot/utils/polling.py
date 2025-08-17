@@ -12,6 +12,7 @@ class PollingMiddleware(BaseMiddleware):
         self.settings = settings
         self.current_delay = settings["backoff"]["start_delay"]
         self.failed_attempts = 0
+        self.max_retries = settings["backoff"].get("max_retries", 3)
 
     async def __call__(
         self,
@@ -19,24 +20,29 @@ class PollingMiddleware(BaseMiddleware):
         event: TelegramObject,
         data: Dict[str, Any]
     ) -> Any:
-        try:
-            result = await handler(event, data)
-            # Reset backoff on success
-            if self.failed_attempts > 0:
-                logging.info("Connection recovered after %d attempts", self.failed_attempts)
-            self.current_delay = self.settings["backoff"]["start_delay"]
-            self.failed_attempts = 0
-            return result
-        except Exception as e:
-            error_str = str(e).lower()
-            
-            if "flood control" in error_str or "too many requests" in error_str:
-                await self.handle_rate_limit()
-                raise  # Re-raise to let aiogram handle the retry
-            elif "bad gateway" in error_str:
-                await self.handle_rate_limit()  # Use same backoff for Bad Gateway
-                raise
-            else:
+        attempt = 0
+        while True:
+            try:
+                result = await handler(event, data)
+                # Reset backoff on success
+                if self.failed_attempts > 0:
+                    logging.info("Connection recovered after %d attempts", self.failed_attempts)
+                self.current_delay = self.settings["backoff"]["start_delay"]
+                self.failed_attempts = 0
+                return result
+            except Exception as e:
+                error_str = str(e).lower()
+                is_transient = (
+                    "flood control" in error_str or
+                    "too many requests" in error_str or
+                    "bad gateway" in error_str or
+                    "timeout" in error_str or
+                    "connection" in error_str
+                )
+                if is_transient and attempt < self.max_retries:
+                    attempt += 1
+                    await self.handle_rate_limit()
+                    continue
                 raise
 
     async def handle_rate_limit(self):

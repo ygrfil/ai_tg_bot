@@ -26,6 +26,7 @@ class Config:
                 "start_delay": 1.0,  # Initial retry delay
                 "factor": 1.5,  # Multiplier for each retry
                 "jitter": 0.1,  # Random jitter
+                "max_retries": 3,  # Max retries for transient errors
             }
         }
 
@@ -45,6 +46,7 @@ class Config:
                 "start_delay": env.float("POLLING_START_DELAY", 1.0),
                 "factor": env.float("POLLING_BACKOFF_FACTOR", 1.5),
                 "jitter": env.float("POLLING_JITTER", 0.1),
+                "max_retries": env.int("POLLING_MAX_RETRIES", 3),
             }
         }
         

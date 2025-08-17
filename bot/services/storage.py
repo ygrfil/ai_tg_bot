@@ -33,32 +33,40 @@ class DatabasePool:
             self.pool.append(db)
 
     async def acquire(self, timeout: float = 5.0):
-        async with self._condition:
-            # Wait for a connection to become available or create slot
-            try:
-                await asyncio.wait_for(
-                    self._condition.wait_for(
-                        lambda: self.pool or (self._creating + self._active < self.max_connections)
-                    ),
-                    timeout=timeout
-                )
-            except asyncio.TimeoutError:
-                self.stats["timeouts"] += 1
-                raise TimeoutError("Connection pool timeout")
-            
-            # Try to get existing connection first
-            if self.pool:
-                self.stats["hits"] += 1
-                conn = self.pool.popleft()
-                self._active += 1
-                return conn
-            
-            # Create new connection if under limit
-            if self._creating + self._active < self.max_connections:
-                self._creating += 1
-                self.stats["misses"] += 1
-                
-                # Create connection outside the lock to avoid blocking
+        need_create = False
+        while True:
+            async with self._condition:
+                # Wait for a connection to become available or capacity to create a new one
+                try:
+                    await asyncio.wait_for(
+                        self._condition.wait_for(
+                            lambda: bool(self.pool) or (self._creating + self._active < self.max_connections)
+                        ),
+                        timeout=timeout
+                    )
+                except asyncio.TimeoutError:
+                    self.stats["timeouts"] += 1
+                    raise TimeoutError("Connection pool timeout")
+
+                # Try to get existing connection first
+                if self.pool:
+                    self.stats["hits"] += 1
+                    conn = self.pool.popleft()
+                    self._active += 1
+                    return conn
+
+                # Create new connection if under limit
+                if self._creating + self._active < self.max_connections:
+                    self._creating += 1
+                    self.stats["misses"] += 1
+                    need_create = True
+                else:
+                    # Should not happen due to wait_for, but guard anyway
+                    self.stats["timeouts"] += 1
+                    raise TimeoutError("Connection pool exhausted")
+
+            # Create connection OUTSIDE the lock
+            if need_create:
                 try:
                     db = await self._create_connection()
                     async with self._condition:
@@ -70,26 +78,31 @@ class DatabasePool:
                         self._creating -= 1
                         self._condition.notify_all()  # Wake up other waiters
                     raise
-            
-            # This should not happen due to wait_for condition
-            self.stats["timeouts"] += 1
-            raise TimeoutError("Connection pool exhausted")
 
     async def release(self, db):
+        to_close = []
         async with self._condition:
             self._active -= 1
             current_time = asyncio.get_event_loop().time()
-            
-            # Periodic cleanup of idle connections
+
+            # Collect idle connections to close WITHOUT awaiting while holding the lock
             if current_time - self._last_cleanup > 60:  # Every minute
                 while len(self.pool) > self.min_connections:
                     idle_conn = self.pool.pop()
-                    await idle_conn.close()
+                    to_close.append(idle_conn)
                 self._last_cleanup = current_time
-            
+
+            # Return provided connection to pool
             self.pool.append(db)
-            # Notify waiting acquire() calls that a connection is available
+            # Notify one waiter that a connection is available
             self._condition.notify()
+
+        # Perform connection closes outside the lock to avoid blocking other waiters
+        for conn in to_close:
+            try:
+                await conn.close()
+            except Exception as e:
+                logging.warning(f"Error closing idle DB connection: {e}")
 
     async def _create_connection(self):
         db = await aiosqlite.connect(self.db_path)

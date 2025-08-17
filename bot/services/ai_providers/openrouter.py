@@ -197,18 +197,46 @@ class OpenRouterProvider(BaseAIProvider):
                     logging.debug("Using improved SDK parsing method")
                     return message.parsed
                 
-                # Fallback to manual JSON parsing
-                content = message.content
+                # Fallback to manual JSON parsing with robust cleanup
+                content = message.content or ""
+                content = content.strip()
                 if content:
                     try:
                         import json
-                        parsed_content = json.loads(content)
-                        logging.debug("Successfully parsed JSON response manually")
-                        return parsed_content
-                    except json.JSONDecodeError as e:
+                        import re
+                        # If the model wrapped JSON in code fences, extract inner content
+                        fenced = re.search(r"```(?:json|JSON)?\s*([\s\S]+?)\s*```", content)
+                        if fenced:
+                            candidate = fenced.group(1).strip()
+                            try:
+                                parsed_content = json.loads(candidate)
+                                logging.debug("Parsed JSON from fenced block")
+                                return parsed_content
+                            except json.JSONDecodeError:
+                                pass
+                        
+                        # Try direct parse
+                        try:
+                            parsed_content = json.loads(content)
+                            logging.debug("Successfully parsed JSON response manually")
+                            return parsed_content
+                        except json.JSONDecodeError:
+                            # Try to locate first JSON object/array substring
+                            match = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", content)
+                            if match:
+                                snippet = match.group(1)
+                                try:
+                                    parsed_content = json.loads(snippet)
+                                    logging.debug("Parsed JSON from detected snippet")
+                                    return parsed_content
+                                except json.JSONDecodeError:
+                                    pass
+                            # If still failing, raise to error handler below
+                            raise
+                    except Exception as e:
                         logging.error(f"Failed to parse JSON response: {e}")
                         logging.debug(f"Raw content: {content}")
-                        # Return error in expected format
+                        # Return error in expected format so caller can fall back to streaming
                         return {
                             "response_type": "error",
                             "content": f"Failed to generate valid structured response: {str(e)}",
@@ -219,7 +247,14 @@ class OpenRouterProvider(BaseAIProvider):
                         }
                 else:
                     logging.error("Empty content in response")
-                    raise Exception("Received empty response content")
+                    return {
+                        "response_type": "error",
+                        "content": "Empty response received from model while expecting JSON.",
+                        "confidence": 0.0,
+                        "error_type": "unclear_request",
+                        "suggestion": "Please try again or try a longer prompt.",
+                        "can_retry": True
+                    }
             else:
                 raise Exception("No response received from model")
                 

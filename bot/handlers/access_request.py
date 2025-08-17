@@ -35,7 +35,13 @@ async def start_unauthorized(message: Message, state: FSMContext):
     # Check authorization with database first
     from bot.handlers.user import is_user_authorized as async_is_user_authorized
     if await async_is_user_authorized(message.from_user.id):
-        return  # User is authorized, let main handler deal with it
+        # Forward to the authorized /start handler
+        try:
+            from bot.handlers.user import cmd_start
+            await cmd_start(message, state)
+        except Exception:
+            pass
+        return
     
     user = message.from_user
     can_request = await storage.can_request_access(user.id)
