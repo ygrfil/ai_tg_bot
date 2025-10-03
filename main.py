@@ -53,12 +53,16 @@ async def main():
     
     # Reduce verbosity of noisy third-party libraries
     logging.getLogger('aiosqlite').setLevel(logging.WARNING)
-    logging.getLogger('asyncio').setLevel(logging.WARNING)
+    logging.getLogger('asyncio').setLevel(logging.ERROR)  # Suppress slow callback warnings
     logging.getLogger('httpcore').setLevel(logging.WARNING)
     logging.getLogger('httpx').setLevel(logging.WARNING)
     logging.getLogger('openai').setLevel(logging.WARNING)
     logging.getLogger('aiogram.utils.chat_action').setLevel(logging.INFO)
     logging.getLogger('aiogram.event').setLevel(logging.INFO)
+    
+    # Suppress Python 3.13 slow callback warnings (AI operations naturally take longer)
+    import warnings
+    warnings.filterwarnings('ignore', message='.*took .* seconds.*', category=RuntimeWarning)
     
     logging.getLogger(__name__).info(f"Logging initialized at level: {log_level_name}")
     
