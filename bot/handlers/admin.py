@@ -34,9 +34,9 @@ async def admin_panel_button(message: Message, state: FSMContext):
         parse_mode="HTML"
     )
 
-@router.message(F.text == "🔙 Back")
-async def back_button(message: Message, state: FSMContext):
-    """Handle back button press"""
+@router.message(F.text == "🔙 Back", UserStates.admin_menu)
+async def admin_back_button(message: Message, state: FSMContext):
+    """Handle back button press in admin menu"""
     if str(message.from_user.id) != config.admin_id:
         return
         

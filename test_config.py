@@ -34,7 +34,7 @@ async def test_configuration():
         
         # Test AI providers
         print(f"\n🤖 Testing AI Providers:")
-        for provider_name in ["openai", "sonnet", "gemini"]:
+        for provider_name in ["openai", "sonnet", "grok"]:
             if provider_name in PROVIDER_MODELS:
                 try:
                     provider = await get_provider(provider_name, config)

@@ -1,6 +1,6 @@
 PROVIDER_MODELS = {
     "sonnet": {
-        "name": "anthropic/claude-sonnet-4",
+        "name": "anthropic/claude-sonnet-4.5",
         "vision": True
     },
     "openai": {
@@ -8,12 +8,12 @@ PROVIDER_MODELS = {
         "vision": True
     },
     "online": {
-        "name": "google/gemini-2.5-flash",
+        "name": "x-ai/grok-4-fast",
         "vision": True,
-        "online": False
+        "online": True
     },
-    "gemini": {
-        "name": "google/gemini-2.5-flash",
+    "grok": {
+        "name": "x-ai/grok-4-fast",
         "vision": True
     },
     "fal": {

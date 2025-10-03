@@ -13,7 +13,7 @@ from bot.services.storage import Storage
 from bot.keyboards import reply as kb
 from bot.utils.polling import PollingMiddleware
 
-async def on_startup(bot: Bot, storage: Storage):
+async def on_startup(bot: Bot, storage: Storage, config: 'Config'):
     """Initialize bot on startup"""
     try:
         # Just log that startup is complete - no database operations needed
@@ -48,10 +48,19 @@ async def main():
         level=log_level,
         format='%(asctime)s - %(levelname)s - %(name)s - %(message)s'
     )
+    
+    # Reduce verbosity of noisy third-party libraries
+    logging.getLogger('aiosqlite').setLevel(logging.WARNING)
+    logging.getLogger('asyncio').setLevel(logging.WARNING)
+    logging.getLogger('httpcore').setLevel(logging.WARNING)
+    logging.getLogger('httpx').setLevel(logging.WARNING)
+    logging.getLogger('openai').setLevel(logging.WARNING)
+    logging.getLogger('aiogram.utils.chat_action').setLevel(logging.INFO)
+    logging.getLogger('aiogram.event').setLevel(logging.INFO)
+    
     logging.getLogger(__name__).info(f"Logging initialized at level: {log_level_name}")
     
     # Load config
-    global config
     config = Config.from_env()
     
     # Debug print config
@@ -98,7 +107,7 @@ async def main():
     print(f"- Max Backoff: {config.polling_settings['backoff']['max_delay']} seconds")
     
     # Initialize bot on startup
-    await on_startup(bot, settings_storage)
+    await on_startup(bot, settings_storage, config)
     
     # Start polling with configured settings
     await dp.start_polling(

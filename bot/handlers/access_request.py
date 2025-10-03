@@ -22,10 +22,26 @@ class AccessRequestState(StatesGroup):
     waiting_for_message = State()
 
 
-def is_user_authorized(user_id: int) -> bool:
-    """Check if user is authorized to use the bot (sync version for filters)."""
+async def async_is_user_authorized(user_id: int) -> bool:
+    """Check if user is authorized to use the bot (async version that checks database)."""
     user_id_str = str(user_id)
-    return user_id_str == config.admin_id or user_id_str in config.allowed_user_ids
+    
+    # Check config first (admin + .env users)
+    if user_id_str == config.admin_id or user_id_str in config.allowed_user_ids:
+        return True
+    
+    # Check database for approved access requests
+    try:
+        async with storage._db_connect() as db:
+            async with db.execute("""
+                SELECT COUNT(*) FROM access_requests 
+                WHERE user_id = ? AND status = 'approved'
+            """, (user_id,)) as cursor:
+                result = await cursor.fetchone()
+                return result[0] > 0
+    except Exception as e:
+        logging.error(f"Database authorization check failed: {e}")
+        return False
 
 
 @router.message(Command("start"))
@@ -33,7 +49,6 @@ async def start_unauthorized(message: Message, state: FSMContext):
     """Handle /start command for unauthorized users."""
     
     # Check authorization with database first
-    from bot.handlers.user import is_user_authorized as async_is_user_authorized
     if await async_is_user_authorized(message.from_user.id):
         # Forward to the authorized /start handler
         try:
@@ -73,7 +88,7 @@ async def start_unauthorized(message: Message, state: FSMContext):
 @router.callback_query(F.data == "request_access")
 async def start_access_request(callback_query, state: FSMContext):
     """Start the access request process."""
-    if is_user_authorized(callback_query.from_user.id):
+    if await async_is_user_authorized(callback_query.from_user.id):
         await callback_query.answer("You already have access!", show_alert=True)
         return
     
@@ -104,7 +119,6 @@ async def request_command(message: Message, state: FSMContext):
     """Handle /request command."""
     
     # Check authorization with database
-    from bot.handlers.user import is_user_authorized as async_is_user_authorized
     if await async_is_user_authorized(message.from_user.id):
         await message.answer("✅ You already have access to this bot!")
         return
@@ -137,7 +151,7 @@ async def request_command(message: Message, state: FSMContext):
 @router.message(AccessRequestState.waiting_for_message)
 async def handle_access_request_message(message: Message, state: FSMContext):
     """Handle the access request message."""
-    if is_user_authorized(message.from_user.id):
+    if await async_is_user_authorized(message.from_user.id):
         await message.answer("✅ You already have access to this bot!")
         await state.clear()
         return

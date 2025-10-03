@@ -38,7 +38,7 @@ def get_provider_menu() -> ReplyKeyboardMarkup:
     
     model_buttons = [
         ["OpenAI", "Sonnet"],
-        ["Online🌐", "Gemini 2.5"]
+        ["Online🌐", "Grok 4"]
     ]
     
     for row in model_buttons:

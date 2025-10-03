@@ -25,7 +25,7 @@ async def test_bot_response():
         # Test with different providers
         test_message = "Write a short paragraph about artificial intelligence in 2-3 sentences."
         
-        for provider_name in ["openai", "sonnet", "gemini"]:
+        for provider_name in ["openai", "sonnet", "grok"]:
             if provider_name in PROVIDER_MODELS:
                 print(f"\n🧪 Testing {provider_name}...")
                 

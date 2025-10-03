@@ -139,7 +139,7 @@ async def handle_provider_choice(message: Message, state: FSMContext):
     # Map display names to provider keys
     display_to_provider = {
         'online🌐': 'online',
-        'gemini 2.5': 'gemini',
+        'grok 4': 'grok',
         'gpt-4.1': 'gpt-4.1',
         'sonnet': 'sonnet'
     }
@@ -308,8 +308,9 @@ async def btc_price(message: Message):
             reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
         )
 
-@router.message(F.text == "🔙 Back")
-async def back_button(message: Message, state: FSMContext):
+@router.message(F.text == "🔙 Back", UserStates.choosing_provider)
+async def back_from_provider_menu(message: Message, state: FSMContext):
+    """Handle back button from provider selection menu"""
     if not await is_user_authorized(message.from_user.id):
         return
     
@@ -465,8 +466,12 @@ async def handle_image_prompt(message: Message, state: FSMContext):
 # Chat handler for normal messages
 @router.message(UserStates.chatting)
 async def handle_message(message: Message, state: FSMContext):
-    # Wrap the entire function in a timeout
-    processing_timeout = 120.0  # Increased from 60.0 to 120.0 seconds (2 minutes)
+    # Overall timeout for the entire function - 2 minutes
+    OVERALL_TIMEOUT = 120.0
+    # Timeout for data loading operations
+    DATA_LOADING_TIMEOUT = 10.0
+    # Timeout for AI streaming
+    STREAM_TIMEOUT = 60.0
     
     async def process_message():
         try:
@@ -490,16 +495,13 @@ async def handle_message(message: Message, state: FSMContext):
             await message.bot.send_chat_action(message.chat.id, "typing")
             bot_response = await message.answer("💭")
             
-            # Set a timeout for the entire message processing
-            processing_timeout = 60.0  # 60 seconds total timeout
-            
             try:
                 # Get only essential data needed for AI call (minimal context for speed)
                 settings_task = storage.get_user_settings(message.from_user.id)
                 history_task = storage.get_chat_history(message.from_user.id, limit=6)  # Reduced for speed
                 settings, history = await asyncio.wait_for(
                     asyncio.gather(settings_task, history_task), 
-                    timeout=10.0  # 10 second timeout for data loading
+                    timeout=DATA_LOADING_TIMEOUT
                 )
                 t1 = time.monotonic()
 
@@ -515,11 +517,12 @@ async def handle_message(message: Message, state: FSMContext):
                 legacy_to_new = {
                     'openai': 'openai',
                     'claude': 'sonnet',
-                    'openrouter_deepseek': 'gemini',
+                    'openrouter_deepseek': 'grok',
                     'groq': 'openai',
                     'o3-mini': 'online',
-                    'r1-1776': 'gemini',
-                    'online': 'online'
+                    'r1-1776': 'grok',
+                    'online': 'online',
+                    'gemini': 'grok'  # Migrate old gemini users to grok
                 }
                 provider_name = legacy_to_new.get(settings['current_provider'], settings['current_provider'])
                 if provider_name not in PROVIDER_MODELS:
@@ -648,17 +651,16 @@ async def handle_message(message: Message, state: FSMContext):
                     elapsed = time.monotonic() - start_time
                     logging.info(f"[user.handle_message][STREAM_END] chars={len(collected_response)} tokens~={token_count} chunks={chunk_count} time={elapsed:.2f}s")
 
-                stream_timeout = 60.0  # Increased from 35.0 to 60.0 seconds
                 try:
-                    await asyncio.wait_for(consume_stream(), timeout=stream_timeout)
+                    await asyncio.wait_for(consume_stream(), timeout=STREAM_TIMEOUT)
                 except asyncio.TimeoutError:
-                    logging.error(f"AI streaming timed out after {stream_timeout}s for provider {provider_name}")
+                    logging.error(f"AI streaming timed out after {STREAM_TIMEOUT}s for provider {provider_name}")
                     await bot_response.edit_text("❌ Response timed out. Please try again or try a shorter message.")
                 except Exception as stream_e:
                     logging.error(f"AI streaming failed: {stream_e}", exc_info=True)
                     
                     # Try fallback provider if current one failed
-                    fallback_providers = ["sonnet", "openai", "gemini"]
+                    fallback_providers = ["sonnet", "openai", "grok"]
                     if provider_name in fallback_providers:
                         fallback_providers.remove(provider_name)
                     
@@ -697,7 +699,7 @@ async def handle_message(message: Message, state: FSMContext):
                                                     if "message is not modified" not in str(e).lower():
                                                         logging.debug(f"Fallback edit error: {e}")
                                 
-                                await asyncio.wait_for(consume_fallback_stream(), timeout=stream_timeout)
+                                await asyncio.wait_for(consume_fallback_stream(), timeout=STREAM_TIMEOUT)
                                 
                                 if collected_response:
                                     logging.info(f"Fallback provider {fallback_provider} succeeded")
@@ -767,7 +769,7 @@ async def handle_message(message: Message, state: FSMContext):
                 logging.info(f"[user.handle_message][END] uid={user.id} provider={provider_name} model={model_config['name']} total_time={t4-t0:.3f}s")
 
             except asyncio.TimeoutError:
-                logging.error(f"Message processing timed out for user {user.id} after {processing_timeout}s.")
+                logging.error(f"Message processing timed out for user {user.id} after {DATA_LOADING_TIMEOUT}s during data loading.")
                 await message.answer(
                     "❌ Response timed out. Please try again or try a shorter message.",
                     reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
@@ -786,11 +788,11 @@ async def handle_message(message: Message, state: FSMContext):
                 reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
             )
     
-    # Execute the message processing with timeout
+    # Execute the message processing with overall timeout
     try:
-        await asyncio.wait_for(process_message(), timeout=processing_timeout)
+        await asyncio.wait_for(process_message(), timeout=OVERALL_TIMEOUT)
     except asyncio.TimeoutError:
-        logging.error(f"Message processing timed out for user {message.from_user.id} after {processing_timeout}s.")
+        logging.error(f"Message processing timed out for user {message.from_user.id} after {OVERALL_TIMEOUT}s.")
         await message.answer(
             "❌ Response timed out. Please try again or try a shorter message.",
             reply_markup=kb.get_main_menu(is_admin=str(message.from_user.id) == config.admin_id)
@@ -892,7 +894,7 @@ async def should_use_structured_output(message_text: str, provider_name: str, ha
         True if structured outputs should be used
     """
     # Only use structured outputs for supported providers
-    supported_providers = ["sonnet", "openai", "gemini"]
+    supported_providers = ["sonnet", "openai", "grok"]
     if provider_name not in supported_providers:
         return False
     
@@ -1038,7 +1040,7 @@ async def handle_structured_response(message: Message, reply_msg: Message, respo
         await reply_msg.edit_text(error_msg)
 
 
-@router.message(Command("structured"))
+@router.message(Command("structured"), UserStates.chatting)
 async def test_structured_command(message: Message, state: FSMContext):
     """Test command for structured outputs."""
     if not await is_user_authorized(message.from_user.id):
@@ -1084,7 +1086,7 @@ async def test_structured_command(message: Message, state: FSMContext):
         await processing_msg.edit_text(f"❌ Structured output test failed: {str(e)}")
 
 
-@router.message(Command("test"))
+@router.message(Command("test"), UserStates.chatting)
 async def test_ai_provider(message: Message, state: FSMContext):
     """Test command to check if AI providers are working."""
     if not await is_user_authorized(message.from_user.id):
@@ -1117,7 +1119,7 @@ async def test_ai_provider(message: Message, state: FSMContext):
         await message.answer(f"❌ AI provider test failed: {str(e)}")
 
 
-@router.message(Command("diagnose"))
+@router.message(Command("diagnose"), UserStates.chatting)
 async def diagnose_bot(message: Message, state: FSMContext):
     """Diagnostic command to check bot configuration."""
     if not await is_user_authorized(message.from_user.id):
@@ -1173,7 +1175,7 @@ async def diagnose_bot(message: Message, state: FSMContext):
     await message.answer(diagnostic_text, parse_mode='HTML')
 
 
-@router.message(Command("debug"))
+@router.message(Command("debug"), UserStates.chatting)
 async def debug_bot(message: Message, state: FSMContext):
     """Debug command to check bot state and configuration."""
     if not await is_user_authorized(message.from_user.id):
@@ -1224,7 +1226,7 @@ async def debug_bot(message: Message, state: FSMContext):
     await message.answer(debug_text, parse_mode='HTML')
 
 
-@router.message(Command("ping"))
+@router.message(Command("ping"), UserStates.chatting)
 async def ping_bot(message: Message, state: FSMContext):
     """Simple ping command to test bot responsiveness."""
     if not await is_user_authorized(message.from_user.id):
@@ -1238,7 +1240,7 @@ async def ping_bot(message: Message, state: FSMContext):
     await message.answer(f"⏱️ Response time: {response_time:.1f}ms")
 
 
-@router.message(Command("speedtest"))
+@router.message(Command("speedtest"), UserStates.chatting)
 async def speed_test(message: Message, state: FSMContext):
     """Test AI response speed with a simple query."""
     if not await is_user_authorized(message.from_user.id):

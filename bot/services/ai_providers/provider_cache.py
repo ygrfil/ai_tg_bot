@@ -98,7 +98,7 @@ class ProviderCache:
             # Fal provider for image generation (used less frequently)
             return FalProvider(config.fal_api_key, config=config)
             
-        elif provider_type in ["openai", "anthropic", "google", "perplexity"] or provider_name == "openrouter":
+        elif provider_type in ["openai", "anthropic", "google", "perplexity", "x-ai"] or provider_name == "openrouter":
             # OpenRouter provider for text AI (used frequently - cache this!)
             return OpenRouterProvider(config.openrouter_api_key, config=config)
         

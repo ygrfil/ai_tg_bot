@@ -151,9 +151,16 @@ class Storage:
 
     async def _ensure_pool_initialized(self):
         """Ensure database pool is initialized"""
+        # Use a lock to prevent race condition during pool initialization
+        if not hasattr(self, '_pool_init_lock'):
+            self._pool_init_lock = asyncio.Lock()
+        
         if not hasattr(self.pool, '_initialized'):
-            await self.pool.initialize()
-            self.pool._initialized = True
+            async with self._pool_init_lock:
+                # Double-check inside the lock
+                if not hasattr(self.pool, '_initialized'):
+                    await self.pool.initialize()
+                    self.pool._initialized = True
 
     def _initialize_cache(self):
         """Initialize cache regions with specific TTLs"""
@@ -352,10 +359,15 @@ class Storage:
 
     async def ensure_initialized(self):
         """Initialize the database with all required tables"""
+        # Double-check pattern to prevent race condition
         if self._initialized:
             return
 
         async with self._lock:
+            # Check again inside the lock
+            if self._initialized:
+                return
+            
             try:
                 await self._ensure_pool_initialized()
                 async with self._db_connect() as db:
@@ -441,6 +453,7 @@ class Storage:
                 logging.error(f"Database initialization error: {e}", exc_info=True)
                 raise
 
+    @with_retries(max_retries=3)
     async def save_user_settings(self, user_id: int, settings: dict):
         """Save user settings to database"""
         await self.ensure_initialized()
@@ -463,9 +476,10 @@ class Storage:
                     ))
                     await db.commit()
             except Exception as e:
-                logging.error(f"Error saving user settings: {e}")
+                logging.error(f"Error saving user settings: {e}", exc_info=True)
                 raise
 
+    @with_retries(max_retries=3)
     async def ensure_user_exists(self, user_id: int, username: str = None, first_name: str = None):
         """Ensure user exists in database and update user info"""
         await self.ensure_initialized()
@@ -488,9 +502,10 @@ class Storage:
                         """, (user_id,))
                     await db.commit()
             except Exception as e:
-                logging.error(f"Error ensuring user exists: {e}")
+                logging.error(f"Error ensuring user exists: {e}", exc_info=True)
                 raise
 
+    @with_retries(max_retries=2)  # Fewer retries for logging since it's not critical
     async def log_usage(
         self,
         user_id: int,
@@ -515,7 +530,8 @@ class Storage:
                 """, (user_id, provider, model, tokens, 1 if has_image else 0))
                 await db.commit()
         except Exception as e:
-            logging.error(f"Error logging usage stats: {e}")
+            # Don't raise for logging errors - they're not critical
+            logging.error(f"Error logging usage stats: {e}", exc_info=True)
 
     async def get_usage_stats(self, period: str = 'month') -> Dict[str, Any]:
         """Get usage statistics for all users"""
