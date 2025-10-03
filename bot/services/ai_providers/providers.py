@@ -13,7 +13,7 @@ PROVIDER_MODELS = {
         "online": True
     },
     "grok": {
-        "name": "x-ai/grok-4-fast",
+        "name": "x-ai/grok-4-fast:free",
         "vision": True
     },
     "fal": {
