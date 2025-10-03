@@ -6,12 +6,25 @@ from functools import wraps
 import logging
 import asyncio
 from contextlib import asynccontextmanager
-import json
 from collections import deque
 from .cache import CacheManager
 from .async_file_manager import save_image_background, compute_image_hash_async, AsyncFileManager
 import hashlib
 import re
+
+# Use faster orjson if available, fallback to standard json
+try:
+    import orjson
+    def json_loads(s):
+        return orjson.loads(s)
+    def json_dumps(obj):
+        return orjson.dumps(obj).decode('utf-8')
+    logging.info("Using orjson for faster JSON parsing")
+except ImportError:
+    import json
+    json_loads = json.loads
+    json_dumps = json.dumps
+    logging.info("Using standard json (install orjson for better performance)")
 
 class DatabasePool:
     def __init__(self, db_path: str, max_connections: int = 10, min_connections: int = 2):
@@ -192,8 +205,14 @@ class Storage:
 
     @with_retries(max_retries=3)
     async def get_chat_history(self, user_id: int, limit: int = 10) -> List[Dict[str, Any]]:
-        """Get recent chat history for context - optimized single query"""
+        """Get recent chat history for context - optimized with caching"""
         await self.ensure_initialized()
+        
+        # Check cache first for faster response
+        cache_key = f"history_{user_id}_{limit}"
+        cached = await self.cache.get('chat_history', cache_key)
+        if cached is not None:
+            return cached
         
         try:
             async with self._db_connect() as db:
@@ -230,6 +249,9 @@ class Storage:
                         }
                         for row in rows
                     ]
+                    
+                    # Cache for 60 seconds
+                    await self.cache.set('chat_history', cache_key, result)
                     return result
             
         except Exception as e:
@@ -297,9 +319,8 @@ class Storage:
                                 await db.commit()
                                 break
 
-                # Invalidate the chat history cache for this user
-                cache_key = f"history_{user_id}"
-                await self.cache.set('chat_history', cache_key, None)
+                # Invalidate the chat history cache for this user (all limits)
+                self.cache.invalidate('chat_history', f"history_{user_id}_*")
         except Exception as e:
             logging.error(f"Error adding to chat history: {e}", exc_info=True)
             raise
@@ -315,9 +336,8 @@ class Storage:
                 )
                 await db.commit()
 
-            # Invalidate cache for this user
-            cache_key = f"history_{user_id}"
-            await self.cache.set('chat_history', cache_key, None)
+            # Invalidate cache for this user (all limits)
+            self.cache.invalidate('chat_history', f"history_{user_id}_*")
         except Exception as e:
             logging.error(f"Error clearing user history: {e}")
             raise
@@ -341,8 +361,7 @@ class Storage:
                 """, (user_id,)) as cursor:
                     row = await cursor.fetchone()
                     if row:
-                        import json
-                        settings = json.loads(row[0]) if row[0] else {}
+                        settings = json_loads(row[0]) if row[0] else {}
                         if row[1]:
                             settings['current_provider'] = row[1]
                         if row[2]:
@@ -424,6 +443,7 @@ class Storage:
                         )
                     """)
 
+                    # Create indexes for faster queries
                     await db.execute("""
                         CREATE INDEX IF NOT EXISTS idx_chat_history_user_id_timestamp 
                         ON chat_history(user_id, timestamp DESC)
@@ -433,12 +453,16 @@ class Storage:
                         ON usage_stats(user_id, provider, timestamp)
                     """)
                     await db.execute("""
-                        CREATE INDEX IF NOT EXISTS idx_users_settings
-                        ON users(user_id, current_provider, current_model)
+                        CREATE INDEX IF NOT EXISTS idx_users_lookup
+                        ON users(user_id)
                     """)
                     await db.execute("""
                         CREATE INDEX IF NOT EXISTS idx_access_requests_status
                         ON access_requests(status, request_timestamp DESC)
+                    """)
+                    await db.execute("""
+                        CREATE INDEX IF NOT EXISTS idx_access_requests_user
+                        ON access_requests(user_id, request_timestamp DESC)
                     """)
 
                     # Create images directory asynchronously
@@ -469,7 +493,7 @@ class Storage:
                             updated_at = CURRENT_TIMESTAMP
                     """, (
                         user_id,
-                        json.dumps(settings),
+                        json_dumps(settings),
                         settings.get('current_provider'),
                         settings.get('current_model')
                     ))

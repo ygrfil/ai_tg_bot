@@ -20,22 +20,24 @@ async def on_startup(bot: Bot, storage: Storage, config: 'Config'):
         # Database will be initialized when first user interacts
         logging.info("Bot startup complete - database will initialize on first use")
         
-        # Health check for AI providers
-        logging.info("Performing AI provider health check...")
+        # Pre-warm provider cache for faster first response
+        logging.info("Pre-warming AI provider cache...")
         try:
             from bot.services.ai_providers import get_provider
             from bot.services.ai_providers.providers import PROVIDER_MODELS
             
-            # Test the default provider
-            default_provider = "openai"
-            if default_provider in PROVIDER_MODELS:
-                provider = await get_provider(default_provider, config)
-                logging.info(f"✅ AI provider '{default_provider}' initialized successfully")
-            else:
-                logging.warning(f"⚠️ Default provider '{default_provider}' not found in PROVIDER_MODELS")
+            # Pre-initialize most commonly used providers to eliminate first-request penalty
+            common_providers = ["openai", "sonnet", "grok"]
+            for provider_name in common_providers:
+                if provider_name in PROVIDER_MODELS:
+                    try:
+                        provider = await get_provider(provider_name, config)
+                        logging.info(f"✅ Pre-warmed provider '{provider_name}'")
+                    except Exception as e:
+                        logging.warning(f"⚠️ Failed to pre-warm provider '{provider_name}': {e}")
                 
         except Exception as e:
-            logging.error(f"❌ AI provider health check failed: {e}")
+            logging.error(f"❌ Provider pre-warming failed: {e}")
             
     except Exception as e:
         logging.error(f"Error during startup: {e}")

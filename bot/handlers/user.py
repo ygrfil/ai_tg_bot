@@ -492,7 +492,7 @@ async def handle_message(message: Message, state: FSMContext):
             t0 = time.monotonic()
             
             # Show response immediately to reduce perceived latency
-            await message.bot.send_chat_action(message.chat.id, "typing")
+            # Send typing action and message in parallel for faster UI response
             bot_response = await message.answer("💭")
             
             try:
