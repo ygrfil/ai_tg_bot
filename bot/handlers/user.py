@@ -497,8 +497,9 @@ async def handle_message(message: Message, state: FSMContext):
             
             try:
                 # Get only essential data needed for AI call (minimal context for speed)
+                # Reduced history to 4 messages for faster loading
                 settings_task = storage.get_user_settings(message.from_user.id)
-                history_task = storage.get_chat_history(message.from_user.id, limit=6)  # Reduced for speed
+                history_task = storage.get_chat_history(message.from_user.id, limit=4)
                 settings, history = await asyncio.wait_for(
                     asyncio.gather(settings_task, history_task), 
                     timeout=DATA_LOADING_TIMEOUT
@@ -559,8 +560,8 @@ async def handle_message(message: Message, state: FSMContext):
                 ))
                 asyncio.create_task(storage.add_to_history(message.from_user.id, message_text, False, image_data))
                 
-                # Check if we should use structured outputs (for supported models and specific query types)
-                use_structured = await should_use_structured_output(message_text, provider_name, image_data is not None)
+                # Skip structured outputs for faster streaming response (disabled for speed)
+                use_structured = False  # Optimized: Skip structured output check for faster responses
                 
                 if use_structured:
                     # Use structured output for better reliability
@@ -615,8 +616,8 @@ async def handle_message(message: Message, state: FSMContext):
                                 collected_response += response_chunk
                                 token_count += len(response_chunk.split())
                                 
-                                # Update message less frequently (every 100 characters instead of 50)
-                                if len(collected_response) - last_update_length >= 100:
+                                # Update message less frequently (every 200 characters for better performance)
+                                if len(collected_response) - last_update_length >= 200:
                                     try:
                                         await bot_response.edit_text(collected_response)
                                         last_update_length = len(collected_response)

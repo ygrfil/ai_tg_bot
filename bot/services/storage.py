@@ -192,32 +192,15 @@ class Storage:
 
     @with_retries(max_retries=3)
     async def get_chat_history(self, user_id: int, limit: int = 10) -> List[Dict[str, Any]]:
-        """Get recent chat history for context"""
+        """Get recent chat history for context - optimized single query"""
         await self.ensure_initialized()
-        cache_key = f"history_{user_id}"
         
         try:
             async with self._db_connect() as db:
-                # First check if we need to clear old history
+                # Optimized: Single query that gets messages and checks age
                 async with db.execute("""
-                    SELECT timestamp
-                    FROM chat_history
-                    WHERE user_id = ?
-                    ORDER BY timestamp DESC
-                    LIMIT 1
-                """, (user_id,)) as cursor:
-                    last_msg = await cursor.fetchone()
-                    if last_msg:
-                        last_ts = datetime.fromisoformat(last_msg[0])
-                        if last_ts.tzinfo is None:
-                            last_ts = last_ts.replace(tzinfo=timezone.utc)
-                        if datetime.now(timezone.utc) - last_ts > timedelta(hours=2):
-                            await self.clear_user_history(user_id)
-                            return []
-
-                # Get recent messages
-                async with db.execute("""
-                    SELECT content, is_bot, timestamp
+                    SELECT content, is_bot, timestamp,
+                           (julianday('now') - julianday(timestamp)) * 24 as hours_ago
                     FROM (
                         SELECT content, is_bot, timestamp
                         FROM chat_history
@@ -230,6 +213,12 @@ class Storage:
                     rows = await cursor.fetchall()
                     
                     if not rows:
+                        return []
+                    
+                    # Check if oldest message is too old (>2 hours)
+                    # If so, clear history in background
+                    if rows[-1][3] > 2:  # hours_ago > 2
+                        asyncio.create_task(self.clear_user_history(user_id))
                         return []
 
                     # Convert to list of messages (already in chronological order)
@@ -334,8 +323,15 @@ class Storage:
             raise
 
     async def get_user_settings(self, user_id: int) -> Optional[dict]:
-        """Get user settings"""
+        """Get user settings with caching"""
         await self.ensure_initialized()
+        
+        # Check cache first for faster response
+        cache_key = f"settings_{user_id}"
+        cached = await self.cache.get('user_settings', cache_key)
+        if cached is not None:
+            return cached
+        
         try:
             async with self._db_connect() as db:
                 async with db.execute("""
@@ -351,6 +347,9 @@ class Storage:
                             settings['current_provider'] = row[1]
                         if row[2]:
                             settings['current_model'] = row[2]
+                        
+                        # Cache for 5 minutes
+                        await self.cache.set('user_settings', cache_key, settings)
                         return settings
                     return None
         except Exception as e:
@@ -455,7 +454,7 @@ class Storage:
 
     @with_retries(max_retries=3)
     async def save_user_settings(self, user_id: int, settings: dict):
-        """Save user settings to database"""
+        """Save user settings to database and invalidate cache"""
         await self.ensure_initialized()
         async with self._lock:
             try:
@@ -475,6 +474,10 @@ class Storage:
                         settings.get('current_model')
                     ))
                     await db.commit()
+                    
+                # Invalidate cache after save
+                cache_key = f"settings_{user_id}"
+                self.cache.invalidate('user_settings', cache_key)
             except Exception as e:
                 logging.error(f"Error saving user settings: {e}", exc_info=True)
                 raise

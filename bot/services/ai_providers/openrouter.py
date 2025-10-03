@@ -12,6 +12,11 @@ class OpenRouterProvider(BaseAIProvider):
     
     def __init__(self, api_key: str, config: Config = None):
         super().__init__(api_key, config)
+        # Optimized: Faster timeouts and connection pooling
+        http_client = httpx.AsyncClient(
+            limits=httpx.Limits(max_keepalive_connections=10, max_connections=20, keepalive_expiry=30),
+            timeout=httpx.Timeout(45.0, connect=10.0, read=35.0)  # Faster timeouts
+        )
         self.client = AsyncOpenAI(
             base_url="https://openrouter.ai/api/v1",
             api_key=api_key,
@@ -19,7 +24,7 @@ class OpenRouterProvider(BaseAIProvider):
                 "HTTP-Referer": "https://github.com/ygrfil/ai_tg_bot",
                 "X-Title": "AI Telegram Bot"
             },
-            timeout=httpx.Timeout(60.0, connect=15.0, read=45.0)  # Increased timeouts
+            http_client=http_client
         )
 
     async def chat_completion_stream(
@@ -41,7 +46,7 @@ class OpenRouterProvider(BaseAIProvider):
             
             # Add history (limit to recent messages for speed)
             if history:
-                messages.extend(self._format_history(history[-6:], model_config))  # Only last 6 messages
+                messages.extend(self._format_history(history[-4:], model_config))  # Only last 4 messages for faster response
             
             # Add current message with image if provided
             if image and self._supports_vision(model_config):
@@ -50,13 +55,14 @@ class OpenRouterProvider(BaseAIProvider):
             else:
                 messages.append({"role": "user", "content": message})
 
-            # Prepare completion parameters
+            # Prepare completion parameters - optimized for speed
             completion_params = {
                 "model": model_config['name'],
                 "messages": messages,
                 "stream": True,
-                "max_tokens": 1024,  # Reduced from 2048 to 1024 for faster responses
-                "temperature": 0.7,   # Slightly lower temperature for speed
+                "max_tokens": 800,  # Further reduced for faster initial response
+                "temperature": 0.7,
+                "top_p": 0.9,  # Slightly reduced for more focused responses
             }
             
             # Add structured output if schema provided and model supports it
@@ -167,7 +173,7 @@ class OpenRouterProvider(BaseAIProvider):
                 "model": model_config['name'],
                 "messages": messages,
                 "stream": False,  # Non-streaming for structured output
-                "max_tokens": 1024,  # Reduced from 2048 to 1024
+                "max_tokens": 800,  # Reduced for faster response
                 "temperature": 0.3,  # Lower temperature for more consistent JSON
             }
             
